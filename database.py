@@ -636,6 +636,32 @@ def init_db():
         if not _column_exists(conn, "users", "agreed_terms_at"):
             conn.execute("ALTER TABLE users ADD COLUMN agreed_terms_at TEXT")
 
+        # Telegram login + device/IP tracking. These live in the CREATE TABLE
+        # above, so FRESH databases already have them — but an existing
+        # deployment never got them, and every login crashed with
+        # `psycopg2.errors.UndefinedColumn: column "fingerprint" does not exist`.
+        # Adding them here is what actually upgrades a live database.
+        if not _column_exists(conn, "users", "telegram_id"):
+            conn.execute("ALTER TABLE users ADD COLUMN telegram_id BIGINT")
+            # UNIQUE must be a separate statement for an added column.
+            try:
+                conn.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_telegram_id "
+                    "ON users (telegram_id)"
+                )
+            except Exception as exc:  # pragma: no cover - index is best effort
+                logger.warning("telegram_id unique index: %s", exc)
+        if not _column_exists(conn, "users", "fingerprint"):
+            conn.execute("ALTER TABLE users ADD COLUMN fingerprint TEXT")
+        if not _column_exists(conn, "users", "last_ip"):
+            conn.execute("ALTER TABLE users ADD COLUMN last_ip TEXT")
+
+        # Same story for the sessions table.
+        if not _column_exists(conn, "sessions", "fingerprint"):
+            conn.execute("ALTER TABLE sessions ADD COLUMN fingerprint TEXT")
+        if not _column_exists(conn, "sessions", "expires_at"):
+            conn.execute("ALTER TABLE sessions ADD COLUMN expires_at TEXT")
+
         conn.commit()
     finally:
         conn.close()

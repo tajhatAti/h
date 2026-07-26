@@ -37,7 +37,7 @@ def check(cond, msg):
 
 
 USERNAME = "ahad_test"
-EMAIL = "ahadtest@example.com"
+EMAIL = "ahadtest@gmail.com"          # Gmail-only sign-up is enforced
 PASSWORD = "supersecret"
 
 print("[1] health")
@@ -45,12 +45,12 @@ r = client.get("/health")
 check(r.status_code == 200, "health 200")
 
 print("[2] signup")
-r = client.post("/signup", json={"username": USERNAME, "email": EMAIL, "password": PASSWORD, "agreed_terms": True})
+r = client.post("/signup", json={"username": USERNAME, "email": EMAIL, "password": PASSWORD, "agreed_terms": True, "captcha": "12"})
 check(r.status_code == 200, f"signup 200 (got {r.status_code} {r.text})")
 
 # duplicate signup of an UNVERIFIED account now re-sends the OTP instead of
 # erroring (so users who lose the OTP page while checking mail can finish).
-r = client.post("/signup", json={"username": USERNAME, "email": "x@example.com", "password": PASSWORD, "agreed_terms": True})
+r = client.post("/signup", json={"username": USERNAME, "email": "x@gmail.com", "password": PASSWORD, "agreed_terms": True, "captcha": "12"})
 check(r.status_code == 200 and r.json().get("resent") is True, "duplicate UNVERIFIED signup re-sends OTP")
 
 # read OTP straight from DB to verify

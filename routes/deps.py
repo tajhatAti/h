@@ -333,25 +333,14 @@ def _ensure_column(conn, table: str, column: str, ddl_type: str = "TEXT"):
     only then add the column.
     """
     try:
-        from database import DIALECT
-        cur = conn.cursor()
-        exists = False
-        if DIALECT == "postgres":
-            cur.execute(
-                "SELECT 1 FROM information_schema.columns "
-                "WHERE table_name=%s AND column_name=%s" % ("%s", "%s"),
-                (table, column),
-            )
-            exists = cur.fetchone() is not None
-        else:
-            cur.execute(f"PRAGMA table_info({table})")
-            rows = cur.fetchall() or []
-            exists = any((r[1] if len(r) > 1 else None) == column for r in rows)
-        if not exists:
+        # Reuse database._column_exists: it already speaks both dialects and
+        # goes through the ?-placeholder translation layer. Hand-rolling the
+        # psycopg2 query here (with literal %s interpolation) was fragile.
+        from database import _column_exists
+        if not _column_exists(conn, table, column):
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl_type}")
             conn.commit()
             logger.info("Added missing column %s.%s", table, column)
-        cur.close()
     except Exception as exc:
         logger.warning("_ensure_column(%s.%s): %s", table, column, exc)
         try:
@@ -428,17 +417,13 @@ def create_session(user_id: int, request: Request, fingerprint: str = "") -> str
             # Older SQLite (<3.35) doesn't support LIMIT in sub-DELETE; skip cap.
             try: conn.rollback()
             except Exception: pass
-        _ensure_column(conn, "sessions", "fingerprint")
+        # Signing in must NEVER depend on an optional analytics column. A
+        # missing sessions.fingerprint once made every login 500 with
+        # `UndefinedColumn`. Write the session first, without it.
         conn.execute(
-            "INSERT INTO sessions (user_id, token, device_info, ip_address, created_at, last_seen, expires_at, fingerprint) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (user_id, token, device_info, ip, created_at, created_at, expires_at, fingerprint),
-        )
-        # Keep the account-level fingerprint/IP current so §4 can aggregate job
-        # counts per device. Never overwrite a good hash with an empty one.
-        conn.execute(
-            "UPDATE users SET fingerprint = COALESCE(NULLIF(?, ''), fingerprint), last_ip = ? WHERE id = ?",
-            (fingerprint, ip, user_id),
+            "INSERT INTO sessions (user_id, token, device_info, ip_address, created_at, last_seen, expires_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (user_id, token, device_info, ip, created_at, created_at, expires_at),
         )
         conn.commit()
     except Exception:
@@ -447,6 +432,29 @@ def create_session(user_id: int, request: Request, fingerprint: str = "") -> str
         raise
     finally:
         conn.close()
+
+    # Best-effort telemetry: device fingerprint + last IP. Isolated in its own
+    # connection and swallowed on failure, so a schema gap degrades the abuse
+    # signal instead of locking users out.
+    if fingerprint or ip:
+        conn2 = get_db_connection()
+        try:
+            _ensure_column(conn2, "sessions", "fingerprint")
+            conn2.execute("UPDATE sessions SET fingerprint = ? WHERE token = ?",
+                          (fingerprint, token))
+            _ensure_column(conn2, "users", "fingerprint")
+            _ensure_column(conn2, "users", "last_ip")
+            conn2.execute(
+                "UPDATE users SET fingerprint = COALESCE(NULLIF(?, ''), fingerprint), last_ip = ? WHERE id = ?",
+                (fingerprint, ip, user_id),
+            )
+            conn2.commit()
+        except Exception as exc:  # noqa: BLE001 — never block a login
+            logger.warning("session telemetry skipped: %s", exc)
+            try: conn2.rollback()
+            except Exception: pass
+        finally:
+            conn2.close()
 
     return token
 
