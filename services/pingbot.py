@@ -46,6 +46,28 @@ def _tg(method, **params):
         return {}
 
 
+TG_MAX_UPLOAD_BYTES = 50 * 1024 * 1024   # Telegram bot upload ceiling
+
+
+def _send_document(chat_id, filepath, caption=""):
+    """Upload a real file to the chat (multipart, not the JSON endpoint)."""
+    if not TG_API:
+        return {}
+    try:
+        with open(filepath, "rb") as fh:
+            r = requests.post(
+                f"{TG_API}/sendDocument",
+                data={"chat_id": chat_id, "caption": caption[:1024]},
+                files={"document": (os.path.basename(filepath), fh)},
+                timeout=120,
+            )
+        return r.json()
+    except Exception as e:  # noqa: BLE001
+        print("sendDocument failed:", e)
+        _send(chat_id, "❌ Upload failed.")
+        return {}
+
+
 def _send(chat_id, text, reply_markup=None):
     data = {"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}
     if reply_markup:
@@ -187,7 +209,39 @@ def handle_callback(chat_id, data):
             _send(chat_id, "❌ Could not get status")
 
     elif action == "db":
-        _send(chat_id, "📥 Database download feature coming soon...")
+        # Real implementation (this used to be a dead "coming soon" button):
+        # find the job's data file in its workspace and upload it to Telegram.
+        try:
+            r = _runner_http("GET", f"/internal/jobs/{runner_id}")
+            jdir = (r.json() or {}).get("dir") or ""
+            if not jdir or not os.path.isdir(jdir):
+                _send(chat_id, "❌ Workspace not found (job may have been deleted).")
+                return
+            best, best_size = None, -1
+            for root, dirs, files in os.walk(jdir):
+                dirs[:] = [d for d in dirs if d not in
+                           ("__pycache__", ".git", "node_modules", "pylibs", ".cache")]
+                for fn in files:
+                    if not fn.lower().endswith((".db", ".sqlite", ".sqlite3", ".json")):
+                        continue
+                    fp = os.path.join(root, fn)
+                    try:
+                        sz = os.path.getsize(fp)
+                    except OSError:
+                        continue
+                    if sz > best_size:
+                        best, best_size = fp, sz
+            if not best:
+                _send(chat_id, "📭 No database file found yet — the bot hasn't created one.")
+                return
+            if best_size > TG_MAX_UPLOAD_BYTES:
+                _send(chat_id, f"❌ `{os.path.basename(best)}` is {best_size // (1024*1024)} MB — "
+                               f"over Telegram's 50 MB limit. Download it from the dashboard.")
+                return
+            _send_document(chat_id, best, caption=f"📥 {os.path.basename(best)} ({best_size} bytes)")
+        except Exception as e:  # noqa: BLE001
+            print("db download failed:", e)
+            _send(chat_id, "❌ Could not fetch the database file.")
 
     elif action == "restart":
         try:

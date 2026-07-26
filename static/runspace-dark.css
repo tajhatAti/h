@@ -522,8 +522,13 @@ body.rs-side-open #tab-jobs .rs-menu-backdrop { display: block; }
 #tab-jobs .rs-icon-btn.loading { opacity: .7; pointer-events: none; }
 
 /* ───────── Job details drawer ───────── */
-body.rs-drawer-open { overflow: hidden; }
-body.rs-drawer-open #tab-jobs .rs-side { touch-action: none; pointer-events: none; }
+/* Locking body scroll is only needed on mobile, where the drawer is a
+   full-screen sheet. On desktop it froze scrolling for the whole page
+   (including other tabs) once Details had been opened. */
+@media (max-width: 760px) {
+  body.rs-drawer-open { overflow: hidden; }
+  body.rs-drawer-open #tab-jobs .rs-side { touch-action: none; pointer-events: none; }
+}
 #tab-jobs .rs-list {
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
@@ -954,3 +959,43 @@ body.rs-detail-open #tab-jobs .rs-detail { z-index: 145; }
   #tab-jobs.active .rs-main,
   #tab-jobs.active .job-item { animation: none !important; }
 }
+
+/* ============================================================
+   DETAILS PANEL — correctness fixes
+   Symptoms being fixed: opening Details froze the tab, scrolling
+   stopped working and tab switching stuck.
+   ============================================================ */
+
+/* 1. The workspace underneath was left VISIBLE (only pointer-events:none),
+      so the browser kept compositing CodeMirror + a full log pane behind an
+      opaque drawer every frame. Take it out of the render tree entirely.
+      content-visibility also skips its layout/paint work completely. */
+body.rs-detail-open #tab-jobs .rs-ws {
+  visibility: hidden;
+  content-visibility: hidden;
+  pointer-events: none;
+}
+
+/* 2. Scrolling: the drawer body owns the scroll, and it must not chain to the
+      page behind it. Momentum scrolling on iOS needs the -webkit prefix. */
+#tab-jobs .rs-detail-body {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 3. The log pane inside Details scrolls on its own and is the one element
+      that can hold a lot of nodes — give it a containment boundary so its
+      reflows never invalidate the rest of the page. */
+#tab-jobs .rs-detail-logs {
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  contain: content;
+  max-height: 46vh;
+}
+
+/* 4. will-change:transform was left on permanently, pinning a GPU layer for
+      a panel that is usually closed. Only promote it while it animates. */
+#tab-jobs .rs-detail { will-change: auto; }
+body.rs-detail-open #tab-jobs .rs-detail { will-change: transform; }

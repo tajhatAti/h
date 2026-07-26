@@ -63,6 +63,15 @@ function scrollToId(id) {
 function switchTab(tabId) {
   // "more" isn't a real tab — on mobile it opens the LEFT side drawer.
   if (tabId === "more") { openSideMenu(); return; }
+  // Leaving RunSpace with the Details drawer open used to strand
+  // body.rs-drawer-open (scroll locked) and body.rs-detail-open on the
+  // document, which made the next tab feel completely frozen.
+  if (tabId !== "jobs" && typeof _jdOpen !== "undefined" && _jdOpen) {
+    try { closeJobDetails({noUrl: true}); } catch (e) {}
+  }
+  if (tabId !== "jobs") {
+    document.body.classList.remove("rs-detail-open", "rs-drawer-open");
+  }
   // Pseudo-tabs (e.g. the Activity launcher has no data-tab) must NOT
   // blank the dashboard — a missing/unknown tab target = no-op.
   if (!tabId || !document.getElementById(`tab-${tabId}`)) return;
@@ -2818,20 +2827,50 @@ function _colorizeLine(line) {
   return '<span class="log-line">' + s + '</span>';
 }
 
-function _renderLogs(text) {
-  const body = document.getElementById("jobLogBody");
+/* Logs are rendered into EXACTLY ONE pane: the editor pane, or the Details
+   pane when Details is open. The old code built the editor HTML and then
+   copied innerHTML into the Details pane on every SSE tick (~113 KB parsed
+   twice, ~9 MB/min) which is what froze the tab, scrolling and tab switching.
+   We also skip all work when the pane is not visible, and skip re-rendering
+   when the log text has not actually changed. */
+let _lastLogText = null;
+let _lastLogTarget = null;
+
+function _activeLogPane() {
+  return _jdOpen
+    ? document.getElementById("jdLogBody")
+    : document.getElementById("jobLogBody");
+}
+
+function _renderLogs(text, force) {
+  const body = _activeLogPane();
   const dot = document.getElementById("jobLogTitle");
   if (!body) return;
+
+  // Same text into the same pane => nothing to do. This alone removes almost
+  // all of the per-tick DOM churn, because logs usually grow by a line or two.
+  if (!force && text === _lastLogText && body === _lastLogTarget) return;
+  _lastLogText = text;
+  _lastLogTarget = body;
+
   if (!text || !text.trim()) {
     body.innerHTML = '<span class="rs-log-empty">// Logs will appear here when you run the job.</span>';
     if (dot) { dot.className = "rs-log-dot"; dot.title = "idle"; }
     _reflectJobStatus(_selectedJobId);
     return;
   }
-  const lines = text.split(/\r?\n/);
-  const tail = lines.slice(-600);
-  body.innerHTML = tail.map(_colorizeLine).join("\n");
-  if (_logFollow) body.scrollTop = body.scrollHeight;
+
+  // Only keep a bounded tail in the DOM — an unbounded log would grow the
+  // document forever and degrade scrolling the longer a job runs.
+  const tail = text.split(/\r?\n/).slice(-400);
+  const follow = _jdOpen ? _jdLogFollow : _logFollow;
+  // Measure BEFORE mutating; reading scroll metrics afterwards forces an
+  // extra synchronous layout.
+  const atBottom = follow !== false ||
+    (body.scrollTop + body.clientHeight >= body.scrollHeight - 24);
+  body.textContent = "";
+  body.insertAdjacentHTML("afterbegin", tail.map(_colorizeLine).join("\n"));
+  if (atBottom) body.scrollTop = body.scrollHeight;
   if (dot) { dot.className = "rs-log-dot running"; dot.title = "streaming"; }
 }
 
@@ -3079,8 +3118,13 @@ async function fetchJobDetail(id) {
 function stopLogStream() {
   if (_logSSE) {
     try { _logSSE.close(); } catch (e) {}
+    // Drop any frame queued by the stream so it can't paint stale logs into
+    // a pane that now belongs to a different job.
+    try { if (_logSSE._raf) cancelAnimationFrame(_logSSE._raf); } catch (e) {}
     _logSSE = null;
   }
+  _lastLogText = null;
+  _lastLogTarget = null;
 }
 
 function restartLogStream(id) {
@@ -3093,14 +3137,27 @@ function restartLogStream(id) {
   try {
     const es = new EventSource("/api/jobs/" + id + "/logs/stream?token=" + encodeURIComponent(token));
     _logSSE = es;
+    let _pending = null, _raf = 0;
+    es._raf = 0;
     es.onmessage = (ev) => {
+      // Coalesce bursts: paint at most once per animation frame. Rendering
+      // synchronously inside every SSE message is what let a chatty job
+      // saturate the main thread and freeze scrolling / tab switching.
+      try { _pending = JSON.parse(ev.data); } catch (e) { return; }
+      if (_raf) return;
+      _raf = es._raf = requestAnimationFrame(() => {
+        _raf = es._raf = 0;
+        const d = _pending; _pending = null;
+        if (!d) return;
+        _applyStreamUpdate(id, d);
+      });
+    };
+    function _applyStreamUpdate(id, d) {
       try {
-        const d = JSON.parse(ev.data);
         _renderLogs(d.logs || "");
         window._lastJobs = window._lastJobs || [];
         const job = window._lastJobs.find(x => String(x.id) === String(id));
-        if (job) { job.status = d.status; _reflectJobStatus(job); }
-        // Mirror logs + refresh details panel if open
+        if (job) { job.status = d.status; job.uptime_s = d.uptime_s; job.restarts = d.restarts; _reflectJobStatus(job); }
         if (_jdOpen && String(_selectedJobId) === String(id)) renderJobDetails();
         const it = document.querySelector('#jobsList .job-item[data-jid="' + String(id).replace(/"/g,'\\"') + '"]');
         if (it) {
@@ -3116,7 +3173,7 @@ function restartLogStream(id) {
           }
         }
       } catch(e){}
-    };
+    }
     // The server closes each stream after a bounded lifetime (so a forgotten
     // tab can't pin a connection forever) and sends this event first. Re-open
     // deliberately instead of relying on EventSource's error backoff.
@@ -3504,13 +3561,17 @@ function _initSplitDrag() {
 // ─── Job Details drawer ──────────────────────────────────────────────
 let _jdOpen = false;
 let _jdHealthTimer = null;
+let _jdHealthBusy = false;
 let _jdTimeline = [];
 let _jdLogFollow = true;
 function openJobDetails(id, opts) {
   if (id) selectJob(id);
   document.body.classList.add("rs-detail-open");
   _jdOpen = true;
+  _jdLogFollow = true;
   renderJobDetails();
+  // The visible log pane just changed, so repaint the cached text into it.
+  _renderLogs(_lastLogText || "", true);
   _playSwap(document.getElementById("jobDetailPanel"));
   // §5: the Details page has its own URL so it can be linked/refreshed.
   if (!(opts && opts.noUrl)) {
@@ -3530,6 +3591,8 @@ function closeJobDetails(opts) {
   document.body.classList.remove("rs-drawer-open");
   _jdOpen = false;
   if (_jdHealthTimer) { clearInterval(_jdHealthTimer); _jdHealthTimer = null; }
+  // Repaint the cached log text back into the editor pane.
+  _renderLogs(_lastLogText || "", true);
   _playSwap(document.getElementById("wbWorkspace"));
   // Drop the /page suffix again so the URL matches the editor view.
   if (!(opts && opts.noUrl)) {
@@ -3542,6 +3605,9 @@ function _jdSet(name, value) {
   if (el && value !== undefined) el.textContent = value;
 }
 function renderJobDetails() {
+  // Cheap guard: never touch the DOM for a panel nobody is looking at.
+  if (!_jdOpen) return;
+  if (document.hidden) return;          // background tab: resume on focus
   const job = (window._lastJobs||[]).find(x => String(x.id) === String(_selectedJobId));
   if (!job) { closeJobDetails(); return; }
   _jdSet("jdName", job.name || "untitled");
@@ -3554,14 +3620,9 @@ function renderJobDetails() {
   }
   _jdSet("jdUptime", "up " + _fmtUptime(job.uptime_s||0));
   _jdSet("jdRestarts", (job.restarts||0) + " restart" + (job.restarts===1?"":"s"));
-  // Mirror logs to drawer (auto-follow like main pane)
-  const src = document.getElementById("jobLogBody");
-  const dst = document.getElementById("jdLogBody");
-  if (src && dst) {
-    const wasBottom = dst.scrollTop + dst.clientHeight >= dst.scrollHeight - 24;
-    dst.innerHTML = src.innerHTML;
-    if (wasBottom || _jdLogFollow !== false) dst.scrollTop = dst.scrollHeight;
-  }
+  // NO log mirroring here. _renderLogs() already writes straight into the
+  // Details pane while it is open, so copying innerHTML across (the old
+  // behaviour) only doubled the parse cost and froze the UI.
   // URL card
   const card = document.getElementById("jdUrlCard");
   if (card) {
@@ -3580,17 +3641,23 @@ function renderJobDetails() {
   _jdSet("jdPort", job.port || "—");
   _jdSet("jdCpu", job.cpu_pct != null ? (job.cpu_pct.toFixed?.(1) ?? job.cpu_pct) + "%" : "—");
   _jdSet("jdMem", job.mem_mb != null ? (Math.round(job.mem_mb)) + " MB" : "—");
-  // Timeline
+  // Timeline — only rebuild when a NEW event was actually appended. The old
+  // code re-generated the whole list HTML on every SSE tick.
   const tl = document.getElementById("jdTimeline");
   if (tl) {
     if (!job._tl) job._tl = [];
-    // Append events on status changes
     const last = job._tl[job._tl.length-1];
     const evLabel = _fmtStatus(job.status).label;
+    let changed = false;
     if (!last || last.ev !== evLabel) {
       job._tl.push({t: new Date(), ev: evLabel, cls: stKey==="running"?"ok":stKey==="crashed"||stKey==="install_failed"?"err":stKey==="starting"||stKey==="installing"?"warn":""});
       if (job._tl.length > 30) job._tl.shift();
+      changed = true;
     }
+    if (!changed && tl.dataset.jid === String(job.id)) {
+      // nothing new to show for this job
+    } else {
+    tl.dataset.jid = String(job.id);
     if (!job._tl.length) {
       tl.innerHTML = '<li class="rs-empty-sm">Events will appear here.</li>';
     } else {
@@ -3598,6 +3665,7 @@ function renderJobDetails() {
         const t = e.t.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
         return '<li><span class="rs-ts">'+t+'</span><span class="rs-te '+e.cls+'">'+e.ev+'</span></li>';
       }).join("");
+    }
     }
   }
 }
@@ -3610,11 +3678,19 @@ function _startHealthCheck() {
     const sub = document.getElementById("jdHealthSub");
     const url = job && (job.web_url || job.url);
     if (!h || !sub || !url) return;
+    if (document.hidden) return;          // don't probe from a background tab
+    if (_jdHealthBusy) return;            // never stack overlapping probes
+    _jdHealthBusy = true;
     h.className = "rs-health";
     h.querySelector(".rs-h-tx").textContent = "checking…";
     const t0 = performance.now();
+    // A sleeping free-tier target can hang for a long time; without a timeout
+    // these probes pile up every 15s and starve the browser's connection pool.
+    const ctl = ("AbortController" in window) ? new AbortController() : null;
+    const killer = setTimeout(() => { try { ctl && ctl.abort(); } catch (e) {} }, 8000);
     try {
-      const r = await fetch(url, {method:"GET", mode:"no-cors", cache:"no-store"});
+      const r = await fetch(url, {method:"GET", mode:"no-cors", cache:"no-store",
+                                  signal: ctl ? ctl.signal : undefined});
       const dt = Math.round(performance.now()-t0);
       h.className = "rs-health ok";
       h.querySelector(".rs-h-tx").textContent = "live ("+dt+"ms)";
@@ -3623,10 +3699,13 @@ function _startHealthCheck() {
       h.className = "rs-health bad";
       h.querySelector(".rs-h-tx").textContent = "unreachable";
       sub.textContent = "Last checked: " + new Date().toLocaleTimeString();
+    } finally {
+      clearTimeout(killer);
+      _jdHealthBusy = false;
     }
   };
   tick();
-  _jdHealthTimer = setInterval(tick, 15000);
+  _jdHealthTimer = setInterval(tick, 20000);
 }
 function _initDetailWiring() {
   if (document.getElementById("btnJobDetails") && document.getElementById("btnJobDetails")._w) return;
