@@ -10,6 +10,7 @@ from routes.deps import *  # shared kernel (config, helpers, models)
 from fastapi.responses import HTMLResponse
 
 from services import runner_client
+from services import limits
 from services.runner_client import MAX_JOBS_PER_USER
 from services.twofa import _verify_second_factor
 
@@ -295,62 +296,130 @@ def report_abuse_submit(payload: AbuseReportIn, request: Request):
 
 @router.get("/admin/fingerprint-clusters")
 def get_fingerprint_clusters(authorization: Optional[str] = Header(None)):
-    """Show accounts grouped by fingerprint (for abuse detection)"""
-    user, _ = get_current_user_and_session(authorization)
-    if user.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Admin only")
+    """Accounts grouped by device fingerprint, with live job counts (§6).
+
+    Sorted by cluster size so the largest — most suspicious — device clusters
+    surface first. Uses require_admin() for 404-stealth like every other admin
+    route, and avoids GROUP_CONCAT (SQLite-only) so it also runs on Postgres.
+    """
+    require_admin(authorization)
 
     conn = get_db_connection()
     try:
-        rows = conn.execute("""
-            SELECT fingerprint, COUNT(*) as account_count, 
-                   GROUP_CONCAT(username) as usernames
-            FROM users 
-            WHERE fingerprint IS NOT NULL AND fingerprint != ''
-            GROUP BY fingerprint 
-            HAVING COUNT(*) > 1
-            ORDER BY account_count DESC
-            LIMIT 50
-        """).fetchall()
+        live = limits.running_runner_ids()
+        rows = conn.execute(
+            "SELECT id, username, email, fingerprint, last_ip, created_at, "
+            "       COALESCE(is_suspended, 0) AS is_suspended "
+            "FROM users WHERE fingerprint IS NOT NULL AND fingerprint != '' "
+            "ORDER BY id"
+        ).fetchall()
+
+        bursts = signup_burst_counts()
+        by_fp = {}
+        for r in rows:
+            r = dict(r)
+            by_fp.setdefault(r["fingerprint"], []).append(r)
 
         clusters = []
-        for row in rows:
+        for fp, members in by_fp.items():
+            uids = {m["id"] for m in members}
             clusters.append({
-                "fingerprint": row["fingerprint"][:50] + "...",
-                "account_count": row["account_count"],
-                "usernames": row["usernames"].split(",")[:10] if row["usernames"] else []
+                "fingerprint": fp[:16] + "…",
+                "fingerprint_full": fp,
+                "account_count": len(members),
+                "running_jobs": limits.count_running_for_users(conn, uids, live),
+                "job_limit": limits.FINGERPRINT_JOB_LIMIT,
+                "over_limit": limits.count_running_for_users(conn, uids, live) > limits.FINGERPRINT_JOB_LIMIT,
+                "signup_burst": bursts.get(fp, 0) >= SIGNUP_BURST_MAX,
+                "recent_signups": bursts.get(fp, 0),
+                "accounts": [
+                    {"id": m["id"], "username": m["username"], "email": m["email"],
+                     "last_ip": m["last_ip"], "created_at": m["created_at"],
+                     "is_suspended": bool(m["is_suspended"])}
+                    for m in members[:25]
+                ],
             })
+        clusters.sort(key=lambda c: (c["account_count"], c["running_jobs"]), reverse=True)
+        return {
+            "clusters": clusters,
+            "total": len(clusters),
+            "shared_only": [c for c in clusters if c["account_count"] > 1],
+        }
+    finally:
+        conn.close()
+
+
+@router.get("/admin/ip-clusters")
+def get_ip_clusters(authorization: Optional[str] = Header(None)):
+    """Accounts grouped by IP address, with live job counts (§6)."""
+    require_admin(authorization)
+
+    conn = get_db_connection()
+    try:
+        live = limits.running_runner_ids()
+        rows = conn.execute(
+            "SELECT id, username, email, last_ip, fingerprint, created_at, "
+            "       COALESCE(is_suspended, 0) AS is_suspended "
+            "FROM users WHERE last_ip IS NOT NULL AND last_ip != '' "
+            "ORDER BY id"
+        ).fetchall()
+
+        by_ip = {}
+        for r in rows:
+            r = dict(r)
+            by_ip.setdefault(r["last_ip"], []).append(r)
+
+        clusters = []
+        for ip, members in by_ip.items():
+            uids = {m["id"] for m in members}
+            running = limits.count_running_for_users(conn, uids, live)
+            clusters.append({
+                "ip": ip,
+                "account_count": len(members),
+                "device_count": len({m["fingerprint"] for m in members if m["fingerprint"]}),
+                "running_jobs": running,
+                "job_limit": limits.IP_JOB_LIMIT,
+                "over_limit": running > limits.IP_JOB_LIMIT,
+                "accounts": [
+                    {"id": m["id"], "username": m["username"], "email": m["email"],
+                     "created_at": m["created_at"], "is_suspended": bool(m["is_suspended"])}
+                    for m in members[:25]
+                ],
+            })
+        clusters.sort(key=lambda c: (c["account_count"], c["running_jobs"]), reverse=True)
         return {"clusters": clusters, "total": len(clusters)}
     finally:
         conn.close()
 
-@router.get("/admin/fingerprint-clusters")
-def get_fingerprint_clusters(authorization: Optional[str] = Header(None)):
-    """Show accounts grouped by fingerprint (for abuse detection)"""
-    user, _ = get_current_user_and_session(authorization)
-    if user.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Admin only")
 
+@router.get("/admin/signup-flags")
+def get_signup_flags(authorization: Optional[str] = Header(None)):
+    """Devices showing rapid-signup-burst patterns (§5 — flagged, never auto-blocked)."""
+    require_admin(authorization)
+
+    counts = signup_burst_counts()
     conn = get_db_connection()
     try:
-        rows = conn.execute("""
-            SELECT fingerprint, COUNT(*) as account_count, 
-                   GROUP_CONCAT(username) as usernames
-            FROM users 
-            WHERE fingerprint IS NOT NULL AND fingerprint != ''
-            GROUP BY fingerprint 
-            HAVING COUNT(*) > 1
-            ORDER BY account_count DESC
-            LIMIT 50
-        """).fetchall()
-
-        clusters = []
-        for row in rows:
-            clusters.append({
-                "fingerprint": row["fingerprint"][:50] + "...",
-                "account_count": row["account_count"],
-                "usernames": row["usernames"].split(",")[:10] if row["usernames"] else []
+        flags = []
+        for fp, n in sorted(counts.items(), key=lambda kv: kv[1], reverse=True):
+            if n < SIGNUP_BURST_MAX:
+                continue
+            rows = conn.execute(
+                "SELECT id, username, email, created_at FROM users WHERE fingerprint = ? ORDER BY id DESC LIMIT 25",
+                (fp,),
+            ).fetchall()
+            flags.append({
+                "fingerprint": fp[:16] + "…",
+                "fingerprint_full": fp,
+                "signups_in_window": n,
+                "window_seconds": SIGNUP_BURST_WINDOW_S,
+                "threshold": SIGNUP_BURST_MAX,
+                "accounts": [dict(r) for r in rows],
             })
-        return {"clusters": clusters, "total": len(clusters)}
+        return {
+            "flags": flags,
+            "total": len(flags),
+            "note": "Flagged for review only — no account is auto-blocked.",
+        }
     finally:
         conn.close()

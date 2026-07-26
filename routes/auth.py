@@ -14,6 +14,7 @@ import pyotp
 import qrcode
 
 from services import email as email_service
+from services import captcha as captcha_service
 from services.twofa import _verify_second_factor
 
 router = APIRouter()
@@ -65,26 +66,31 @@ def signup(user: UserSignup, request: Request):
     if user.agreed_terms is not True:
         raise HTTPException(status_code=400, detail="Please accept the Terms of Use to create an account.")
 
-    # Simple CAPTCHA check (7 + 5 = 12)
-    if getattr(user, 'captcha', None) != "12":
+    # CAPTCHA: Turnstile/hCaptcha when configured, arithmetic fallback otherwise.
+    if not captcha_service.verify(user.captcha_token, user.captcha, client_ip(request)):
         raise HTTPException(status_code=400, detail="CAPTCHA verification failed.")
 
-    # Store fingerprint if provided (for abuse detection)
-    fingerprint = getattr(user, 'fingerprint', None)
+    # Device fingerprint (§3) — stored on the account so §4 can aggregate job
+    # counts across every account that shares this device.
+    fingerprint = normalise_fingerprint(user.fingerprint)
 
     username = validate_username(user.username)
     email = str(user.email).strip().lower()
-    if not email.endswith("@gmail.com"):
-        raise HTTPException(status_code=400, detail="Only Gmail addresses are currently supported for email sign-up. You can also sign in with Telegram.")
+    domain = email.rsplit("@", 1)[-1]
 
-    # Disposable / Temp mail blocklist
-    disposable_domains = [
-        "tempmail.com", "10minutemail.com", "mailinator.com", "guerrillamail.com",
-        "yopmail.com", "throwawaymail.com", "maildrop.cc", "temp-mail.org",
-        "fakeinbox.com", "mailcatch.com", "inbox.lv", "mail.ru"
-    ]
-    domain = email.split("@")[-1]
-    if domain in disposable_domains:
+    # Gmail-only: compare the FULL domain, never a suffix. endswith("@gmail.com")
+    # would happily accept "evil@notgmail.com" — a lookalike bypass.
+    if domain not in GMAIL_DOMAINS:
+        raise HTTPException(
+            status_code=400,
+            detail="Only Gmail addresses are supported for email sign-up. "
+                   "You can also sign in with Telegram.",
+        )
+
+    # Defense-in-depth: the blocklist can no longer be reached through a normal
+    # Gmail address, but it still guards against lookalike/punycode tricks and
+    # stays in place if the Gmail-only rule is ever relaxed.
+    if domain in DISPOSABLE_EMAIL_DOMAINS:
         raise HTTPException(status_code=400, detail="Disposable email addresses are not allowed.")
     password = validate_password(user.password)
 
@@ -113,10 +119,13 @@ def signup(user: UserSignup, request: Request):
             otp = generate_otp()
             current_time = now_utc_str()
             cursor.execute("""
-                UPDATE users SET password=?, otp=?, otp_created_at=?, agreed_terms_at=?, updated_at=?
+                UPDATE users SET password=?, otp=?, otp_created_at=?, agreed_terms_at=?,
+                    updated_at=?, fingerprint=COALESCE(NULLIF(?, ''), fingerprint), last_ip=?
                 WHERE id=?
-            """, (hashed_pw, otp, current_time, current_time, current_time, existing["id"]))
+            """, (hashed_pw, otp, current_time, current_time, current_time,
+                  fingerprint, client_ip(request), existing["id"]))
             conn.commit()
+            record_signup_attempt(fingerprint)
             email_service.send_email(email, "Verify your CodeNest account", otp, username, "Email Verification")
             return {
                 "message": "Welcome back! A fresh verification code was sent to your email.",
@@ -126,11 +135,14 @@ def signup(user: UserSignup, request: Request):
 
         cursor.execute("""
             INSERT INTO users (username, email, password, otp, otp_created_at,
-                is_verified, created_at, updated_at, agreed_terms_at)
-            VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)
-        """, (username, email, hashed_pw, otp, current_time, current_time, current_time, current_time))
+                is_verified, created_at, updated_at, agreed_terms_at,
+                fingerprint, last_ip)
+            VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
+        """, (username, email, hashed_pw, otp, current_time, current_time,
+              current_time, current_time, fingerprint, client_ip(request)))
         conn.commit()
         inserted_user_id = cursor.lastrowid
+        record_signup_attempt(fingerprint)
 
         email_service.send_email(email, "Verify your CodeNest account", otp, username, "Email Verification")
         return {"message": "Account created. Check your email for the verification code.", "expires_in": OTP_EXPIRY_MINUTES * 60}
@@ -223,7 +235,7 @@ def verify_otp(user: UserVerify, request: Request):
 
         # Auto-login: create a session immediately after successful verification
         _grant_admin_if_configured(row["id"], row["email"])
-        token = create_session(row["id"], request)
+        token = create_session(row["id"], request, fingerprint=user.fingerprint or "")
         return {"message": "Verification successful!", "token": token, "username": row["username"]}
     finally:
         conn.close()
@@ -281,7 +293,7 @@ def login(user: UserLogin, request: Request):
 
     record_login_attempt(row["id"], request, success=True)
     _grant_admin_if_configured(row["id"], row["email"])
-    token = create_session(row["id"], request)
+    token = create_session(row["id"], request, fingerprint=user.fingerprint or "")
     return {"message": "Login successful!", "username": row["username"], "token": token}
 
 
@@ -606,6 +618,7 @@ class TelegramAuthData(BaseModel):
     photo_url: Optional[str] = None
     auth_date: int
     hash: str
+    fingerprint: Optional[str] = None
 
 @router.post("/auth/telegram")
 def telegram_login(payload: TelegramAuthData, request: Request):
@@ -650,11 +663,21 @@ def telegram_login(payload: TelegramAuthData, request: Request):
             # the codebase uses so this works on SQLite *and* Postgres.
             if "is_suspended" in row.keys() and row["is_suspended"]:
                 raise HTTPException(status_code=403, detail="Account is suspended.")
-            token = create_session(row["id"], request)
+            token = create_session(row["id"], request, fingerprint=payload.fingerprint or "")
             return {"message": "Login successful via Telegram", "token": token, "username": row["username"]}
 
-        # Create new account
-        username = f"tg_{payload.id}"
+        # Create new account. The natural username is tg_<id>, but an existing
+        # e-mail account may already own that name — fall back to a suffixed
+        # variant instead of dying with a UNIQUE-constraint 500.
+        base_username = f"tg_{payload.id}"
+        username = base_username
+        for _attempt in range(6):
+            clash = conn.execute(
+                "SELECT id FROM users WHERE username = ?", (username,)
+            ).fetchone()
+            if not clash:
+                break
+            username = f"{base_username}_{secrets.token_hex(3)}"
         email = f"tg_{payload.id}@telegram.user"
         password = hash_password(secrets.token_urlsafe(16))
         current_time = now_utc_str()
@@ -667,7 +690,7 @@ def telegram_login(payload: TelegramAuthData, request: Request):
         conn.commit()
         user_id = cursor.lastrowid
 
-        token = create_session(user_id, request)
+        token = create_session(user_id, request, fingerprint=payload.fingerprint or "")
         return {"message": "Account created via Telegram", "token": token, "username": username}
     finally:
         conn.close()

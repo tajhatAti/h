@@ -456,6 +456,7 @@ _SCHEMA_TABLES = [
         token TEXT NOT NULL UNIQUE,
         device_info TEXT,
         ip_address TEXT,
+        fingerprint TEXT,
         created_at TEXT NOT NULL,
         last_seen TEXT NOT NULL,
         expires_at TEXT

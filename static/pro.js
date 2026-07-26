@@ -261,6 +261,10 @@ function closeMoreSheet() { closeSideMenu(); }
 async function api(path, method = "POST", body = null, auth = false, _retried = false) {
   const headers = { "Content-Type": "application/json" };
   if (auth && authToken) headers["Authorization"] = "Bearer " + authToken;
+  // §4: the server enforces per-device job limits, so authenticated calls
+  // carry the device fingerprint. Cached after the first computation — the
+  // canvas/audio probes are far too slow to redo on every request.
+  if (auth && _fpCache) headers["X-Fingerprint"] = _fpCache;
 
   let res;
   try {
@@ -388,6 +392,16 @@ function btnFail(btn) {
 
 /* ---------------- SIGN-UP AVAILABILITY (already-registered check) ------ */
 // Strong device fingerprint for abuse prevention
+let _fpCache = "";
+
+/** Compute (once) and cache the device fingerprint for use as a request header. */
+async function ensureFingerprint() {
+  if (!_fpCache) {
+    try { _fpCache = await generateDeviceFingerprint(); } catch (e) { _fpCache = ""; }
+  }
+  return _fpCache;
+}
+
 async function generateDeviceFingerprint() {
   const fp = {
     ua: navigator.userAgent,
@@ -710,12 +724,25 @@ async function handleSignup(e) {
     }
   } catch (e) { /* check endpoint hiccup — /signup will decide anyway */ }
 
+  // CAPTCHA — provider widget when configured, arithmetic box otherwise.
+  // The math input existed in the markup but was never read, so the server
+  // saw captcha=undefined and rejected EVERY signup.
+  const captchaEl = document.getElementById("su_captcha");
+  const captcha = captchaEl ? captchaEl.value.trim() : "";
+  const captchaToken = _captchaToken();
+  if (!captchaToken && captchaEl && !captcha) {
+    toast("Please answer the CAPTCHA question", "error");
+    captchaEl.focus();
+    return;
+  }
+
   // Collect strong device fingerprint for abuse prevention
-  const fingerprint = await generateDeviceFingerprint();
+  const fingerprint = await ensureFingerprint();
   btnBusy(btn);
   try {
-    const res = await api("/signup", "POST", { 
+    const res = await api("/signup", "POST", {
       username, email, password, agreed_terms: true,
+      captcha, captcha_token: captchaToken,
       fingerprint: fingerprint
     });
     signupUsername = username;
@@ -749,7 +776,7 @@ document.getElementById("btnVerify").addEventListener("click", async () => {
   if (otp.length !== 6) { toast("Enter the 6-digit code", "error"); return; }
   btnBusy(btn);
   try {
-    const data = await api("/verify", "POST", { username, otp });
+    const data = await api("/verify", "POST", { username, otp, fingerprint: await ensureFingerprint() });
     authToken = data.token;
     localStorage.setItem("ahad_token", authToken);
     localStorage.removeItem("ahad_signup_username");
@@ -805,7 +832,7 @@ async function handleSignin(e) {
   if (!username || !password) { toast("Please enter username and password", "error"); return; }
   btnBusy(btn);
   try {
-    const data = await api("/login", "POST", { username, password });
+    const data = await api("/login", "POST", { username, password, fingerprint: await ensureFingerprint() });
     // Backend routes unverified accounts to verification instead of erroring.
     if (data.need_verify) {
       signupUsername = data.username;
@@ -4346,7 +4373,9 @@ async function confirmAdminAction() {
    ============================================================ */
 window.onTelegramAuth = async function (user) {
   try {
-    const data = await api("/auth/telegram", "POST", user);
+    // §3: fingerprint must be captured on EVERY auth event, Telegram included.
+    const payload = Object.assign({}, user, { fingerprint: await ensureFingerprint() });
+    const data = await api("/auth/telegram", "POST", payload);
     authToken = data.token;
     localStorage.setItem("ahad_token", authToken);
     try {
@@ -4389,4 +4418,70 @@ window.onTelegramAuth = async function (user) {
   }
   if (document.readyState === "complete" || document.readyState === "interactive") setTimeout(mount, 60);
   else document.addEventListener("DOMContentLoaded", function () { setTimeout(mount, 60); });
+})();
+
+
+/* ============================================================
+   CAPTCHA PROVIDER (Cloudflare Turnstile / hCaptcha)
+   Which provider — if any — is active comes from /api/public-config.
+   With no provider configured the arithmetic question in the markup
+   stays visible and is validated server-side instead.
+   ============================================================ */
+let _captchaProvider = "none";
+let _captchaWidgetId = null;
+
+function _captchaToken() {
+  if (_captchaProvider === "turnstile" && window.turnstile) {
+    try { return window.turnstile.getResponse(_captchaWidgetId) || ""; } catch (e) { return ""; }
+  }
+  if (_captchaProvider === "hcaptcha" && window.hcaptcha) {
+    try { return window.hcaptcha.getResponse(_captchaWidgetId) || ""; } catch (e) { return ""; }
+  }
+  return "";
+}
+
+function _captchaReset() {
+  try {
+    if (_captchaProvider === "turnstile" && window.turnstile) window.turnstile.reset(_captchaWidgetId);
+    if (_captchaProvider === "hcaptcha" && window.hcaptcha) window.hcaptcha.reset(_captchaWidgetId);
+  } catch (e) {}
+}
+
+(function initCaptcha() {
+  async function mount() {
+    let cfg = {};
+    try {
+      const r = await fetch("/api/public-config");
+      if (r.ok) cfg = await r.json();
+    } catch (e) { return; }
+    _captchaProvider = cfg.captcha_provider || "none";
+    const key = cfg.captcha_site_key || "";
+    if (_captchaProvider === "none" || !key) return;   // keep the math fallback
+
+    const box = document.querySelector(".captcha-box");
+    if (!box) return;
+    box.innerHTML = '<div id="captchaWidget"></div>';   // replace the math input
+
+    const src = _captchaProvider === "turnstile"
+      ? "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
+      : "https://js.hcaptcha.com/1/api.js?render=explicit";
+    const s = document.createElement("script");
+    s.src = src; s.async = true; s.defer = true;
+    s.onload = function () {
+      const api = _captchaProvider === "turnstile" ? window.turnstile : window.hcaptcha;
+      if (!api) return;
+      try { _captchaWidgetId = api.render("#captchaWidget", { sitekey: key }); } catch (e) {}
+    };
+    document.head.appendChild(s);
+  }
+  if (document.readyState === "complete" || document.readyState === "interactive") setTimeout(mount, 80);
+  else document.addEventListener("DOMContentLoaded", function () { setTimeout(mount, 80); });
+})();
+
+// Warm the fingerprint cache at boot so the first job-create request already
+// carries X-Fingerprint (the device limit is useless if the header is absent).
+(function warmFingerprint() {
+  const go = function () { ensureFingerprint(); };
+  if (document.readyState === "complete" || document.readyState === "interactive") setTimeout(go, 300);
+  else document.addEventListener("DOMContentLoaded", function () { setTimeout(go, 300); });
 })();

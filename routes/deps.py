@@ -7,6 +7,7 @@ app.py includes the routers; the routers see only deps + services."""
 import os
 import re
 import json
+import hashlib
 import time
 import secrets
 import logging
@@ -41,7 +42,84 @@ RATE_LIMIT_MAX_ATTEMPTS = 6
 _attempts = defaultdict(list)
 
 
-SIGNUP_DAILY_MAX = 10  # abuse guard: max fresh accounts per IP per day
+# Master prompt §5: max 3 new accounts per IP per 24h.
+SIGNUP_DAILY_MAX = int(os.getenv("SIGNUP_DAILY_MAX", "3"))
+
+# Accepted domains for e-mail sign-up (Gmail-only per §2). Matched against the
+# FULL domain — never with endswith(), which "notgmail.com" would satisfy.
+GMAIL_DOMAINS = {"gmail.com", "googlemail.com"}
+
+# Disposable / temp-mail blocklist (defense-in-depth, §2).
+DISPOSABLE_EMAIL_DOMAINS = {
+    "0-mail.com", "10minutemail.com", "20minutemail.com", "33mail.com",
+    "burnermail.io", "dispostable.com", "emailondeck.com", "fakeinbox.com",
+    "getairmail.com", "getnada.com", "guerrillamail.com", "inbox.lv",
+    "mail.ru", "mailcatch.com", "maildrop.cc", "mailinator.com",
+    "mailnesia.com", "mintemail.com", "mohmal.com", "moakt.com",
+    "sharklasers.com", "spamgourmet.com", "temp-mail.org", "tempmail.com",
+    "tempmailo.com", "throwawaymail.com", "trashmail.com", "yopmail.com",
+    # Gmail lookalikes seen in the wild
+    "gmai.com", "gmial.com", "gnail.com", "notgmail.com",
+}
+
+
+def normalise_fingerprint(raw) -> str:
+    """Turn a raw client fingerprint payload into a stable 64-char hex hash.
+
+    The browser sends a JSON blob of device signals. Storing that verbatim is
+    wasteful and makes SQL grouping fragile (key order, whitespace), so we hash
+    it. Already-hashed values pass through unchanged, which keeps old rows and
+    the X-Fingerprint header comparable with freshly captured ones.
+    """
+    if not raw:
+        return ""
+    s = raw.strip() if isinstance(raw, str) else json.dumps(raw, sort_keys=True)
+    if not s:
+        return ""
+    if len(s) == 64 and all(c in "0123456789abcdef" for c in s.lower()):
+        return s.lower()          # already a sha256 hex digest
+    try:
+        # Canonicalise JSON so key order can't produce two hashes for one device.
+        s = json.dumps(json.loads(s), sort_keys=True, separators=(",", ":"))
+    except Exception:
+        pass
+    return hashlib.sha256(s.encode("utf-8", "replace")).hexdigest()
+
+
+# --- signup burst detection (§5) -------------------------------------------
+# FLAG ONLY, never auto-block: legitimate shared devices (a classroom, a
+# cyber-cafe) can produce a burst too, so an admin makes the final call.
+SIGNUP_BURST_MAX = int(os.getenv("SIGNUP_BURST_MAX", "5"))
+SIGNUP_BURST_WINDOW_S = int(os.getenv("SIGNUP_BURST_WINDOW_S", "3600"))
+_signup_events = defaultdict(list)   # fingerprint -> [timestamps]
+
+
+def record_signup_attempt(fingerprint: str) -> bool:
+    """Record a signup for this device. Returns True when it looks like a burst."""
+    if not fingerprint:
+        return False
+    now = time.time()
+    cutoff = now - SIGNUP_BURST_WINDOW_S
+    events = [t for t in _signup_events[fingerprint] if t > cutoff]
+    events.append(now)
+    _signup_events[fingerprint] = events
+    if len(events) >= SIGNUP_BURST_MAX:
+        logger.warning(
+            "Signup burst flagged: %d accounts from fingerprint %s… within %ds",
+            len(events), fingerprint[:12], SIGNUP_BURST_WINDOW_S)
+        return True
+    return False
+
+
+def signup_burst_counts() -> dict:
+    """Snapshot of recent signup activity per fingerprint (for the admin view)."""
+    cutoff = time.time() - SIGNUP_BURST_WINDOW_S
+    out = {}
+    for fp, events in _signup_events.items():
+        recent = [t for t in events if t > cutoff]
+        if recent:
+            out[fp] = len(recent)
+    return out
 
 
 def rate_limit_custom(key: str, window_s: int, max_attempts: int, detail: str):
@@ -116,16 +194,25 @@ class UserSignup(BaseModel):
     email: EmailStr
     password: str
     agreed_terms: Optional[bool] = None
+    # Undeclared fields are DROPPED by pydantic. These two were read with
+    # getattr() in /signup but never declared, so captcha was always None
+    # ("CAPTCHA verification failed" on every single signup) and the device
+    # fingerprint the browser sent was silently discarded.
+    captcha: Optional[str] = None
+    captcha_token: Optional[str] = None   # hCaptcha / Turnstile response
+    fingerprint: Optional[str] = None
 
 
 class UserVerify(BaseModel):
     username: str
     otp: str
+    fingerprint: Optional[str] = None
 
 
 class UserLogin(BaseModel):
     username: str
     password: str
+    fingerprint: Optional[str] = None
 
 
 class ResendOTP(BaseModel):
@@ -238,6 +325,41 @@ SESSION_TTL_DAYS = 90   # extended from 30 days — users reported being logged 
                         # too often across free-tier cold starts.
 
 
+def _ensure_column(conn, table: str, column: str, ddl_type: str = "TEXT"):
+    """Idempotently ensure `table.column` exists (probe first, then ALTER).
+
+    psycopg2 aborts the whole transaction if any statement raises, so we never
+    rely on try/except around ALTER — we check information_schema / PRAGMA and
+    only then add the column.
+    """
+    try:
+        from database import DIALECT
+        cur = conn.cursor()
+        exists = False
+        if DIALECT == "postgres":
+            cur.execute(
+                "SELECT 1 FROM information_schema.columns "
+                "WHERE table_name=%s AND column_name=%s" % ("%s", "%s"),
+                (table, column),
+            )
+            exists = cur.fetchone() is not None
+        else:
+            cur.execute(f"PRAGMA table_info({table})")
+            rows = cur.fetchall() or []
+            exists = any((r[1] if len(r) > 1 else None) == column for r in rows)
+        if not exists:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl_type}")
+            conn.commit()
+            logger.info("Added missing column %s.%s", table, column)
+        cur.close()
+    except Exception as exc:
+        logger.warning("_ensure_column(%s.%s): %s", table, column, exc)
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
+
 def _ensure_expires_column(conn):
     """Idempotently ensure the `sessions.expires_at` column exists.
 
@@ -272,11 +394,18 @@ def _ensure_expires_column(conn):
             pass
 
 
-def create_session(user_id: int, request: Request) -> str:
+def create_session(user_id: int, request: Request, fingerprint: str = "") -> str:
+    """Create a login session.
+
+    §3 requires the device fingerprint on EVERY auth event, so it is recorded
+    here — the one place every auth method (email, OTP verify, Telegram)
+    funnels through — on both the session row and the account.
+    """
     from datetime import datetime, timedelta, timezone
     token = generate_token()
     device_info = parse_device(request.headers.get("user-agent", ""))
     ip = client_ip(request)
+    fingerprint = normalise_fingerprint(fingerprint)
     now = datetime.now(timezone.utc)
     created_at = now.strftime("%Y-%m-%d %H:%M:%S")
     expires_at = (now + timedelta(days=SESSION_TTL_DAYS)).strftime("%Y-%m-%d %H:%M:%S")
@@ -299,10 +428,17 @@ def create_session(user_id: int, request: Request) -> str:
             # Older SQLite (<3.35) doesn't support LIMIT in sub-DELETE; skip cap.
             try: conn.rollback()
             except Exception: pass
+        _ensure_column(conn, "sessions", "fingerprint")
         conn.execute(
-            "INSERT INTO sessions (user_id, token, device_info, ip_address, created_at, last_seen, expires_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (user_id, token, device_info, ip, created_at, created_at, expires_at),
+            "INSERT INTO sessions (user_id, token, device_info, ip_address, created_at, last_seen, expires_at, fingerprint) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (user_id, token, device_info, ip, created_at, created_at, expires_at, fingerprint),
+        )
+        # Keep the account-level fingerprint/IP current so §4 can aggregate job
+        # counts per device. Never overwrite a good hash with an empty one.
+        conn.execute(
+            "UPDATE users SET fingerprint = COALESCE(NULLIF(?, ''), fingerprint), last_ip = ? WHERE id = ?",
+            (fingerprint, ip, user_id),
         )
         conn.commit()
     except Exception:

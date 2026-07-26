@@ -195,8 +195,11 @@ def public_config():
     per deployment — hardcoding it in index.html left a dead "YOUR_BOT_USERNAME"
     placeholder that never rendered a button.
     """
+    from services import captcha as _captcha
     return {
         "telegram_bot_username": os.getenv("TELEGRAM_BOT_USERNAME", "").strip().lstrip("@"),
+        "captcha_provider": _captcha.provider(),
+        "captcha_site_key": _captcha.site_key(),
     }
 
 
