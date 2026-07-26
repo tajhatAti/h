@@ -4331,3 +4331,62 @@ async function confirmAdminAction() {
     }
   });
 })();
+
+
+/* ============================================================
+   TELEGRAM LOGIN WIDGET
+   The bot @username is deployment-specific, so it is fetched from
+   /api/public-config at runtime instead of being hardcoded in the
+   markup (the old data-telegram-login="YOUR_BOT_USERNAME" placeholder
+   meant the widget never rendered at all).
+
+   We use the callback flow (data-onauth) rather than data-auth-url:
+   the backend POST /auth/telegram returns a JSON session token, which
+   a full-page redirect could not hand back to this SPA.
+   ============================================================ */
+window.onTelegramAuth = async function (user) {
+  try {
+    const data = await api("/auth/telegram", "POST", user);
+    authToken = data.token;
+    localStorage.setItem("ahad_token", authToken);
+    try {
+      localStorage.setItem("ahad_user", JSON.stringify({ username: data.username, ts: Date.now() }));
+    } catch (e) {}
+    resetLocalActivity();
+    logEvent("success", "Telegram sign-in", `Welcome, ${data.username}`);
+    showScreen("screen-dashboard");
+    _consumeReturnTo();
+    toast(`Welcome, ${data.username}!`, "success");
+    loadDashboard();
+  } catch (err) {
+    toast(err.message || "Telegram sign-in failed", "error");
+  }
+};
+
+(function initTelegramLogin() {
+  async function mount() {
+    const wrap = document.getElementById("telegramLogin");
+    const slot = document.getElementById("telegramLoginBtn");
+    if (!wrap || !slot || slot.dataset.mounted) return;
+    let username = "";
+    try {
+      const r = await fetch("/api/public-config");
+      if (r.ok) username = ((await r.json()).telegram_bot_username || "").trim();
+    } catch (e) { /* offline / older backend — leave the block hidden */ }
+    // No bot configured for this deployment: keep the whole block hidden
+    // instead of showing a broken "or" divider with nothing under it.
+    if (!username) return;
+    const s = document.createElement("script");
+    s.async = true;
+    s.src = "https://telegram.org/js/telegram-widget.js?22";
+    s.setAttribute("data-telegram-login", username);
+    s.setAttribute("data-size", "large");
+    s.setAttribute("data-onauth", "onTelegramAuth(user)");
+    s.setAttribute("data-request-access", "write");
+    slot.appendChild(s);
+    slot.dataset.mounted = "1";
+    wrap.hidden = false;
+  }
+  if (document.readyState === "complete" || document.readyState === "interactive") setTimeout(mount, 60);
+  else document.addEventListener("DOMContentLoaded", function () { setTimeout(mount, 60); });
+})();

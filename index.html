@@ -317,14 +317,12 @@
       <button type="submit" class="btn-primary block" id="btnSignin"><span>Sign in</span></button>
     </form>
 
-    <!-- Telegram Login Widget -->
-    <div class="telegram-login">
+    <!-- Telegram Login Widget — injected at runtime from /api/public-config
+         so the bot @username comes from the TELEGRAM_BOT_USERNAME env var
+         instead of a hardcoded placeholder. Hidden entirely when unset. -->
+    <div class="telegram-login" id="telegramLogin" hidden>
       <div class="auth-or"><span>or</span></div>
-      <script async src="https://telegram.org/js/telegram-widget.js?22" 
-              data-telegram-login="YOUR_BOT_USERNAME" 
-              data-size="large" 
-              data-auth-url="/auth/telegram"
-              data-request-access="write"></script>
+      <div id="telegramLoginBtn"></div>
       <p class="telegram-hint">Sign in with your Telegram account</p>
     </div>
 

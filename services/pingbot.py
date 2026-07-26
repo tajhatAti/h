@@ -5,6 +5,7 @@ Features:
 - Inline buttons after deploy
 - Real logs, Uptime, Download DB
 """
+import json
 import os
 import re
 import threading
@@ -22,21 +23,34 @@ TG_API = f"https://api.telegram.org/bot{BOT_TOKEN}" if BOT_TOKEN else ""
 code_buffer = defaultdict(list)       # chat_id -> list of messages
 buffer_timer = {}                     # chat_id -> timer
 
+# Chats that ran /code and are now streaming their source in. Telegram splits
+# anything over ~4096 chars into SEPARATE messages, so the flag MUST survive
+# every chunk — it is cleared only when flush_code() actually deploys.
+waiting_for_code = {}                 # chat_id -> True
+
 
 def _tg(method, **params):
+    """Call a Telegram Bot API method.
+
+    POST + JSON body (not GET + query params): nested structures such as
+    reply_markup's inline_keyboard cannot survive urlencoding — requests
+    flattens them to "reply_markup=inline_keyboard" and the buttons vanish.
+    """
     if not TG_API:
         return {}
     try:
-        r = requests.get(f"{TG_API}/{method}", params=params, timeout=50)
+        r = requests.post(f"{TG_API}/{method}", json=params, timeout=50)
         return r.json()
-    except:
+    except Exception as e:  # noqa: BLE001
+        print(f"Telegram {method} failed: {e}")
         return {}
 
 
 def _send(chat_id, text, reply_markup=None):
     data = {"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}
     if reply_markup:
-        data["reply_markup"] = reply_markup
+        # Telegram expects reply_markup as a JSON-serialised string.
+        data["reply_markup"] = json.dumps(reply_markup)
     _tg("sendMessage", **data)
 
 
@@ -54,12 +68,18 @@ def handle_ping(chat_id, text):
 
 # ==================== SMART CODE COLLECTION ====================
 def flush_code(chat_id, first_name):
+    """Fired 5s after the LAST chunk arrived — join everything and deploy."""
     if chat_id not in code_buffer:
+        waiting_for_code.pop(chat_id, None)
         return
     code = "\n".join(code_buffer[chat_id])
     del code_buffer[chat_id]
-    if chat_id in buffer_timer:
-        del buffer_timer[chat_id]
+    buffer_timer.pop(chat_id, None)
+    # Collection is over — the next plain message is NOT code any more.
+    waiting_for_code.pop(chat_id, None)
+    if not code.strip():
+        _send(chat_id, "❌ Kono code paini. Abar /code likhun.")
+        return
     deploy_code(code, chat_id, first_name)
 
 
@@ -201,17 +221,20 @@ def poll_loop():
                     first_name = msg.get("from", {}).get("first_name", "user")
 
                     if text.startswith("/start"):
-                        _send(chat_id, f"👋 Hi {first_name}!\\n\\nUse /ping or /code")
+                        _send(chat_id, f"👋 Hi {first_name}!\n\nUse /ping or /code")
 
                     elif text.startswith("/ping"):
                         handle_ping(chat_id, text)
 
                     elif text.startswith("/code"):
                         waiting_for_code[chat_id] = True
+                        code_buffer.pop(chat_id, None)
                         _send(chat_id, "✅ Send your code (any size)")
 
                     elif chat_id in waiting_for_code:
-                        del waiting_for_code[chat_id]
+                        # Keep the flag set: long files arrive as SEVERAL
+                        # messages and every one of them must land in the
+                        # buffer. flush_code() clears it after deploying.
                         collect_code(chat_id, text, first_name)
 
                 elif "callback_query" in upd:

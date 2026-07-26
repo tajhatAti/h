@@ -615,27 +615,40 @@ def telegram_login(payload: TelegramAuthData, request: Request):
     if not bot_token:
         raise HTTPException(status_code=500, detail="Telegram login not configured.")
 
-    # Verify HMAC-SHA256
+    # Verify HMAC-SHA256 over the data-check-string, exactly as Telegram
+    # specifies: "key=value" lines for every NON-EMPTY field, sorted by key,
+    # joined with \n. Iterating a dict yields KEYS only — unpacking those as
+    # (k, v) raised ValueError and turned every login into a 500.
+    fields = {
+        "auth_date": payload.auth_date,
+        "first_name": payload.first_name,
+        "id": payload.id,
+        "photo_url": payload.photo_url or "",
+        "username": payload.username or "",
+    }
     secret_key = hashlib.sha256(bot_token.encode()).digest()
     data_check = "\n".join(
-        f"{k}={v}" for k, v in sorted(
-            {"id": payload.id, "first_name": payload.first_name,
-             "username": payload.username or "", "photo_url": payload.photo_url or "",
-             "auth_date": payload.auth_date},
-            key=lambda x: x[0]
-        )
-        if v
+        f"{k}={v}" for k, v in sorted(fields.items()) if v not in (None, "")
     )
     calculated_hash = hmac.new(secret_key, data_check.encode(), hashlib.sha256).hexdigest()
-    if calculated_hash != payload.hash:
+    if not hmac.compare_digest(calculated_hash, payload.hash):
         raise HTTPException(status_code=400, detail="Invalid Telegram authentication data.")
+
+    # Replay protection: Telegram signs auth_date, so a leaked payload would
+    # otherwise stay valid forever. Telegram's own guidance is to reject
+    # anything older than a day.
+    age_s = time.time() - payload.auth_date
+    if age_s > 86400 or age_s < -300:
+        raise HTTPException(status_code=400, detail="Telegram login expired. Please try again.")
 
     conn = get_db_connection()
     try:
         row = conn.execute("SELECT * FROM users WHERE telegram_id = ?", (payload.id,)).fetchone()
 
         if row:
-            if row.get("is_suspended"):
+            # sqlite3.Row has no .get() — use the same key-probe the rest of
+            # the codebase uses so this works on SQLite *and* Postgres.
+            if "is_suspended" in row.keys() and row["is_suspended"]:
                 raise HTTPException(status_code=403, detail="Account is suspended.")
             token = create_session(row["id"], request)
             return {"message": "Login successful via Telegram", "token": token, "username": row["username"]}

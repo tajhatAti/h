@@ -187,6 +187,19 @@ def code_share_redirect(token: str):
     return RedirectResponse(url=f"/s/{token}", status_code=301)
 
 
+@app.get("/api/public-config")
+def public_config():
+    """Non-secret settings the static SPA needs at runtime.
+
+    The Telegram login widget must be told the bot's @username, which differs
+    per deployment — hardcoding it in index.html left a dead "YOUR_BOT_USERNAME"
+    placeholder that never rendered a button.
+    """
+    return {
+        "telegram_bot_username": os.getenv("TELEGRAM_BOT_USERNAME", "").strip().lstrip("@"),
+    }
+
+
 @app.get("/health")
 def health():
     return {

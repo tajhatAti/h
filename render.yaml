@@ -67,6 +67,16 @@ services:
       - key: PG_SSLMODE
         value: prefer
 
+      # ── Telegram (bot + "Sign in with Telegram") ─────────
+      # Token powers the in-process RunSpace bot AND the login widget's
+      # HMAC check. Username is what makes the widget render at all
+      # (frontend reads it from /api/public-config). Leave both unset
+      # to disable the Telegram feature entirely.
+      - key: TELEGRAM_PING_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_BOT_USERNAME
+        sync: false
+
       # ── Two-service layout (OPTIONAL — leave BOTH unset for
       #    single-service embedded mode, which is the default) ──
       # - key: RUNNER_SERVICE_URL     # https://ahad-code-runner.onrender.com
