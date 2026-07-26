@@ -277,6 +277,14 @@
       <div class="brand-mark lg"><object type="image/svg+xml" data="/static/codenest-mark.svg?v=20260724m" aria-label="CodeNest"></object></div>
       <h2>Create your account</h2>
     </div>
+    <!-- Telegram-only mode: signing up IS signing in. -->
+    <div class="telegram-login primary" id="telegramSignup" hidden>
+      <div id="telegramSignupBtn"></div>
+      <p class="telegram-hint">Create your account with Telegram — one tap, no password.</p>
+    </div>
+
+    <div id="emailAuthSignup" hidden>
+      <div class="auth-or"><span>or use email</span></div>
     <form id="formSignup" class="auth-form">
       <label class="field"><span>Username</span><input type="text" id="su_username" placeholder="e.g. ahad_r" autocomplete="username" required></label>
       <label class="field"><span>Email</span><input type="email" id="su_email" placeholder="you@example.com" autocomplete="email" required></label>
@@ -295,6 +303,7 @@
 
       <button type="submit" class="btn-primary block" id="btnSignup"><span>Create account</span></button>
     </form>
+    </div>
     <p class="auth-switch">Already have an account? <a onclick="showScreen('screen-signin')">Sign in</a></p>
   </div>
 </div>
@@ -307,26 +316,32 @@
       <div class="brand-mark lg"><object type="image/svg+xml" data="/static/codenest-mark.svg?v=20260724m" aria-label="CodeNest"></object></div>
       <h2>Sign in</h2>
     </div>
-    <form id="formSignin" class="auth-form">
-      <label class="field"><span>Email or username</span><input type="text" id="si_username" placeholder="you@example.com" autocomplete="username" required></label>
-      <label class="field"><span>Password</span><input type="password" id="si_password" placeholder="••••••••" autocomplete="current-password" required></label>
-      <div class="field-row">
-        <label class="check"><input type="checkbox"> Remember me</label>
-        <a class="link" onclick="showScreen('screen-forgot1')">Forgot password?</a>
-      </div>
-      <button type="submit" class="btn-primary block" id="btnSignin"><span>Sign in</span></button>
-    </form>
-
-    <!-- Telegram Login Widget — injected at runtime from /api/public-config
-         so the bot @username comes from the TELEGRAM_BOT_USERNAME env var
-         instead of a hardcoded placeholder. Hidden entirely when unset. -->
-    <div class="telegram-login" id="telegramLogin" hidden>
-      <div class="auth-or"><span>or</span></div>
+    <!-- Telegram is the ONLY sign-in method for now. The widget is injected at
+         runtime from /api/public-config so the bot @username comes from the
+         TELEGRAM_BOT_USERNAME env var rather than a hardcoded placeholder. -->
+    <div class="telegram-login primary" id="telegramLogin" hidden>
       <div id="telegramLoginBtn"></div>
-      <p class="telegram-hint">Sign in with your Telegram account</p>
+      <p class="telegram-hint">Sign in or create your account with Telegram — no password needed.</p>
     </div>
+    <p class="auth-note" id="telegramUnavailable" hidden>
+      Telegram sign-in is not configured on this deployment yet.
+    </p>
 
-    <p class="auth-switch">New here? <a onclick="showScreen('screen-signup')">Create an account</a></p>
+    <!-- Email + password kept in the DOM (backend still supported) but hidden
+         while Telegram-only mode is active. -->
+    <div id="emailAuthSignin" hidden>
+      <div class="auth-or"><span>or use email</span></div>
+      <form id="formSignin" class="auth-form">
+        <label class="field"><span>Email or username</span><input type="text" id="si_username" placeholder="you@example.com" autocomplete="username"></label>
+        <label class="field"><span>Password</span><input type="password" id="si_password" placeholder="••••••••" autocomplete="current-password"></label>
+        <div class="field-row">
+          <label class="check"><input type="checkbox"> Remember me</label>
+          <a class="link" onclick="showScreen('screen-forgot1')">Forgot password?</a>
+        </div>
+        <button type="submit" class="btn-primary block" id="btnSignin"><span>Sign in</span></button>
+      </form>
+      <p class="auth-switch">New here? <a onclick="showScreen('screen-signup')">Create an account</a></p>
+    </div>
   </div>
 </div>
 

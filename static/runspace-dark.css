@@ -913,3 +913,44 @@ body.rs-detail-open #tab-jobs .rs-detail { z-index: 145; }
   scroll-behavior: smooth;
   will-change: scroll-position;
 }
+
+/* ============================================================
+   JOB TAB SWITCHING — brief fade + slide (§4)
+   GPU-accelerated: only transform/opacity are animated, so the
+   compositor handles it and no layout/paint work is triggered.
+   ============================================================ */
+@keyframes rsJobSwapIn {
+  from { opacity: 0; transform: translate3d(0, 6px, 0); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+/* Applied for the duration of a job switch, then removed by JS so the
+   class can retrigger on the next switch. */
+#tab-jobs .rs-ws.rs-swap {
+  animation: rsJobSwapIn 180ms cubic-bezier(.2, .7, .2, 1) both;
+  will-change: opacity, transform;
+}
+#tab-jobs .rs-ws.rs-swap .rs-log-wrap {
+  animation: rsJobSwapIn 200ms cubic-bezier(.2, .7, .2, 1) both;
+  animation-delay: 40ms;
+}
+
+/* Sidebar item selection should feel immediate but not jump. */
+#tab-jobs .job-item { transition: background-color 140ms ease, border-color 140ms ease; }
+
+/* Details page transitions in the same visual language. */
+#tab-jobs .rs-details.rs-swap {
+  animation: rsJobSwapIn 190ms cubic-bezier(.2, .7, .2, 1) both;
+  will-change: opacity, transform;
+}
+
+/* Users who ask the OS for less motion get no movement at all. */
+@media (prefers-reduced-motion: reduce) {
+  #tab-jobs .rs-ws.rs-swap,
+  #tab-jobs .rs-ws.rs-swap .rs-log-wrap,
+  #tab-jobs .rs-details.rs-swap,
+  #tab-jobs.active,
+  #tab-jobs.active .rs-side,
+  #tab-jobs.active .rs-main,
+  #tab-jobs.active .job-item { animation: none !important; }
+}

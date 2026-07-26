@@ -2037,7 +2037,9 @@ const ROUTES = {
   "/terminal": "term", "/term": "term",
   "/admin": "admin", "/profile": "profile",
 };
-const _JOB_PATH_RE = /^\/runspace\/([^/]+)\/([^/]+)\/?$/;
+// /runspace/{username}/{tabname}          -> editor
+// /runspace/{username}/{tabname}/page     -> Details page (§5)
+const _JOB_PATH_RE = /^\/runspace\/([^/]+)\/([^/]+?)(\/page)?\/?$/;
 const TAB_PATHS = {};
 Object.keys(ROUTES).forEach(p => { if (!TAB_PATHS[ROUTES[p]]) TAB_PATHS[ROUTES[p]] = p; });
 const AUTH_ROUTES = {
@@ -2091,7 +2093,18 @@ function routeFromUrl() {
       return "blocked";
     }
     showScreen("screen-dashboard");
-    window.__rs_deep_slug = decodeURIComponent(_jd[2] || "");
+    const _slug = decodeURIComponent(_jd[2] || "");
+    const _wantDetails = !!_jd[3];            // the "/page" suffix
+    // Back/Forward between the editor and its Details page: the job is already
+    // selected, so just toggle the view instead of reloading everything.
+    const _cur = (window._lastJobs || []).find(x => String(x.id) === String(_selectedJobId));
+    if (currentTab === "jobs" && _cur && _slugify(_cur.name) === _slug) {
+      if (_wantDetails && !_jdOpen) openJobDetails(null, {noUrl: true});
+      else if (!_wantDetails && _jdOpen) closeJobDetails({noUrl: true});
+      return "tab";
+    }
+    window.__rs_deep_slug = _slug;
+    window.__rs_deep_details = _wantDetails;
     if (currentTab !== "jobs") _switch("jobs");
     else _deepSelectJobBySlug(window.__rs_deep_slug);
     return "tab";
@@ -2585,14 +2598,26 @@ function _deepSelectJobBySlug(slug) {
   const j = window._lastJobs.find(x => _slugify(x.name) === slug);
   if (j) selectJob(j.id);
 }
-function _updateJobUrl(job) {
+function _jobBasePath(job) {
+  const u = (window.__user && window.__user.username) ? window.__user.username : null;
+  if (!u || !job || !job.name) return null;
+  return "/runspace/" + encodeURIComponent(u) + "/" + _slugify(job.name);
+}
+
+/* Keep the address bar in sync with the job AND with which view is showing.
+   Editor  -> /runspace/{username}/{tabname}
+   Details -> /runspace/{username}/{tabname}/page          (§5) */
+function _updateJobUrl(job, opts) {
   try {
-    const u = (window.__user && window.__user.username) ? window.__user.username : null;
-    if (!u || !job || !job.name) return;
-    const path = "/runspace/" + encodeURIComponent(u) + "/" + _slugify(job.name);
-    if (_clientPath() !== path && !_routeNav) {
-      history.replaceState({tab:"jobs",jobId:job.id}, "", path);
-    }
+    const base = _jobBasePath(job);
+    if (!base) return;
+    const wantDetails = opts && opts.details !== undefined ? opts.details : _jdOpen;
+    const path = base + (wantDetails ? "/page" : "");
+    if (_clientPath() === path || _routeNav) return;
+    // Editor <-> Details is a real navigation inside the job, so PUSH it:
+    // the browser Back button then returns to the editor as users expect.
+    if (opts && opts.push) history.pushState({tab:"jobs", jobId:job.id, details:!!wantDetails}, "", path);
+    else history.replaceState({tab:"jobs", jobId:job.id, details:!!wantDetails}, "", path);
   } catch (e) {}
 }
 
@@ -2811,13 +2836,28 @@ function _renderLogs(text) {
 }
 
 // ─── Workspace chrome ─────────────────────────────────────────────────
-function _showWorkspace(job) {
+/** Retrigger a CSS animation class (§4 tab-switch transition).
+ *  Removing + reflowing + re-adding is required: re-adding a class that is
+ *  already present does not restart a CSS animation. */
+function _playSwap(el) {
+  if (!el) return;
+  try {
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    el.classList.remove("rs-swap");
+    void el.offsetWidth;                 // force reflow so the animation restarts
+    el.classList.add("rs-swap");
+    setTimeout(() => el.classList.remove("rs-swap"), 260);
+  } catch (e) {}
+}
+
+function _showWorkspace(job, animate) {
   const emp = document.getElementById("wbEmpty");
   const ws = document.getElementById("wbWorkspace");
   const boot = document.getElementById("wbBootLoader");
   if (emp) emp.style.display = "none";
   if (ws)  ws.style.display = "flex";
   if (boot) boot.style.display = "none";
+  if (animate) _playSwap(ws);
   _reflectJobStatus(job);
   _jobCmRefresh();
 }
@@ -3027,7 +3067,7 @@ async function fetchJobDetail(id) {
     if (curCode !== (job.code || "")) _jobCmSetValue(job.code || "");
     _jobDirty = false;
     _updateStats();
-    _showWorkspace(job);
+    _showWorkspace(job, true);   // animate: this is a job→job switch (§4)
     _reflectJobStatus(job);
     _setHint("ok", "");
     // If the detail drawer is open, re-render it with the new job's data so
@@ -3159,7 +3199,18 @@ function renderJobs(jobs) {
   // Deep-link: if URL says /runspace/u/slug, pick that job regardless of running state
   let deepPick = null;
   if (window.__rs_deep_slug) deepPick = jobs.find(x => _slugify(x.name) === window.__rs_deep_slug);
-  if (deepPick) { selectJob(deepPick.id); window.__rs_deep_slug = null; _suppressAutoSelect = 0; }
+  if (deepPick) {
+    selectJob(deepPick.id);
+    window.__rs_deep_slug = null;
+    _suppressAutoSelect = 0;
+    // Landing directly on .../page must open Details, not the editor.
+    if (window.__rs_deep_details) {
+      window.__rs_deep_details = false;
+      openJobDetails(null, {noUrl: true});
+    } else if (_jdOpen) {
+      closeJobDetails({noUrl: true});
+    }
+  }
   else if (Date.now() < _suppressAutoSelect) {
     // New was just clicked — do NOT auto-select; keep blank editor.
     document.querySelectorAll("#jobsList .job-item.active").forEach(el => el.classList.remove("active"));
@@ -3455,11 +3506,17 @@ let _jdOpen = false;
 let _jdHealthTimer = null;
 let _jdTimeline = [];
 let _jdLogFollow = true;
-function openJobDetails(id) {
+function openJobDetails(id, opts) {
   if (id) selectJob(id);
   document.body.classList.add("rs-detail-open");
   _jdOpen = true;
   renderJobDetails();
+  _playSwap(document.getElementById("jobDetailPanel"));
+  // §5: the Details page has its own URL so it can be linked/refreshed.
+  if (!(opts && opts.noUrl)) {
+    const job = (window._lastJobs || []).find(x => String(x.id) === String(_selectedJobId));
+    if (job) _updateJobUrl(job, {details: true, push: true});
+  }
   _startHealthCheck();
   // Lock background scroll on mobile (prevents double-scroll)
   document.body.classList.add("rs-drawer-open");
@@ -3468,11 +3525,17 @@ function openJobDetails(id) {
   if (db) db.scrollTop = 0;
   _jdLogFollow = true;
 }
-function closeJobDetails() {
+function closeJobDetails(opts) {
   document.body.classList.remove("rs-detail-open");
   document.body.classList.remove("rs-drawer-open");
   _jdOpen = false;
   if (_jdHealthTimer) { clearInterval(_jdHealthTimer); _jdHealthTimer = null; }
+  _playSwap(document.getElementById("wbWorkspace"));
+  // Drop the /page suffix again so the URL matches the editor view.
+  if (!(opts && opts.noUrl)) {
+    const job = (window._lastJobs || []).find(x => String(x.id) === String(_selectedJobId));
+    if (job) _updateJobUrl(job, {details: false, push: true});
+  }
 }
 function _jdSet(name, value) {
   const el = document.getElementById(name);
@@ -4413,18 +4476,9 @@ window.onTelegramAuth = async function (user) {
 };
 
 (function initTelegramLogin() {
-  async function mount() {
-    const wrap = document.getElementById("telegramLogin");
-    const slot = document.getElementById("telegramLoginBtn");
-    if (!wrap || !slot || slot.dataset.mounted) return;
-    let username = "";
-    try {
-      const r = await fetch("/api/public-config");
-      if (r.ok) username = ((await r.json()).telegram_bot_username || "").trim();
-    } catch (e) { /* offline / older backend — leave the block hidden */ }
-    // No bot configured for this deployment: keep the whole block hidden
-    // instead of showing a broken "or" divider with nothing under it.
-    if (!username) return;
+  function mountWidget(slotId, username) {
+    const slot = document.getElementById(slotId);
+    if (!slot || slot.dataset.mounted) return;
     const s = document.createElement("script");
     s.async = true;
     s.src = "https://telegram.org/js/telegram-widget.js?22";
@@ -4434,7 +4488,38 @@ window.onTelegramAuth = async function (user) {
     s.setAttribute("data-request-access", "write");
     slot.appendChild(s);
     slot.dataset.mounted = "1";
-    wrap.hidden = false;
+  }
+
+  async function mount() {
+    let cfg = {};
+    try {
+      const r = await fetch("/api/public-config");
+      if (r.ok) cfg = await r.json();
+    } catch (e) { /* older backend / offline */ }
+
+    const username = (cfg.telegram_bot_username || "").trim();
+    // Telegram-only mode (server-driven). When Telegram is NOT configured we
+    // fall back to showing the e-mail forms so the site is never unusable.
+    const tgOnly = cfg.telegram_only !== false;
+
+    const show = (id, on) => { const el = document.getElementById(id); if (el) el.hidden = !on; };
+
+    if (username) {
+      mountWidget("telegramLoginBtn", username);
+      mountWidget("telegramSignupBtn", username);
+      show("telegramLogin", true);
+      show("telegramSignup", true);
+      show("telegramUnavailable", false);
+      show("emailAuthSignin", !tgOnly);
+      show("emailAuthSignup", !tgOnly);
+    } else {
+      // No bot configured: hide Telegram, reveal e-mail so users can still log in.
+      show("telegramLogin", false);
+      show("telegramSignup", false);
+      show("telegramUnavailable", tgOnly);
+      show("emailAuthSignin", true);
+      show("emailAuthSignup", true);
+    }
   }
   if (document.readyState === "complete" || document.readyState === "interactive") setTimeout(mount, 60);
   else document.addEventListener("DOMContentLoaded", function () { setTimeout(mount, 60); });

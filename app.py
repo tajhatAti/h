@@ -198,6 +198,10 @@ def public_config():
     from services import captcha as _captcha
     return {
         "telegram_bot_username": os.getenv("TELEGRAM_BOT_USERNAME", "").strip().lstrip("@"),
+        # Telegram-only sign-in is the current scope. The e-mail+password flow
+        # stays fully implemented server-side; set TELEGRAM_ONLY_AUTH=0 to show
+        # its UI again.
+        "telegram_only": os.getenv("TELEGRAM_ONLY_AUTH", "1").strip().lower() not in ("0", "false", "no"),
         "captcha_provider": _captcha.provider(),
         "captcha_site_key": _captcha.site_key(),
     }

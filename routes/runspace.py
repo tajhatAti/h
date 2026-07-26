@@ -47,6 +47,11 @@ logger = logging.getLogger("codenest.runspace")
 SSE_POLL_INTERVAL_S = 1.5
 SSE_MAX_LIFETIME_S = float(os.getenv("SSE_MAX_LIFETIME_S", "900"))  # 15 min, then reconnect
 
+# Cross-account fingerprint/IP cluster limiting is written and tested
+# (services/limits.py) but intentionally DISABLED: current scope is a simple
+# per-account cap. Set CLUSTER_LIMITS_ENABLED=1 to switch it back on.
+CLUSTER_LIMITS_ENABLED = os.getenv("CLUSTER_LIMITS_ENABLED", "").strip().lower() in ("1", "true", "yes")
+
 router = APIRouter()
 
 
@@ -131,22 +136,22 @@ def create_job(payload: JobCreateRequest, request: Request, authorization: Optio
     user, _ = get_current_user_and_session(authorization)
     rate_limit_user(user["id"], "exec")
 
-    # === DEVICE FINGERPRINT + IP LIMITS (PRIMARY DEFENSE, §4) ===
-    # Counted across EVERY account sharing this device/network, so making extra
-    # accounts (via either auth method) does not buy extra jobs.
+    # Device/IP are still RECORDED (cheap, and useful for future abuse work),
+    # but cross-account cluster limiting is OFF by default: the current scope is
+    # a simple per-account cap. The fingerprint/IP cluster implementation lives
+    # in services/limits.py and is re-enabled with CLUSTER_LIMITS_ENABLED=1.
     fp = normalise_fingerprint(request.headers.get("X-Fingerprint", "")[:4000])
     ip = client_ip(request)
 
     conn = get_db_connection()
     try:
-        # Keep the account's device/IP current for cluster grouping.
         conn.execute(
             "UPDATE users SET fingerprint = COALESCE(NULLIF(?, ''), fingerprint), last_ip = ? WHERE id = ?",
             (fp, ip, user["id"]),
         )
         conn.commit()
-        # Raises 429 with a specific, human explanation when a cap is hit.
-        limits.check_job_quota(conn, user["id"], fp, ip)
+        if CLUSTER_LIMITS_ENABLED:
+            limits.check_job_quota(conn, user["id"], fp, ip)
     finally:
         conn.close()
 
@@ -171,10 +176,26 @@ def create_job(payload: JobCreateRequest, request: Request, authorization: Optio
         if dup:
             conn.close()
             raise HTTPException(status_code=409, detail=f"You already have a job named \u201c{name}\u201d \u2014 choose a different name.")
-        cnt = conn.execute("SELECT COUNT(*) AS c FROM jobs WHERE user_id = ?", (user["id"],)).fetchone()
-        if (dict(cnt)["c"] if cnt else 0) >= MAX_JOBS_PER_USER:
+        # Per-account cap on CONCURRENT jobs (§2). Counting every row ever
+        # created would permanently lock a user out after 3 lifetime jobs even
+        # if all of them were stopped, so only jobs the runner reports as alive
+        # count. If the runner is unreachable we fall back to the row count
+        # rather than letting the cap disappear entirely.
+        rows = conn.execute(
+            "SELECT runner_job_id FROM jobs WHERE user_id = ?", (user["id"],)
+        ).fetchall()
+        live_ids = limits.running_runner_ids()
+        if live_ids:
+            active = sum(1 for r in rows if dict(r).get("runner_job_id") in live_ids)
+        else:
+            active = len(rows)
+        if active >= MAX_JOBS_PER_USER:
             conn.close()
-            raise HTTPException(status_code=429, detail=f"Max {MAX_JOBS_PER_USER} jobs per account (free tier).")
+            raise HTTPException(
+                status_code=429,
+                detail=(f"You already have {active} of {MAX_JOBS_PER_USER} RunSpace jobs "
+                        f"running — stop one before starting another."),
+            )
     except HTTPException:
         raise
 
