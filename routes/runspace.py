@@ -29,7 +29,9 @@ class GithubImportRequest(BaseModel):
 
 import asyncio
 import json
+import logging
 import re
+import time
 from urllib.parse import urlparse
 
 from fastapi.responses import StreamingResponse
@@ -37,6 +39,13 @@ from fastapi.responses import StreamingResponse
 from services import runner_client
 from services import limits
 from services.runner_client import MAX_JOBS_PER_USER
+
+logger = logging.getLogger("codenest.runspace")
+
+# Log-stream safety valves. A stream that cannot end will pin one request (and
+# a worker thread per poll in embedded mode) until the server is exhausted.
+SSE_POLL_INTERVAL_S = 1.5
+SSE_MAX_LIFETIME_S = float(os.getenv("SSE_MAX_LIFETIME_S", "900"))  # 15 min, then reconnect
 
 router = APIRouter()
 
@@ -291,7 +300,7 @@ def job_logs(job_id: int, authorization: Optional[str] = Header(None)):
 
 
 @router.get("/api/jobs/{job_id}/logs/stream")
-async def job_logs_stream(job_id: int, token: Optional[str] = None):
+async def job_logs_stream(job_id: int, request: Request, token: Optional[str] = None):
     """Server-Sent Events: push a job's logs to the dashboard in real time.
 
     EventSource can't send Authorization headers, so the session token comes
@@ -349,27 +358,54 @@ async def job_logs_stream(job_id: int, token: Optional[str] = None):
     rid = row.get("runner_job_id")
 
     async def gen():
+        """Push status+logs until the client goes away.
+
+        This loop MUST be able to end. Without a disconnect check it ran
+        forever: every job a user opened pinned one request (and, in embedded
+        mode, a worker thread per poll) until the server ran out of capacity
+        and the whole RunSpace UI froze. Closing a browser tab does not raise
+        inside the generator, so we poll request.is_disconnected() and also
+        cap the total lifetime — the client reconnects automatically, which is
+        exactly what EventSource is designed to do.
+        """
         last = None
-        while True:
-            info = None
-            if rid:
-                try:
-                    resp = await asyncio.to_thread(_runner_http, "GET", f"/internal/jobs/{rid}")
-                    if resp.status_code == 200:
-                        info = resp.json()
-                except Exception:
-                    info = None
-            payload = {
-                "status": (info or {}).get("status", "offline"),
-                "logs": (info or {}).get("logs", "(Waking up your RunSpace... this can take up to a minute on the free tier)"),
-                "uptime_s": (info or {}).get("uptime_s", 0),
-                "restarts": (info or {}).get("restarts", 0),
-            }
-            blob = json.dumps(payload, ensure_ascii=False)
-            if blob != last:
-                last = blob
-                yield f"data: {blob}\n\n"
-            await asyncio.sleep(1.5)
+        started = time.monotonic()
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                if time.monotonic() - started > SSE_MAX_LIFETIME_S:
+                    # Tell the client to reconnect, then close this one cleanly.
+                    yield "event: reconnect\ndata: {}\n\n"
+                    break
+
+                info = None
+                if rid:
+                    try:
+                        resp = await asyncio.to_thread(_runner_http, "GET", f"/internal/jobs/{rid}")
+                        if resp.status_code == 200:
+                            info = resp.json()
+                    except Exception:
+                        info = None
+                payload = {
+                    "status": (info or {}).get("status", "offline"),
+                    "logs": (info or {}).get("logs", "(Waking up your RunSpace... this can take up to a minute on the free tier)"),
+                    "uptime_s": (info or {}).get("uptime_s", 0),
+                    "restarts": (info or {}).get("restarts", 0),
+                }
+                blob = json.dumps(payload, ensure_ascii=False)
+                if blob != last:
+                    last = blob
+                    yield f"data: {blob}\n\n"
+                else:
+                    # Comment frame doubles as a keep-alive AND as the write
+                    # that surfaces a dead peer to the transport.
+                    yield ": ping\n\n"
+                await asyncio.sleep(SSE_POLL_INTERVAL_S)
+        except asyncio.CancelledError:  # client aborted mid-write
+            raise
+        except Exception as exc:  # noqa: BLE001 — never leak a stack trace into the stream
+            logger.warning("log stream for job %s ended: %s", job_id, exc)
 
     return StreamingResponse(
         gen(),

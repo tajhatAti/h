@@ -605,7 +605,7 @@ class TerminalManager:
             db = self._db()
             if not db:
                 return
-            with db.connect() as conn:
+            with db.get_db_connection() as conn:
                 try:
                     rows = conn.execute(
                         "SELECT user_id FROM term_homes WHERE tarball_b64 IS NOT NULL AND tarball_b64 != ''"
@@ -658,7 +658,7 @@ class TerminalManager:
                 return False
             b64 = base64.b64encode(data).decode('ascii')
             now = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
-            with db.connect() as conn:
+            with db.get_db_connection() as conn:
                 try:
                     conn.execute(
                         "INSERT INTO term_homes(user_id,tarball_b64,updated_at) VALUES (?,?,?)",
@@ -678,7 +678,7 @@ class TerminalManager:
         try:
             db = self._db()
             if not db: return False
-            with db.connect() as conn:
+            with db.get_db_connection() as conn:
                 row = conn.execute(
                     "SELECT tarball_b64 FROM term_homes WHERE user_id=?", (user_id,)
                 ).fetchone()
@@ -958,7 +958,7 @@ class TerminalManager:
             db = self._db()
             if not db:
                 return
-            with db.connect() as conn:
+            with db.get_db_connection() as conn:
                 try:
                     rows = conn.execute(
                         "SELECT user_id FROM term_homes WHERE tarball_b64 IS NOT NULL AND tarball_b64 != ''"

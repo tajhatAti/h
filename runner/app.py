@@ -1221,10 +1221,10 @@ def job_update(job_id: str, req: JobUpdateRequest, authorization: Optional[str] 
         else:
             j["pylibs"] = j.get("pylibs") or None
 
-    # Re-allocate port if it was released during stop
+    # Re-allocate port if it was released during stop. Same self-deadlock as in
+    # job_restart(): _alloc_port() acquires _jobs_lock internally.
     if not j.get("port"):
-        with _jobs_lock:
-            j["port"] = _alloc_port()
+        j["port"] = _alloc_port()
 
     j["log"].append("[system] Code updated — restarting (data preserved)")
     j["status"] = "starting"
@@ -1249,10 +1249,12 @@ def job_restart(job_id: str, authorization: Optional[str] = Header(None)):
     _kill_job_tree(j)
     j["stop_requested"] = False
     j["restarts"] = 0
-    # Re-allocate port if released
+    # Re-allocate port if released. _alloc_port() takes _jobs_lock itself, so
+    # wrapping it in `with _jobs_lock:` self-deadlocked on this non-reentrant
+    # lock — restart-after-stop hung forever and, because the lock was never
+    # released, every later job operation piled up behind it and RunSpace froze.
     if not j.get("port"):
-        with _jobs_lock:
-            j["port"] = _alloc_port()
+        j["port"] = _alloc_port()
     j["log"].append("[system] restarting in place (workspace preserved)")
     _spawn(j)
     logger.info("Job %s restarted in place (dir: %s)", job_id, j.get("dir"))

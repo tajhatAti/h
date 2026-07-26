@@ -1826,6 +1826,16 @@ function _tfaShowBackupCodes(freshlyEnabled) {
   const done = document.getElementById("tfaDoneBtn");
   chk.addEventListener("change", () => { done.disabled = !chk.checked; });
 }
+/** Trigger a browser download for a Blob. */
+function _downloadBlob(blob, filename) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 100);
+}
+
 function _tfaDownloadCodes() {
   const txt = "CodeNest — 2FA backup codes\nSave these somewhere safe. Each code works ONCE.\n\n" + _tfa.codes.join("\n") + "\n";
   _downloadBlob(new Blob([txt], { type: "text/plain;charset=utf-8" }),
@@ -3067,6 +3077,16 @@ function restartLogStream(id) {
         }
       } catch(e){}
     };
+    // The server closes each stream after a bounded lifetime (so a forgotten
+    // tab can't pin a connection forever) and sends this event first. Re-open
+    // deliberately instead of relying on EventSource's error backoff.
+    es.addEventListener("reconnect", () => {
+      if (_logSSE !== es) return;               // superseded by another job
+      if (String(_selectedJobId) !== String(id)) { stopLogStream(); return; }
+      setTimeout(() => {
+        if (_logSSE === es && String(_selectedJobId) === String(id)) restartLogStream(id);
+      }, 400);
+    });
     es.onerror = () => { /* SSE auto-retries */ };
   } catch(e) {}
 }
