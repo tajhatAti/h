@@ -713,144 +713,132 @@
               </div>
             </div>
 
-            <!-- JOB DETAILS DRAWER -->
-            <aside class="rs-detail" id="jobDetailPanel" aria-hidden="true">
-              <div class="rs-detail-head">
-                <button class="rs-icon-btn rs-tb" id="jobDetailBack" title="Back to editor">
-                  <svg viewBox="0 0 24 24" class="rs-ic-sm" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
-                </button>
-                <div class="rs-detail-title">
-                  <div class="rs-detail-name" id="jdName">—</div>
-                  <div class="rs-detail-sub">
-                    <span class="jlang-icon" id="jdLang">py</span>
-                    <span class="rs-dot-sep">·</span>
-                    <span class="rs-badge" id="jdBadge">stopped</span>
-                    <span class="rs-dot-sep">·</span>
-                    <span id="jdUptime">up 0s</span>
-                    <span class="rs-dot-sep">·</span>
-                    <span id="jdRestarts">0 restarts</span>
-                  </div>
-                </div>
-                <div class="rs-detail-head-acts">
-                  <button class="rs-icon-btn rs-tb" id="jdRestart" title="Restart">
-                    <svg viewBox="0 0 24 24" class="rs-ic-sm" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>
-                  </button>
-                  <button class="rs-icon-btn rs-tb" id="jdStop" title="Stop">
-                    <svg viewBox="0 0 24 24" class="rs-ic-sm" fill="currentColor" stroke="none" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>
-                  </button>
-                  <button class="rs-icon-btn rs-tb" id="jdDelete" title="Delete">
-                    <svg viewBox="0 0 24 24" class="rs-ic-sm" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>
-                  </button>
-                </div>
-              </div>
-              <div class="rs-detail-body">
-                <!-- Logs card -->
-                <section class="rs-card">
-                  <header class="rs-card-head">
-                    <span class="rs-card-title">Logs</span>
-                    <div class="rs-card-acts">
-                      <button class="rs-icon-btn rs-tb" id="jdCopy" title="Copy logs"><svg viewBox="0 0 24 24" class="rs-ic-sm" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button>
-                      <button class="rs-icon-btn rs-tb" id="jdClear" title="Clear"><svg viewBox="0 0 24 24" class="rs-ic-sm" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
-                    </div>
-                  </header>
-                  <pre class="rs-log-body rs-detail-logs" id="jdLogBody"><span class="rs-log-empty">// Select a running job to see its logs.</span></pre>
-                </section>
-                <!-- Public URL card -->
-                <section class="rs-card" id="jdUrlCard" style="display:none">
-                  <header class="rs-card-head">
-                    <span class="rs-card-title">Public URL</span>
-                    <span class="rs-health" id="jdHealth"><span class="rs-h-dot"></span><span class="rs-h-tx">checking…</span></span>
-                  </header>
-                  <div class="rs-url-row">
-                    <a class="rs-url" id="jdUrl" href="#" target="_blank" rel="noopener">—</a>
-                    <button class="rs-icon-btn rs-tb" id="jdUrlCopy" title="Copy link"><svg viewBox="0 0 24 24" class="rs-ic-sm" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button>
-                    <a class="rs-text-btn" id="jdUrlOpen" href="#" target="_blank" rel="noopener">Open ↗</a>
-                  </div>
-                  <div class="rs-sub" id="jdHealthSub">Last checked: just now</div>
-                </section>
-                <!-- Resources card -->
-                <section class="rs-card">
-                  <header class="rs-card-head"><span class="rs-card-title">Resources</span></header>
-                  <div class="rs-meta-grid">
-                    <div><span class="rs-k">CPU</span><span class="rs-v" id="jdCpu">—</span></div>
-                    <div><span class="rs-k">Memory</span><span class="rs-v" id="jdMem">—</span></div>
-                    <div><span class="rs-k">PID</span><span class="rs-v" id="jdPid">—</span></div>
-                    <div><span class="rs-k">Port</span><span class="rs-v" id="jdPort">—</span></div>
-                  </div>
-                </section>
-                <!-- Environment vars -->
-                <section class="rs-card">
-                  <header class="rs-card-head">
-                    <span class="rs-card-title">Environment variables</span>
-                    <button class="rs-text-btn" id="jdEnvAdd">+ Add</button>
-                  </header>
-                  <div class="rs-env-list" id="jdEnvList">
-                    <div class="rs-empty-sm">No variables set. Secrets are stored per-job and injected at start.</div>
-                  </div>
-                  <div class="rs-sub" id="jdEnvHint">Env changes take effect on next Restart.</div>
-                </section>
-                <!-- Export -->
-                <section class="rs-card">
-                  <header class="rs-card-head"><span class="rs-card-title">Download files</span></header>
-                  <div class="rs-dl-wrap" id="jdDlWrap">
-                    <button class="rs-text-btn rs-dl-main" id="jdDl">
-                      <svg viewBox="0 0 24" class="rs-ic-sm" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                        <polyline points="7 10 12 15 17 10"/>
-                        <line x1="12" y1="15" x2="12" y2="3"/>
-                      </svg>
-                      <span class="rs-dl-label">Download</span>
-                    </button>
-                    <button class="rs-text-btn rs-dl-caret" id="jdDlCaret" title="Choose file">
-                      <svg viewBox="0 0 24" class="rs-ic-sm" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <polyline points="6 9 12 15 18 9"/>
-                      </svg>
-                    </button>
-                    <div class="rs-dl-menu" id="jdDlMenu" role="menu" aria-hidden="true">
-                      <button class="rs-dl-item" data-type="source" role="menuitem">
-                        <span class="rs-dl-ic">
-                          <svg viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
-                          </svg>
-                        </span>
-                        <span class="rs-dl-tx">
-                          <b>Source code</b>
-                          <small>.py / .js / .sh etc.</small>
-                        </span>
-                      </button>
-                      <button class="rs-dl-item" data-type="logs" role="menuitem">
-                        <span class="rs-dl-ic">
-                          <svg viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M8 13h.01"/><path d="M11 13h5"/><path d="M8 17h.01"/><path d="M11 17h5"/>
-                          </svg>
-                        </span>
-                        <span class="rs-dl-tx">
-                          <b>Logs</b>
-                          <small>.log text file</small>
-                        </span>
-                      </button>
-                      <button class="rs-dl-item" data-type="db" role="menuitem">
-                        <span class="rs-dl-ic">
-                          <svg viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/>
-                          </svg>
-                        </span>
-                        <span class="rs-dl-tx">
-                          <b>Database</b>
-                          <small>.db / .sqlite / .json</small>
-                        </span>
-                      </button>
-                    </div>
-                  </div>
-                </section>
-                <!-- Timeline / history -->
-                <section class="rs-card">
-                  <header class="rs-card-head"><span class="rs-card-title">Timeline</span></header>
-                  <ol class="rs-timeline" id="jdTimeline"><li class="rs-empty-sm">Events will appear here.</li></ol>
-                </section>
-                <div class="rs-detail-foot">
-                  <button class="rs-text-btn" id="jdEditCode"><svg viewBox="0 0 24" class="rs-ic-sm" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>Edit code</button>
-                </div>
-              </div>
-            </aside>
+            
           </div>
+
+<!-- ============================================================
+                 JOB DETAILS PAGE  ·  /runspace/{user}/{job}/page
+                 Rebuilt as a standalone view (sibling of .rs-ws, NOT a child —
+                 nesting it inside the workspace is what made it go blank when
+                 the workspace was hidden). Every action lives in its own
+                 labelled section instead of being crowded into one toolbar.
+                 ============================================================ -->
+            <section class="jd" id="jobDetailPanel" aria-hidden="true" aria-label="Job details">
+
+              <!-- Header: identity + back to editor -->
+              <header class="jd-top">
+                <button class="jd-back" id="jobDetailBack" type="button" title="Back to editor">
+                  <svg viewBox="0 0 24 24" class="jd-i" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+                  <span>Editor</span>
+                </button>
+                <div class="jd-id">
+                  <h2 class="jd-name" id="jdName">—</h2>
+                  <div class="jd-meta">
+                    <span class="jlang-icon" id="jdLang">py</span>
+                    <span class="jd-badge" id="jdBadge">stopped</span>
+                  </div>
+                </div>
+              </header>
+
+              <div class="jd-scroll" id="jdScroll">
+
+                <!-- 1 · STATUS -->
+                <section class="jd-card">
+                  <h3 class="jd-h">Status</h3>
+                  <div class="jd-stats">
+                    <div class="jd-stat"><span class="jd-k">State</span><span class="jd-v" id="jdState">—</span></div>
+                    <div class="jd-stat"><span class="jd-k">Uptime</span><span class="jd-v" id="jdUptime">—</span></div>
+                    <div class="jd-stat"><span class="jd-k">Restarts</span><span class="jd-v" id="jdRestarts">0</span></div>
+                    <div class="jd-stat"><span class="jd-k">Language</span><span class="jd-v" id="jdLangName">—</span></div>
+                    <div class="jd-stat"><span class="jd-k">Job ID</span><span class="jd-v mono" id="jdPid">—</span></div>
+                    <div class="jd-stat"><span class="jd-k">Port</span><span class="jd-v mono" id="jdPort">—</span></div>
+                  </div>
+                </section>
+
+                <!-- 2 · CONTROLS (each action separated, with its own label) -->
+                <section class="jd-card">
+                  <h3 class="jd-h">Controls</h3>
+                  <div class="jd-acts">
+                    <button class="jd-btn start" id="jdStart" type="button">
+                      <svg viewBox="0 0 24 24" class="jd-i" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+                      <span>Start</span>
+                    </button>
+                    <button class="jd-btn" id="jdRestart" type="button">
+                      <svg viewBox="0 0 24 24" class="jd-i" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>
+                      <span>Restart</span>
+                    </button>
+                    <button class="jd-btn" id="jdStop" type="button">
+                      <svg viewBox="0 0 24 24" class="jd-i" fill="currentColor" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>
+                      <span>Stop</span>
+                    </button>
+                    <button class="jd-btn" id="jdEditCode" type="button">
+                      <svg viewBox="0 0 24 24" class="jd-i" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+                      <span>Edit code</span>
+                    </button>
+                    <button class="jd-btn danger" id="jdDelete" type="button">
+                      <svg viewBox="0 0 24 24" class="jd-i" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+                      <span>Delete</span>
+                    </button>
+                  </div>
+                </section>
+
+                <!-- 3 · PUBLIC URL + HEALTH -->
+                <section class="jd-card" id="jdUrlCard" hidden>
+                  <h3 class="jd-h">Public URL</h3>
+                  <div class="jd-url-row">
+                    <a class="jd-url mono" id="jdUrl" href="#" target="_blank" rel="noopener">—</a>
+                    <button class="jd-mini" id="jdUrlCopy" type="button" title="Copy URL">Copy</button>
+                    <a class="jd-mini" id="jdUrlOpen" href="#" target="_blank" rel="noopener">Open</a>
+                  </div>
+                  <div class="jd-health-row">
+                    <span class="jd-health" id="jdHealth"><i class="jd-dot"></i><span class="jd-h-tx">not checked</span></span>
+                    <span class="jd-sub" id="jdHealthSub"></span>
+                    <button class="jd-mini" id="jdHealthNow" type="button">Check now</button>
+                  </div>
+                </section>
+
+                <!-- 4 · LIVE LOGS -->
+                <section class="jd-card">
+                  <h3 class="jd-h">
+                    Live logs
+                    <span class="jd-h-acts">
+                      <label class="jd-follow"><input type="checkbox" id="jdFollow" checked> Follow</label>
+                      <button class="jd-mini" id="jdCopy" type="button">Copy</button>
+                      <button class="jd-mini" id="jdClear" type="button">Clear</button>
+                    </span>
+                  </h3>
+                  <pre class="jd-logs" id="jdLogBody"><span class="rs-log-empty">// Waiting for output…</span></pre>
+                </section>
+
+                <!-- 5 · ENVIRONMENT VARIABLES -->
+                <section class="jd-card">
+                  <h3 class="jd-h">
+                    Environment variables
+                    <span class="jd-h-acts"><button class="jd-mini" id="jdEnvAdd" type="button">+ Add</button></span>
+                  </h3>
+                  <div class="jd-env" id="jdEnvList"></div>
+                  <p class="jd-sub" id="jdEnvHint">Changes apply on the next restart.</p>
+                </section>
+
+                <!-- 6 · DOWNLOAD / EXPORT -->
+                <section class="jd-card">
+                  <h3 class="jd-h">Download</h3>
+                  <div class="jd-acts">
+                    <button class="jd-btn" id="jdDlSource" type="button" data-type="source"><span>Source code</span></button>
+                    <button class="jd-btn" id="jdDlLogs" type="button" data-type="logs"><span>Logs</span></button>
+                    <button class="jd-btn" id="jdDlDb" type="button" data-type="db"><span>Database</span></button>
+                  </div>
+                  <p class="jd-sub">Files are taken from the job's live workspace.</p>
+                </section>
+
+                <!-- 7 · RUN HISTORY -->
+                <section class="jd-card">
+                  <h3 class="jd-h">Run history</h3>
+                  <ol class="jd-timeline" id="jdTimeline"><li class="jd-empty">Events will appear here.</li></ol>
+                </section>
+
+              </div>
+            </section>
         </main>
       </div>
     </div>

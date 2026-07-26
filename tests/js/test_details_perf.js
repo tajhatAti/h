@@ -28,18 +28,19 @@ check("logs render into ONE pane (_activeLogPane)",
 check("unchanged log text short-circuits re-render",
   /_lastLogText/.test(js) && /if \(!force && text === _lastLogText/.test(js));
 check("renderJobDetails no-ops while the panel is closed",
-  /function renderJobDetails\(\)\s*\{[\s\S]{0,200}?if \(!_jdOpen\) return;/.test(js));
+  /function renderJobDetails\(\)\s*\{[\s\S]{0,200}?if \(!_jdOpen \|\| document\.hidden\) return;/.test(js));
 check("SSE updates are coalesced into an animation frame",
   /requestAnimationFrame\(\(\) => \{[\s\S]{0,160}_applyStreamUpdate/.test(js));
 check("log tail is bounded",
   /slice\(-400\)/.test(js));
 check("timeline only rebuilds when an event was appended",
-  /let changed = false;/.test(js) && /tl\.dataset\.jid/.test(js));
+  /if \(!last \|\| last\.ev !== st\.label\) \{/.test(js));
 
 // ---- health check must not pile up --------------------------------------
 check("health probe has an abort timeout", /AbortController/.test(js) && /ctl\.abort\(\)/.test(js));
 check("health probe cannot overlap itself", /_jdHealthBusy/.test(js));
-check("health probe skips background tabs", /if \(document\.hidden\) return;/.test(js));
+check("health probe skips background tabs",
+  /async function _jdCheckHealth\(\)\s*\{\s*\n\s*if \(!_jdOpen \|\| document\.hidden\) return;/.test(js));
 
 // ---- leaving the tab must clean up --------------------------------------
 check("switching tabs closes the Details drawer",

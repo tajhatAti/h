@@ -966,10 +966,9 @@ body.rs-detail-open #tab-jobs .rs-detail { z-index: 145; }
    stopped working and tab switching stuck.
    ============================================================ */
 
-/* 1. The workspace underneath was left VISIBLE (only pointer-events:none),
-      so the browser kept compositing CodeMirror + a full log pane behind an
-      opaque drawer every frame. Take it out of the render tree entirely.
-      content-visibility also skips its layout/paint work completely. */
+/* Details is now a SIBLING of .rs-ws (under .rs-main), so the workspace can be
+   dropped from layout/paint entirely while the page is open without ever
+   affecting the panel itself. */
 body.rs-detail-open #tab-jobs .rs-ws {
   visibility: hidden;
   content-visibility: hidden;
@@ -999,3 +998,174 @@ body.rs-detail-open #tab-jobs .rs-ws {
       a panel that is usually closed. Only promote it while it animates. */
 #tab-jobs .rs-detail { will-change: auto; }
 body.rs-detail-open #tab-jobs .rs-detail { will-change: transform; }
+
+/* ============================================================
+   JOB DETAILS PAGE — rebuilt from scratch
+   Sibling of .rs-ws inside .rs-main. Each action group is its own
+   card so buttons are never crowded into a single toolbar.
+   ============================================================ */
+#tab-jobs .jd {
+  position: absolute;
+  inset: 0;
+  z-index: 150;
+  display: flex;
+  flex-direction: column;
+  background: #0d1117;
+  transform: translateX(100%);
+  transition: transform .2s cubic-bezier(.2,.7,.2,1);
+  visibility: hidden;
+}
+body.rs-detail-open #tab-jobs .jd {
+  transform: translateX(0);
+  visibility: visible;
+}
+@media (prefers-reduced-motion: reduce) {
+  #tab-jobs .jd { transition: none; }
+}
+
+/* Header */
+#tab-jobs .jd-top {
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 14px;
+  padding-top: calc(10px + env(safe-area-inset-top, 0px));
+  background: #161b22;
+  border-bottom: 1px solid #21262d;
+}
+#tab-jobs .jd-back {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: #21262d; color: #c9d1d9;
+  border: 1px solid #30363d; border-radius: 7px;
+  padding: 6px 11px 6px 8px; font-size: 12.5px; font-weight: 600;
+  cursor: pointer; flex: 0 0 auto;
+}
+#tab-jobs .jd-back:hover { background: #30363d; color: #f0f6fc; }
+#tab-jobs .jd-i { width: 15px; height: 15px; flex: 0 0 auto; }
+#tab-jobs .jd-id { min-width: 0; flex: 1 1 auto; }
+#tab-jobs .jd-name {
+  margin: 0; font-size: 15px; font-weight: 650; color: #f0f6fc;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#tab-jobs .jd-meta { display: flex; align-items: center; gap: 7px; margin-top: 2px; }
+#tab-jobs .jd-badge {
+  font-size: 10.5px; font-weight: 700; letter-spacing: .02em;
+  padding: 2px 8px; border-radius: 20px; text-transform: uppercase;
+  background: #21262d; color: #8b949e; border: 1px solid #30363d;
+}
+#tab-jobs .jd-badge.running  { background: rgba(63,185,80,.14); color: #3fb950; border-color: rgba(63,185,80,.35); }
+#tab-jobs .jd-badge.starting { background: rgba(210,153,34,.14); color: #d29922; border-color: rgba(210,153,34,.35); }
+#tab-jobs .jd-badge.crashed  { background: rgba(248,81,73,.14);  color: #f85149; border-color: rgba(248,81,73,.35); }
+
+/* Scroll container — owns scrolling, never chains to the page */
+#tab-jobs .jd-scroll {
+  flex: 1 1 auto; min-height: 0;
+  overflow-y: auto; overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 12px; padding-bottom: calc(28px + env(safe-area-inset-bottom, 0px));
+  display: flex; flex-direction: column; gap: 12px;
+}
+
+/* Cards: one concern per card */
+#tab-jobs .jd-card {
+  background: #161b22; border: 1px solid #21262d;
+  border-radius: 10px; padding: 13px 14px;
+}
+#tab-jobs .jd-h {
+  margin: 0 0 11px; font-size: 11px; font-weight: 700;
+  letter-spacing: .07em; text-transform: uppercase; color: #8b949e;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+#tab-jobs .jd-h-acts { display: flex; align-items: center; gap: 6px; text-transform: none; letter-spacing: 0; }
+
+/* Status grid */
+#tab-jobs .jd-stats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(126px, 1fr)); gap: 9px;
+}
+#tab-jobs .jd-stat {
+  background: #0d1117; border: 1px solid #21262d;
+  border-radius: 7px; padding: 8px 10px;
+  display: flex; flex-direction: column; gap: 3px; min-width: 0;
+}
+#tab-jobs .jd-k { font-size: 10.5px; color: #6e7681; text-transform: uppercase; letter-spacing: .05em; }
+#tab-jobs .jd-v { font-size: 13.5px; color: #e6edf3; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#tab-jobs .jd-v.mono, #tab-jobs .mono { font-family: ui-monospace, "JetBrains Mono", Menlo, monospace; font-size: 12px; }
+
+/* Action buttons — separated, labelled, wrap freely */
+#tab-jobs .jd-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+#tab-jobs .jd-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: #21262d; color: #c9d1d9;
+  border: 1px solid #30363d; border-radius: 7px;
+  padding: 8px 13px; font-size: 12.5px; font-weight: 600;
+  cursor: pointer; transition: background-color .13s ease, color .13s ease, border-color .13s ease;
+}
+#tab-jobs .jd-btn:hover:not(:disabled) { background: #30363d; color: #f0f6fc; }
+#tab-jobs .jd-btn:disabled { opacity: .45; cursor: not-allowed; }
+#tab-jobs .jd-btn.start        { background: rgba(63,185,80,.13); color: #3fb950; border-color: rgba(63,185,80,.32); }
+#tab-jobs .jd-btn.start:hover:not(:disabled)  { background: rgba(63,185,80,.22); }
+#tab-jobs .jd-btn.danger       { background: rgba(248,81,73,.10); color: #f85149; border-color: rgba(248,81,73,.28); }
+#tab-jobs .jd-btn.danger:hover:not(:disabled) { background: rgba(248,81,73,.2); }
+#tab-jobs .jd-mini {
+  background: #21262d; color: #8b949e; border: 1px solid #30363d;
+  border-radius: 6px; padding: 4px 10px; font-size: 11.5px; font-weight: 600;
+  cursor: pointer; text-decoration: none; display: inline-flex; align-items: center;
+}
+#tab-jobs .jd-mini:hover { background: #30363d; color: #e6edf3; }
+
+/* URL + health */
+#tab-jobs .jd-url-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+#tab-jobs .jd-url {
+  flex: 1 1 220px; min-width: 0; color: #58a6ff; font-size: 12px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: none;
+}
+#tab-jobs .jd-url:hover { text-decoration: underline; }
+#tab-jobs .jd-health-row { display: flex; align-items: center; gap: 9px; margin-top: 10px; flex-wrap: wrap; }
+#tab-jobs .jd-health { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #8b949e; }
+#tab-jobs .jd-dot { width: 7px; height: 7px; border-radius: 50%; background: #6e7681; flex: 0 0 auto; }
+#tab-jobs .jd-health.ok  .jd-dot { background: #3fb950; box-shadow: 0 0 0 3px rgba(63,185,80,.16); }
+#tab-jobs .jd-health.ok  { color: #3fb950; }
+#tab-jobs .jd-health.bad .jd-dot { background: #f85149; box-shadow: 0 0 0 3px rgba(248,81,73,.16); }
+#tab-jobs .jd-health.bad { color: #f85149; }
+#tab-jobs .jd-sub { font-size: 11.5px; color: #6e7681; margin: 6px 0 0; }
+
+/* Logs — contained so its reflows never touch the rest of the page */
+#tab-jobs .jd-logs {
+  margin: 0; padding: 10px 12px;
+  background: #010409; border: 1px solid #21262d; border-radius: 8px;
+  font-family: ui-monospace, "JetBrains Mono", Menlo, monospace;
+  font-size: 11.5px; line-height: 1.55; color: #c9d1d9;
+  max-height: 42vh; min-height: 130px;
+  overflow: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+  contain: content;
+  white-space: pre-wrap; word-break: break-word;
+}
+#tab-jobs .jd-follow { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: #8b949e; cursor: pointer; }
+
+/* Env vars */
+#tab-jobs .jd-env { display: flex; flex-direction: column; gap: 7px; }
+#tab-jobs .jd-env-row { display: flex; gap: 7px; align-items: center; }
+#tab-jobs .jd-env-row input {
+  flex: 1 1 0; min-width: 0; background: #0d1117; color: #e6edf3;
+  border: 1px solid #30363d; border-radius: 6px; padding: 7px 9px;
+  font-family: ui-monospace, Menlo, monospace; font-size: 12px; outline: none;
+}
+#tab-jobs .jd-env-row input:focus { border-color: #58a6ff; }
+#tab-jobs .jd-env-del {
+  background: transparent; border: 1px solid #30363d; color: #8b949e;
+  border-radius: 6px; padding: 6px 9px; cursor: pointer; font-size: 12px; line-height: 1;
+}
+#tab-jobs .jd-env-del:hover { color: #f85149; border-color: rgba(248,81,73,.4); }
+
+/* Run history */
+#tab-jobs .jd-timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+#tab-jobs .jd-timeline li { display: flex; align-items: center; gap: 9px; font-size: 12px; }
+#tab-jobs .jd-ts { color: #6e7681; font-family: ui-monospace, Menlo, monospace; font-size: 11px; flex: 0 0 auto; }
+#tab-jobs .jd-ev { color: #c9d1d9; }
+#tab-jobs .jd-ev.ok { color: #3fb950; } #tab-jobs .jd-ev.err { color: #f85149; } #tab-jobs .jd-ev.warn { color: #d29922; }
+#tab-jobs .jd-empty { color: #484f58; font-style: italic; font-size: 11.5px; }
+
+@media (max-width: 760px) {
+  #tab-jobs .jd { position: fixed; z-index: 300; }
+  #tab-jobs .jd-scroll { padding: 10px; gap: 10px; }
+  #tab-jobs .jd-logs { max-height: 38vh; }
+}

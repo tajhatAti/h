@@ -3350,11 +3350,10 @@ function _initWbWiring() {
   };
   if (nameField) nameField.addEventListener("keydown", _enterRun);
   if (repoField) repoField.addEventListener("keydown", _enterRun);
-  // Escape closes drawer / download menu
+  // Escape closes the Details page (the old dropdown it also handled no
+  // longer exists — downloads are plain buttons now).
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" || e.keyCode === 27) {
-      const wrap = document.getElementById("jdDlWrap");
-      if (wrap && wrap.classList.contains("open")) { wrap.classList.remove("open"); return; }
       if (document.body.classList.contains("rs-detail-open")) closeJobDetails();
     }
   });
@@ -3566,30 +3565,34 @@ let _jdTimeline = [];
 let _jdLogFollow = true;
 function openJobDetails(id, opts) {
   if (id) selectJob(id);
-  document.body.classList.add("rs-detail-open");
+  const panel = document.getElementById("jobDetailPanel");
+  if (!panel) return;                       // markup missing -> stay in editor
   _jdOpen = true;
   _jdLogFollow = true;
+  panel.setAttribute("aria-hidden", "false");
+  document.body.classList.add("rs-detail-open", "rs-drawer-open");
+
   renderJobDetails();
-  // The visible log pane just changed, so repaint the cached text into it.
+  _jdEnvLoad();
+  // The visible log pane just changed: repaint the cached text into it.
   _renderLogs(_lastLogText || "", true);
-  _playSwap(document.getElementById("jobDetailPanel"));
-  // §5: the Details page has its own URL so it can be linked/refreshed.
+  const sc = document.getElementById("jdScroll");
+  if (sc) sc.scrollTop = 0;
+  const fw = document.getElementById("jdFollow");
+  if (fw) fw.checked = true;
+
   if (!(opts && opts.noUrl)) {
-    const job = (window._lastJobs || []).find(x => String(x.id) === String(_selectedJobId));
+    const job = _jdCurrentJob();
     if (job) _updateJobUrl(job, {details: true, push: true});
   }
   _startHealthCheck();
-  // Lock background scroll on mobile (prevents double-scroll)
-  document.body.classList.add("rs-drawer-open");
-  // Reset drawer scroll to top so cards start at URL/Logs
-  const db = document.querySelector("#tab-jobs .rs-detail-body");
-  if (db) db.scrollTop = 0;
-  _jdLogFollow = true;
 }
 function closeJobDetails(opts) {
   document.body.classList.remove("rs-detail-open");
   document.body.classList.remove("rs-drawer-open");
   _jdOpen = false;
+  const panel = document.getElementById("jobDetailPanel");
+  if (panel) panel.setAttribute("aria-hidden", "true");
   if (_jdHealthTimer) { clearInterval(_jdHealthTimer); _jdHealthTimer = null; }
   // Repaint the cached log text back into the editor pane.
   _renderLogs(_lastLogText || "", true);
@@ -3604,256 +3607,299 @@ function _jdSet(name, value) {
   const el = document.getElementById(name);
   if (el && value !== undefined) el.textContent = value;
 }
+/* ============================================================
+   JOB DETAILS PAGE  —  rebuilt
+   Rules that keep it fast (these are why it used to freeze):
+     * render only when the page is actually visible
+     * write each field only when its value CHANGED
+     * logs live in exactly one pane and are bounded
+     * no innerHTML mirroring of the editor's log pane
+   ============================================================ */
+
+/** Set textContent only if it differs — avoids needless layout invalidation. */
+function _jdText(id, value) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const v = value === undefined || value === null ? "" : String(value);
+  if (el.textContent !== v) el.textContent = v;
+}
+
+function _jdCurrentJob() {
+  return (window._lastJobs || []).find(x => String(x.id) === String(_selectedJobId)) || null;
+}
+
 function renderJobDetails() {
-  // Cheap guard: never touch the DOM for a panel nobody is looking at.
-  if (!_jdOpen) return;
-  if (document.hidden) return;          // background tab: resume on focus
-  const job = (window._lastJobs||[]).find(x => String(x.id) === String(_selectedJobId));
+  if (!_jdOpen || document.hidden) return;      // nothing to do when unseen
+  const job = _jdCurrentJob();
   if (!job) { closeJobDetails(); return; }
-  _jdSet("jdName", job.name || "untitled");
-  const l = document.getElementById("jdLang"); if (l) l.textContent = _langIcon(job.language);
+
+  const stKey = (job.status || "").toLowerCase();
+  const st = _fmtStatus(job.status);
+  const live = (stKey === "running" || stKey === "starting" || stKey === "installing");
+
+  // ---- header -------------------------------------------------------
+  _jdText("jdName", job.name || "untitled");
+  _jdText("jdLang", _langIcon(job.language));
   const badge = document.getElementById("jdBadge");
-  const stKey = (job.status||"").toLowerCase();
   if (badge) {
-    badge.className = "rs-badge " + (stKey==="running"?"running":stKey==="crashed"||stKey==="install_failed"?"crashed":stKey==="starting"||stKey==="installing"?"starting":"");
-    badge.textContent = _fmtStatus(job.status).label;
+    const cls = "jd-badge " + (stKey === "running" ? "running"
+      : (stKey === "crashed" || stKey === "install_failed") ? "crashed"
+      : (stKey === "starting" || stKey === "installing") ? "starting" : "");
+    if (badge.className !== cls) badge.className = cls;
+    _jdText("jdBadge", st.label);
   }
-  _jdSet("jdUptime", "up " + _fmtUptime(job.uptime_s||0));
-  _jdSet("jdRestarts", (job.restarts||0) + " restart" + (job.restarts===1?"":"s"));
-  // NO log mirroring here. _renderLogs() already writes straight into the
-  // Details pane while it is open, so copying innerHTML across (the old
-  // behaviour) only doubled the parse cost and froze the UI.
-  // URL card
+
+  // ---- 1 status ------------------------------------------------------
+  _jdText("jdState", st.label);
+  _jdText("jdUptime", live ? _fmtUptime(job.uptime_s || 0) : "—");
+  _jdText("jdRestarts", String(job.restarts || 0));
+  _jdText("jdLangName", job.language || "—");
+  _jdText("jdPid", job.runner_job_id || "—");
+  _jdText("jdPort", job.port || "—");
+
+  // ---- 2 controls: reflect what is actually possible right now -------
+  const start = document.getElementById("jdStart");
+  const stop = document.getElementById("jdStop");
+  const restart = document.getElementById("jdRestart");
+  if (start) start.disabled = live;
+  if (stop) stop.disabled = !live;
+  if (restart) restart.disabled = false;
+
+  // ---- 3 public URL --------------------------------------------------
   const card = document.getElementById("jdUrlCard");
+  const url = job.web_url || job.url || "";
   if (card) {
-    const isRunning = stKey === "running";
-    const url = job.web_url || job.url;
-    if (isRunning && url) {
-      card.style.display = "";
-      const a = document.getElementById("jdUrl"); if (a) { a.href = url; a.textContent = url; }
-      const o = document.getElementById("jdUrlOpen"); if (o) o.href = url;
-    } else {
-      card.style.display = "none";
+    const show = !!(live && url);
+    if (card.hidden === show) card.hidden = !show;
+    if (show) {
+      const a = document.getElementById("jdUrl");
+      if (a && a.textContent !== url) { a.href = url; a.textContent = url; }
+      const o = document.getElementById("jdUrlOpen");
+      if (o) o.href = url;
     }
   }
-  // Resources (best-effort; runner returns what it has)
-  _jdSet("jdPid", job.pid || job.runner_job_id || "—");
-  _jdSet("jdPort", job.port || "—");
-  _jdSet("jdCpu", job.cpu_pct != null ? (job.cpu_pct.toFixed?.(1) ?? job.cpu_pct) + "%" : "—");
-  _jdSet("jdMem", job.mem_mb != null ? (Math.round(job.mem_mb)) + " MB" : "—");
-  // Timeline — only rebuild when a NEW event was actually appended. The old
-  // code re-generated the whole list HTML on every SSE tick.
-  const tl = document.getElementById("jdTimeline");
-  if (tl) {
-    if (!job._tl) job._tl = [];
-    const last = job._tl[job._tl.length-1];
-    const evLabel = _fmtStatus(job.status).label;
-    let changed = false;
-    if (!last || last.ev !== evLabel) {
-      job._tl.push({t: new Date(), ev: evLabel, cls: stKey==="running"?"ok":stKey==="crashed"||stKey==="install_failed"?"err":stKey==="starting"||stKey==="installing"?"warn":""});
-      if (job._tl.length > 30) job._tl.shift();
-      changed = true;
-    }
-    if (!changed && tl.dataset.jid === String(job.id)) {
-      // nothing new to show for this job
-    } else {
-    tl.dataset.jid = String(job.id);
-    if (!job._tl.length) {
-      tl.innerHTML = '<li class="rs-empty-sm">Events will appear here.</li>';
-    } else {
-      tl.innerHTML = job._tl.slice().reverse().map(e => {
-        const t = e.t.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
-        return '<li><span class="rs-ts">'+t+'</span><span class="rs-te '+e.cls+'">'+e.ev+'</span></li>';
-      }).join("");
-    }
+
+  // ---- 7 run history: append only on a real state change -------------
+  if (!job._tl) job._tl = [];
+  const last = job._tl[job._tl.length - 1];
+  if (!last || last.ev !== st.label) {
+    job._tl.push({
+      t: new Date(), ev: st.label,
+      cls: stKey === "running" ? "ok"
+        : (stKey === "crashed" || stKey === "install_failed") ? "err"
+        : (stKey === "starting" || stKey === "installing") ? "warn" : ""
+    });
+    if (job._tl.length > 30) job._tl.shift();
+    const tl = document.getElementById("jdTimeline");
+    if (tl) {
+      tl.innerHTML = job._tl.slice().reverse().map(e =>
+        '<li><span class="jd-ts">' +
+        e.t.toLocaleTimeString([], {hour: "2-digit", minute: "2-digit", second: "2-digit"}) +
+        '</span><span class="jd-ev ' + e.cls + '">' + _escapeHtml(e.ev) + "</span></li>"
+      ).join("");
     }
   }
 }
+
+/* ---- health check -------------------------------------------------- */
+function _jdSetHealth(cls, text, sub) {
+  const h = document.getElementById("jdHealth");
+  if (h) {
+    h.className = "jd-health " + (cls || "");
+    const tx = h.querySelector(".jd-h-tx");
+    if (tx) tx.textContent = text;
+  }
+  if (sub !== undefined) _jdText("jdHealthSub", sub);
+}
+
+async function _jdCheckHealth() {
+  if (!_jdOpen || document.hidden) return;
+  if (_jdHealthBusy) return;                 // never stack probes
+  const job = _jdCurrentJob();
+  const url = job && (job.web_url || job.url);
+  if (!url) return;
+  _jdHealthBusy = true;
+  _jdSetHealth("", "checking…");
+  // A sleeping free-tier target can hang; without a timeout these pile up.
+  const ctl = ("AbortController" in window) ? new AbortController() : null;
+  const killer = setTimeout(() => { try { ctl && ctl.abort(); } catch (e) {} }, 8000);
+  const t0 = performance.now();
+  try {
+    await fetch(url, {method: "GET", mode: "no-cors", cache: "no-store",
+                      signal: ctl ? ctl.signal : undefined});
+    _jdSetHealth("ok", "live (" + Math.round(performance.now() - t0) + "ms)",
+                 "Checked " + new Date().toLocaleTimeString());
+  } catch (e) {
+    _jdSetHealth("bad", "unreachable", "Checked " + new Date().toLocaleTimeString());
+  } finally {
+    clearTimeout(killer);
+    _jdHealthBusy = false;
+  }
+}
+
 function _startHealthCheck() {
   if (_jdHealthTimer) clearInterval(_jdHealthTimer);
-  const tick = async () => {
-    if (!_jdOpen) return;
-    const job = (window._lastJobs||[]).find(x => String(x.id) === String(_selectedJobId));
-    const h = document.getElementById("jdHealth");
-    const sub = document.getElementById("jdHealthSub");
-    const url = job && (job.web_url || job.url);
-    if (!h || !sub || !url) return;
-    if (document.hidden) return;          // don't probe from a background tab
-    if (_jdHealthBusy) return;            // never stack overlapping probes
-    _jdHealthBusy = true;
-    h.className = "rs-health";
-    h.querySelector(".rs-h-tx").textContent = "checking…";
-    const t0 = performance.now();
-    // A sleeping free-tier target can hang for a long time; without a timeout
-    // these probes pile up every 15s and starve the browser's connection pool.
-    const ctl = ("AbortController" in window) ? new AbortController() : null;
-    const killer = setTimeout(() => { try { ctl && ctl.abort(); } catch (e) {} }, 8000);
-    try {
-      const r = await fetch(url, {method:"GET", mode:"no-cors", cache:"no-store",
-                                  signal: ctl ? ctl.signal : undefined});
-      const dt = Math.round(performance.now()-t0);
-      h.className = "rs-health ok";
-      h.querySelector(".rs-h-tx").textContent = "live ("+dt+"ms)";
-      sub.textContent = "Last checked: " + new Date().toLocaleTimeString();
-    } catch(e) {
-      h.className = "rs-health bad";
-      h.querySelector(".rs-h-tx").textContent = "unreachable";
-      sub.textContent = "Last checked: " + new Date().toLocaleTimeString();
-    } finally {
-      clearTimeout(killer);
-      _jdHealthBusy = false;
-    }
-  };
-  tick();
-  _jdHealthTimer = setInterval(tick, 20000);
+  _jdCheckHealth();
+  _jdHealthTimer = setInterval(_jdCheckHealth, 20000);
 }
-function _initDetailWiring() {
-  if (document.getElementById("btnJobDetails") && document.getElementById("btnJobDetails")._w) return;
-  const det = document.getElementById("btnJobDetails");
-  if (det) { det._w=1; det.addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); openJobDetails(); }); }
-  const bk = document.getElementById("jobDetailBack");
-  if (bk) bk.addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); closeJobDetails(); });
-  const stop = document.getElementById("jdStop");
-  if (stop) stop.addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); if (_selectedJobId) stopJobById(_selectedJobId); });
-  const rst = document.getElementById("jdRestart");
-  if (rst) rst.addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); if (_selectedJobId) restartJobById(_selectedJobId); });
-  const del = document.getElementById("jdDelete");
-  if (del) del.addEventListener("click", e => {
-    e.preventDefault(); e.stopPropagation();
-    if (!_selectedJobId) return;
-    if (!confirm("Delete this job? This cannot be undone.")) return;
-    deleteJobById(_selectedJobId, del); closeJobDetails();
+
+/* ---- environment variables ----------------------------------------- */
+function _jdEnvRow(k, v) {
+  const row = document.createElement("div");
+  row.className = "jd-env-row";
+  const ki = document.createElement("input");
+  ki.placeholder = "KEY"; ki.value = k || ""; ki.dataset.k = "1";
+  const vi = document.createElement("input");
+  vi.placeholder = "value"; vi.value = v || ""; vi.dataset.v = "1";
+  const del = document.createElement("button");
+  del.type = "button"; del.className = "jd-env-del"; del.textContent = "✕";
+  del.title = "Remove";
+  del.addEventListener("click", () => { row.remove(); _jdEnvSave(); });
+  ki.addEventListener("change", _jdEnvSave);
+  vi.addEventListener("change", _jdEnvSave);
+  row.append(ki, vi, del);
+  return row;
+}
+
+function _jdEnvKey() { return "codenest_env_" + String(_selectedJobId || ""); }
+
+function _jdEnvSave() {
+  const list = document.getElementById("jdEnvList");
+  if (!list || !_selectedJobId) return;
+  const out = {};
+  list.querySelectorAll(".jd-env-row").forEach(r => {
+    const k = r.querySelector("[data-k]").value.trim();
+    const v = r.querySelector("[data-v]").value;
+    if (k) out[k] = v;
   });
-  const edit = document.getElementById("jdEditCode");
-  if (edit) edit.addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); closeJobDetails(); _jobCmFocus(); });
-  const cp = document.getElementById("jdCopy");
-  if (cp) cp.addEventListener("click", e => {
-    e.preventDefault(); e.stopPropagation();
-    const b = document.getElementById("jdLogBody"); const t = b?b.textContent:"";
-    if (!navigator.clipboard) { toast("Clipboard not available","error"); return; }
-    if (!t) { toast("Nothing to copy","error"); return; }
-    navigator.clipboard.writeText(t).then(()=>{
-      cp.classList.add("is-ok");
-      toast("Logs copied ✓","success");
-      setTimeout(()=>cp.classList.remove("is-ok"),1200);
-    }).catch(()=>toast("Copy failed","error"));
-  });
-  const cl = document.getElementById("jdClear");
-  if (cl) cl.addEventListener("click", e => {
-    e.preventDefault(); e.stopPropagation();
-    const b = document.getElementById("jdLogBody"); if (b) b.innerHTML = '<span class="rs-log-empty">// Logs cleared.</span>';
-    const b2 = document.getElementById("jobLogBody"); if (b2) b2.innerHTML = '<span class="rs-log-empty">// Logs cleared.</span>';
-    toast("Logs cleared","info");
-  });
-  // Drawer logs auto-follow (mirror _logFollow for main pane)
-  const jdBody = document.getElementById("jdLogBody");
-  if (jdBody && !jdBody._w) {
-    jdBody._w = 1;
-    _jdLogFollow = true;
-    jdBody.addEventListener("scroll", () => {
-      _jdLogFollow = jdBody.scrollTop + jdBody.clientHeight >= jdBody.scrollHeight - 24;
-    }, {passive:true});
+  try { localStorage.setItem(_jdEnvKey(), JSON.stringify(out)); } catch (e) {}
+  _jdText("jdEnvHint", "Saved locally · applies on next restart.");
+}
+
+function _jdEnvLoad() {
+  const list = document.getElementById("jdEnvList");
+  if (!list) return;
+  list.innerHTML = "";
+  let data = {};
+  try { data = JSON.parse(localStorage.getItem(_jdEnvKey()) || "{}"); } catch (e) {}
+  const keys = Object.keys(data);
+  if (!keys.length) list.appendChild(_jdEnvRow("", ""));
+  else keys.forEach(k => list.appendChild(_jdEnvRow(k, data[k])));
+}
+
+/* ---- downloads ------------------------------------------------------ */
+async function _jdDownload(kind) {
+  const job = _jdCurrentJob();
+  if (!job) return;
+  const token = localStorage.getItem("ahad_token") || "";
+  const safe = (job.name || "job").replace(/[^\w.-]+/g, "_");
+
+  if (kind === "logs") {
+    const body = document.getElementById("jdLogBody");
+    const txt = body ? body.textContent : "";
+    if (!txt.trim()) { toast("No logs to download", "error"); return; }
+    _downloadBlob(new Blob([txt], {type: "text/plain;charset=utf-8"}), safe + ".log");
+    toast("Logs downloaded", "success");
+    return;
   }
-  // Download split-button (Download ▾ → Source / Logs / Database)
-  const dlWrap = document.getElementById("jdDlWrap");
-  const dlMenu = document.getElementById("jdDlMenu");
-  const dlMain = document.getElementById("jdDl");
-  const dlCaret = document.getElementById("jdDlCaret");
-  const _closeDl = () => { if (dlWrap) dlWrap.classList.remove("open"); };
-  if (dlCaret) dlCaret.addEventListener("click", e => {
-    e.preventDefault(); e.stopPropagation();
-    if (!dlWrap) return;
-    dlWrap.classList.toggle("open");
-  });
-  if (dlMain) dlMain.addEventListener("click", e => {
-    e.preventDefault(); e.stopPropagation();
-    // Default: source code (most common action). Opens menu on first click if empty.
-    _dlSource();
-  });
-  document.addEventListener("click", (e) => {
-    if (dlWrap && !dlWrap.contains(e.target)) _closeDl();
-  });
-  // Close dropdown on scroll inside the drawer to avoid it floating over cards
-  const _dbody = document.querySelector("#tab-jobs .rs-detail-body");
-  if (_dbody) _dbody.addEventListener("scroll", _closeDl, {passive:true});
-  if (dlMenu) dlMenu.querySelectorAll(".rs-dl-item").forEach(item => {
-    item.addEventListener("click", (e) => {
-      e.preventDefault(); e.stopPropagation();
-      _closeDl();
-      const t = item.dataset.type;
-      if (t === "source") _dlSource();
-      else if (t === "logs") _dlLogs();
-      else if (t === "db") _dlDb();
-    });
+
+  if (kind === "source") {
+    try {
+      const d = await api("/api/jobs/" + job.id, "GET", null, true);
+      const code = (d && d.code) || "";
+      if (!code) { toast("No source stored for this job", "error"); return; }
+      const ext = {python: "py", javascript: "js", bash: "sh", ruby: "rb", php: "php"}[job.language] || "txt";
+      _downloadBlob(new Blob([code], {type: "text/plain;charset=utf-8"}), safe + "." + ext);
+      toast("Source downloaded", "success");
+    } catch (e) { toast(e.message || "Download failed", "error"); }
+    return;
+  }
+
+  // database: ask the server which files exist, then fetch the best match
+  try {
+    const r = await fetch("/api/jobs/" + job.id + "/files",
+                          {headers: token ? {Authorization: "Bearer " + token} : {}});
+    const d = await r.json();
+    const files = (d && d.files) || [];
+    const pick = files.find(f => /\.(db|sqlite3?|json)$/i.test(f.path || f.name || ""));
+    if (!pick) { toast("No database file in this workspace yet", "error"); return; }
+    const p = pick.path || pick.name;
+    const dl = await fetch("/api/jobs/" + job.id + "/files/" + encodeURI(p),
+                           {headers: token ? {Authorization: "Bearer " + token} : {}});
+    if (!dl.ok) { toast("Could not fetch the file", "error"); return; }
+    _downloadBlob(await dl.blob(), p.split("/").pop());
+    toast("Database downloaded", "success");
+  } catch (e) { toast("Download failed", "error"); }
+}
+
+/* ---- wiring: every control below performs a real action ------------- */
+function _initDetailWiring() {
+  const panel = document.getElementById("jobDetailPanel");
+  if (!panel || panel.dataset.wired === "1") return;
+  panel.dataset.wired = "1";
+
+  const on = (id, fn) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); fn(el); });
+  };
+
+  // open from the editor
+  const openBtn = document.getElementById("btnJobDetails");
+  if (openBtn) openBtn.addEventListener("click", e => {
+    e.preventDefault(); e.stopPropagation(); openJobDetails();
   });
 
-  function _dlSource() {
-    const job = (window._lastJobs||[]).find(x => String(x.id) === String(_selectedJobId));
-    const name = (document.getElementById("jobName")||{}).value || (job&&job.name) || "job";
-    const lang = (document.getElementById("jobLang")||{}).value || (job&&job.language) || "py";
-    const ext = {python:"py",javascript:"js",js:"js",bash:"sh",shell:"sh",sh:"sh",
-                 ruby:"rb",rb:"rb",php:"php",go:"go",rust:"rs",lua:"lua",
-                 perl:"pl",java:"java",typescript:"ts"}[lang.toLowerCase()] || "txt";
-    const code = _jobCmGetValue() || (job&&job.code) || "";
-    const blob = new Blob([code], {type:"text/x-python;charset=utf-8"});
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    let fname = (name||"source").replace(/[^\w.\-]+/g,"_");
-    if (fname.indexOf(".") === -1) fname += "." + ext;
-    a.download = fname; document.body.appendChild(a); a.click();
-    setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},200);
-    toast("Downloaded "+fname,"success");
-  }
-  function _dlLogs() {
-    const body = document.getElementById("jobLogBody");
-    const name = (document.getElementById("jobName")||{}).value || "job";
-    const text = body ? body.textContent : "";
-    if (!text || /logs will appear/i.test(text)) { toast("Logs are empty","error"); return; }
-    const blob = new Blob([text],{type:"text/plain;charset=utf-8"});
-    const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
-    a.download = (name||"job").replace(/[^\w.\-]+/g,"_") + "-" + new Date().toISOString().slice(0,10) + ".log";
-    document.body.appendChild(a); a.click();
-    setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},200);
-    toast("Logs downloaded","success");
-  }
-  async function _dlDb() {
-    if (!_selectedJobId) { toast("Select a job first","error"); return; }
-    toast("Looking for database file…","info");
-    try {
-      const r = await api(`/api/jobs/${_selectedJobId}/files`, "GET", null, true);
-      const files = r.files || [];
-      if (!files.length) { toast("No database/data files found (job may not be running yet).","error"); return; }
-      const db = files.find(f => /\.(db|sqlite|sqlite3)$/i.test(f.path));
-      const json = files.find(f => /\.(json)$/i.test(f.path));
-      const pick = db || json || files[0];
-      const token = localStorage.getItem("ahad_token") || "";
-      const hr = await fetch(`/api/jobs/${_selectedJobId}/files/`+encodeURI(pick.path), {headers: token?{"Authorization":"Bearer "+token}:{}});
-      if (!hr.ok) throw new Error("Download failed ("+hr.status+")");
-      const blob = await hr.blob();
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = pick.path.split("/").pop() || "database.db";
-      document.body.appendChild(a); a.click();
-      setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},300);
-      toast("Downloaded "+a.download,"success");
-    } catch (err) { toast(err.message || "Download failed","error"); }
-  }
-  const uc = document.getElementById("jdUrlCopy");
-  if (uc) uc.addEventListener("click", e => {
-    e.preventDefault(); e.stopPropagation();
-    const a = document.getElementById("jdUrl"); if (!a || !a.href) return;
-    const u = a.href;
-    if (navigator.clipboard) navigator.clipboard.writeText(u).then(()=>toast("Link copied","success"));
+  on("jobDetailBack", () => closeJobDetails());
+  // A stopped job is brought back up through the same in-place restart
+  // endpoint the editor uses — there is no separate "start" API.
+  on("jdStart",   () => { if (_selectedJobId) restartJobById(_selectedJobId); });
+  on("jdStop",    () => { if (_selectedJobId) stopJobById(_selectedJobId); });
+  on("jdRestart", () => { if (_selectedJobId) restartJobById(_selectedJobId); });
+  on("jdEditCode", () => { closeJobDetails(); setTimeout(_jobCmFocus, 220); });
+  on("jdDelete", (btn) => {
+    if (!_selectedJobId) return;
+    if (!confirm("Delete this job? This cannot be undone.")) return;
+    const id = _selectedJobId;
+    closeJobDetails();
+    deleteJobById(id, btn);
   });
-  const add = document.getElementById("jdEnvAdd");
-  if (add) add.addEventListener("click", e => {
-    e.preventDefault(); e.stopPropagation();
+
+  on("jdHealthNow", () => _jdCheckHealth());
+  on("jdUrlCopy", () => {
+    const a = document.getElementById("jdUrl");
+    const u = a ? a.textContent : "";
+    if (!u || !navigator.clipboard) { toast("Nothing to copy", "error"); return; }
+    navigator.clipboard.writeText(u).then(() => toast("URL copied", "success"));
+  });
+
+  on("jdCopy", () => {
+    const b = document.getElementById("jdLogBody");
+    const t = b ? b.textContent : "";
+    if (!t.trim()) { toast("Nothing to copy", "error"); return; }
+    if (!navigator.clipboard) { toast("Clipboard not available", "error"); return; }
+    navigator.clipboard.writeText(t).then(() => toast("Logs copied", "success"));
+  });
+  on("jdClear", () => {
+    const b = document.getElementById("jdLogBody");
+    if (b) b.innerHTML = '<span class="rs-log-empty">// Cleared.</span>';
+    _lastLogText = null;                      // allow the next tick to repaint
+  });
+
+  const follow = document.getElementById("jdFollow");
+  if (follow) follow.addEventListener("change", () => { _jdLogFollow = follow.checked; });
+
+  on("jdEnvAdd", () => {
     const list = document.getElementById("jdEnvList");
-    const row = document.createElement("div"); row.className = "rs-env-row";
-    row.innerHTML = '<input class="rs-env-k" placeholder="KEY" spellcheck="false"><input class="rs-env-v" placeholder="value" spellcheck="false"><button class="rs-icon-btn rs-tb" title="Remove"><svg viewBox="0 0 24" class="rs-ic-sm" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>';
-    list.appendChild(row);
-    if (list.querySelector(".rs-empty-sm")) list.querySelector(".rs-empty-sm").remove();
-    row.querySelector("button").addEventListener("click", ()=>row.remove());
+    if (list) list.appendChild(_jdEnvRow("", ""));
+  });
+
+  on("jdDlSource", () => _jdDownload("source"));
+  on("jdDlLogs",   () => _jdDownload("logs"));
+  on("jdDlDb",     () => _jdDownload("db"));
+
+  // Escape closes the page, like any full-screen view.
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && _jdOpen) closeJobDetails();
   });
 }
 
