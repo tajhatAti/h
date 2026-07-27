@@ -1140,12 +1140,18 @@ function initCodeMirror() {
       }
     }
   });
-  cmEditor.on("change", (cm) => {
-    ta.value = cm.getValue();
-    updateEditorMeta();
+  // PERF: same problem as the RunSpace editor — this ran a full-document
+  // serialise (ta.value = cm.getValue()), another inside updateEditorMeta(),
+  // and rebuilt the whole line-number gutter string, on EVERY keystroke.
+  // Coalesce into one animation frame; CodeMirror owns the text, so the
+  // textarea only needs syncing where it is actually read (save/run).
+  let _csRaf = 0;
+  cmEditor.on("change", () => {
     clearTimeout(_livePreviewTimer);
     const l = (document.getElementById("snippetLanguage").value || "").toLowerCase();
     if (_RUNNABLE_LANGS[l]) _livePreviewTimer = setTimeout(runLivePreview, 400);
+    if (_csRaf) return;
+    _csRaf = requestAnimationFrame(() => { _csRaf = 0; updateEditorMeta(); });
   });
   updateCodeMirrorMode();
 }
@@ -1206,9 +1212,18 @@ function updateEditorMeta() {
   const ta = document.getElementById("snippetContent");
   const meta = document.getElementById("editorMeta");
   if (!ta || !meta) return;
-  const val = cmEditor ? cmEditor.getValue() : (ta.value || "");
-  const lines = val.split("\n").length;
-  meta.textContent = lines + " lines · " + val.length + " chars";
+  // lineCount() avoids serialising + splitting the entire document just to
+  // count lines. Only the char count needs the text.
+  let lines, chars;
+  if (cmEditor) {
+    lines = cmEditor.lineCount();
+    chars = cmEditor.getValue().length;
+  } else {
+    const val = ta.value || "";
+    lines = val.split("\n").length;
+    chars = val.length;
+  }
+  meta.textContent = lines + " lines · " + chars + " chars";
   updateGutter();
 }
 
@@ -1599,11 +1614,22 @@ async function executeCode() {
 }
 
 /* Update line-number gutter */
+let _gutterLines = -1;
 function updateGutter() {
-  const ta = document.getElementById("snippetContent");
   const gutter = document.getElementById("csGutter");
-  if (!ta || !gutter) return;
-  const lines = ta.value.split("\n").length;
+  if (!gutter) return;
+  // Read from CodeMirror (the textarea is no longer synced on every change)
+  // and use lineCount(), which is O(1) instead of splitting the whole doc.
+  let lines;
+  if (cmEditor) {
+    lines = cmEditor.lineCount();
+  } else {
+    const ta = document.getElementById("snippetContent");
+    if (!ta) return;
+    lines = ta.value.split("\n").length;
+  }
+  if (lines === _gutterLines) return;   // nothing to repaint
+  _gutterLines = lines;
   let nums = "";
   for (let i = 1; i <= lines; i++) nums += i + "\n";
   gutter.textContent = nums;
@@ -2528,6 +2554,7 @@ let _lastJobsTs = 0;   // epoch of last successful load (for skeleton-stale heur
 
 // ─── RunSpace CodeMirror editor ────────────────────────────────────────
 let _jobCm = null;
+let _jobCmLoading = false;   // true while code is loaded programmatically
 
 function _jobCmModeForLang(lang) {
   const l = (lang || "python").toLowerCase();
@@ -2572,11 +2599,31 @@ function initJobCodeMirror() {
         "Cmd-/":  function(cm) { cm.toggleComment && cm.toggleComment(); },
       }
     });
-    _jobCm.on("change", (cm) => {
-      ta.value = cm.getValue();
-      _updateStats();
+    // PERF: this used to run on EVERY change (every keystroke, and on paste
+    // while the user is still typing). Each run did TWO full-document
+    // serialisations — ta.value = cm.getValue() and another getValue() inside
+    // _updateStats() — plus ~21 DOM reads/writes in _reflectJobStatus(), which
+    // forces synchronous layout. On a large paste followed by typing that is
+    // O(document) work per character and the tab locks up.
+    //
+    // CodeMirror already holds the authoritative text, so mirroring it into the
+    // hidden <textarea> on every change is pure waste: _jobCmGetValue() reads
+    // from CM, and the few places that need the textarea sync it explicitly.
+    // Everything else is coalesced into one animation frame.
+    let _chgRaf = 0;
+    _jobCm.on("change", () => {
+      if (_jobCmLoading) return;          // programmatic load, not a user edit
+      const wasDirty = _jobDirty;
       _jobDirty = true;
-      _reflectJobStatus(_selectedJobId); // swap Run/Details based on dirty state
+      if (_chgRaf) return;                       // already scheduled this frame
+      _chgRaf = requestAnimationFrame(() => {
+        _chgRaf = 0;
+        _updateStats();
+        // Only touch the toolbar when the dirty flag actually flipped —
+        // repainting identical button state on every keystroke is what made
+        // large pastes feel like a freeze.
+        if (!wasDirty) _reflectJobStatus(_selectedJobId);
+      });
     });
     _jobCmSetMode("python");
   } catch (e) { console.error("initJobCodeMirror:", e); }
@@ -2595,7 +2642,16 @@ function _jobCmSetValue(code) {
   if (!ta) return;
   const v = code || "";
   ta.value = v;
-  if (_jobCm) _jobCm.setValue(v);
+  // Loading a job's saved code is NOT a user edit. Without this flag the
+  // change handler marks the buffer dirty, and its deferred callback could
+  // re-dirty it after the caller had already reset the flag — leaving a
+  // freshly-opened job permanently showing "Save & run".
+  _jobCmLoading = true;
+  try {
+    if (_jobCm) _jobCm.setValue(v);
+  } finally {
+    _jobCmLoading = false;
+  }
   _updateStats();
 }
 
@@ -3015,12 +3071,25 @@ function _setHint(kind, msg) {
   dot.title = msg || (kind === "ok" ? "ok" : kind === "warn" ? "working" : kind === "err" ? "error" : "idle");
 }
 
+let _statsLast = "";
 function _updateStats() {
   const el = document.getElementById("codeStats");
-  const v = _jobCmGetValue();
-  const lines = v ? v.split("\n").length : 0;
-  const chars = v ? v.length : 0;
-  if (el) el.textContent = lines + " lines · " + chars + " chars";
+  if (!el) return;
+  // lineCount() is O(1) on CodeMirror's line tree; getValue()+split() rebuilt
+  // and re-scanned the entire document on every keystroke.
+  let lines, chars;
+  if (_jobCm) {
+    lines = _jobCm.lineCount();
+    chars = _jobCm.getValue().length;
+  } else {
+    const v = _jobCmGetValue() || "";
+    lines = v ? v.split("\n").length : 0;
+    chars = v.length;
+  }
+  const txt = lines + " lines · " + chars + " chars";
+  if (txt === _statsLast) return;      // skip identical DOM writes
+  _statsLast = txt;
+  el.textContent = txt;
 }
 
 // Reflect current job status onto toolbar action buttons + sidebar dots + log dot.
