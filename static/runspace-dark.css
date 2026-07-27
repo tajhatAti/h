@@ -1260,3 +1260,47 @@ body.rs-active .dash-main { padding-bottom: 0 !important; }
   #tab-jobs .jd-dot,
   #tab-jobs .jd-badge { animation: none !important; }
 }
+
+/* ============================================================
+   CODEMIRROR ADDONS — fold gutter + search dialog
+   Official CM5 addons, themed to match the editor.
+   ============================================================ */
+#tab-jobs .rs-cm-host .CodeMirror-foldgutter { width: 14px; }
+#tab-jobs .rs-cm-host .CodeMirror-foldgutter-open,
+#tab-jobs .rs-cm-host .CodeMirror-foldgutter-folded {
+  color: #6e7681;
+  cursor: pointer;
+}
+#tab-jobs .rs-cm-host .CodeMirror-foldgutter-open:hover,
+#tab-jobs .rs-cm-host .CodeMirror-foldgutter-folded:hover { color: #c9d1d9; }
+#tab-jobs .rs-cm-host .CodeMirror-foldmarker {
+  color: #d29922;
+  background: rgba(210, 153, 34, .12);
+  border: 1px solid rgba(210, 153, 34, .35);
+  border-radius: 4px;
+  padding: 0 5px;
+  font-family: inherit;
+  text-shadow: none;
+}
+/* Search / replace dialog */
+#tab-jobs .rs-cm-host .CodeMirror-dialog {
+  background: #161b22;
+  border-bottom: 1px solid #30363d;
+  color: #c9d1d9;
+  font-size: 12.5px;
+  padding: 7px 10px;
+}
+#tab-jobs .rs-cm-host .CodeMirror-dialog input {
+  background: #0d1117;
+  border: 1px solid #30363d;
+  color: #e6edf3;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-family: ui-monospace, monospace;
+  outline: none;
+}
+#tab-jobs .rs-cm-host .CodeMirror-dialog input:focus { border-color: #58a6ff; }
+#tab-jobs .rs-cm-host .cm-searching {
+  background: rgba(210, 153, 34, .28);
+  outline: 1px solid rgba(210, 153, 34, .5);
+}

@@ -1124,6 +1124,12 @@ function initCodeMirror() {
     lineNumbers: true,
     theme: "default",
     mode: "python",
+    // Same mobile clipboard fix as the RunSpace editor (see there).
+    inputStyle: "textarea",
+    dragDrop: false,
+    spellcheck: false,
+    autocorrect: false,
+    autocapitalize: false,
     lineWrapping: true,
     indentUnit: 2,
     tabSize: 2,
@@ -1614,34 +1620,11 @@ async function executeCode() {
 }
 
 /* Update line-number gutter */
-let _gutterLines = -1;
-function updateGutter() {
-  const gutter = document.getElementById("csGutter");
-  if (!gutter) return;
-  // Read from CodeMirror (the textarea is no longer synced on every change)
-  // and use lineCount(), which is O(1) instead of splitting the whole doc.
-  let lines;
-  if (cmEditor) {
-    lines = cmEditor.lineCount();
-  } else {
-    const ta = document.getElementById("snippetContent");
-    if (!ta) return;
-    lines = ta.value.split("\n").length;
-  }
-  if (lines === _gutterLines) return;   // nothing to repaint
-  _gutterLines = lines;
-  let nums = "";
-  for (let i = 1; i <= lines; i++) nums += i + "\n";
-  gutter.textContent = nums;
-}
+// NOTE: the hand-rolled line-number gutter was removed. Its target element
+// (#csGutter) does not exist — CodeMirror renders the real gutter itself.
+function updateGutter() { /* CodeMirror owns the gutter */ }
 
-/* Sync gutter scroll with textarea scroll */
-function initGutterScroll() {
-  const ta = document.getElementById("snippetContent");
-  const gutter = document.getElementById("csGutter");
-  if (!ta || !gutter) return;
-  ta.addEventListener("scroll", () => { gutter.scrollTop = ta.scrollTop; });
-}
+function initGutterScroll() { /* CodeMirror owns gutter scrolling */ }
 
 /* initIdeDivider is now the close button for the preview panel */
 function initIdeDivider() {
@@ -2575,6 +2558,16 @@ function initJobCodeMirror() {
       lineNumbers: true,
       theme: "default",
       mode: "python",
+      // MOBILE CLIPBOARD FIX: CodeMirror 5 picks contenteditable input on
+      // mobile, where Gboard's clipboard chip and long-press Paste frequently
+      // fail to deliver a paste event. Forcing the hidden-textarea input model
+      // restores native OS clipboard paste (and Ctrl/Cmd+V) everywhere.
+      inputStyle: "textarea",
+      // Let the browser/OS own text selection gestures.
+      dragDrop: false,
+      spellcheck: false,
+      autocorrect: false,
+      autocapitalize: false,
       lineWrapping: false,
       indentUnit: 2,
       tabSize: 2,
@@ -2582,7 +2575,18 @@ function initJobCodeMirror() {
       autoCloseBrackets: true,
       matchBrackets: true,
       styleActiveLine: true,
+      // Official fold addon (brace/indent/comment aware) + fold gutter.
+      foldGutter: true,
+      gutters: ["CodeMirror-linenumbers", "CodeMirror-foldgutter"],
       extraKeys: {
+        // Official search/replace addon keybindings.
+        "Ctrl-F": "findPersistent",
+        "Cmd-F":  "findPersistent",
+        "Ctrl-H": "replace",
+        "Cmd-Alt-F": "replace",
+        "Alt-G": "jumpToLine",
+        "Ctrl-K Ctrl-0": function(cm) { cm.execCommand("foldAll"); },
+        "Ctrl-K Ctrl-J": function(cm) { cm.execCommand("unfoldAll"); },
         "Ctrl-S": function(cm) { startJob(); },
         "Cmd-S":  function(cm) { startJob(); },
         "Ctrl-Enter": function(cm) { startJob(); },

@@ -46,10 +46,12 @@ const stats = js.slice(js.indexOf("function _updateStats"), js.indexOf("function
 check("_updateStats uses lineCount()", /_jobCm\.lineCount\(\)/.test(stats));
 check("_updateStats skips identical writes", /if \(txt === _statsLast\) return;/.test(stats));
 
-const gutter = js.slice(js.indexOf("function updateGutter"), js.indexOf("function initGutterScroll"));
-check("gutter uses lineCount()", /cmEditor\.lineCount\(\)/.test(gutter));
-check("gutter skips repaint when the line count is unchanged",
-  /if \(lines === _gutterLines\) return;/.test(gutter));
+// The hand-rolled gutter was REMOVED (its #csGutter target no longer exists);
+// CodeMirror renders the real gutter, so there is nothing to recompute.
+check("hand-rolled gutter no longer rebuilds line numbers",
+  !/getElementById\("csGutter"\)/.test(js));
+check("gutter work is delegated to CodeMirror",
+  /function updateGutter\(\) \{ \/\* CodeMirror owns the gutter \*\/ \}/.test(js));
 
 const meta = js.slice(js.indexOf("function updateEditorMeta"), js.indexOf("function _buildPreviewSrcdoc"));
 check("editor meta uses lineCount()", /cmEditor\.lineCount\(\)/.test(meta));
