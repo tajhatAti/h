@@ -929,6 +929,150 @@ def _proc_stats(proc) -> dict:
     return out
 
 
+# ---------------------------------------------------------------------------
+# CRASH/REDEPLOY RECOVERY
+# ---------------------------------------------------------------------------
+# _jobs lives only in memory. Spawned children use start_new_session=True, so
+# they SURVIVE a runner restart — but the registry that described them does
+# not. The job kept running (a Telegram bot kept answering chats) while the
+# API reported "offline", and Restart then cold-started a SECOND copy.
+#
+# Fix: write a tiny manifest next to each job's workspace and re-adopt still
+# -alive processes on boot.
+_MANIFEST = "job.json"
+
+
+def _manifest_path(job_id: str) -> str:
+    return os.path.join(_job_dir(job_id), _MANIFEST)
+
+
+def _save_manifest(j: dict) -> None:
+    """Persist the facts needed to re-adopt this job after a restart."""
+    try:
+        proc = j.get("proc")
+        data = {
+            "id": j["id"], "name": j["name"], "lang": j["lang"],
+            "file": j.get("file"), "bin": j.get("bin"), "pylibs": j.get("pylibs"),
+            "port": j.get("port"), "web_slug": j.get("web_slug"),
+            "web_public": j.get("web_public", True),
+            "access_key": j.get("access_key"), "repo_url": j.get("repo_url"),
+            "env": j.get("env") or {},
+            "restart_enabled": bool(j.get("restart_enabled", True)),
+            "started_at": j.get("started_at"),
+            "pid": proc.pid if proc else None,
+        }
+        with open(_manifest_path(j["id"]), "w") as fh:
+            json.dump(data, fh)
+    except Exception as exc:  # never let bookkeeping break a launch
+        logger.warning("manifest save failed for %s: %s", j.get("id"), exc)
+
+
+def _pid_alive(pid: int, started_at: float) -> bool:
+    """True if `pid` is running AND is plausibly our original child.
+
+    PIDs get recycled, so we also require the process start time to predate
+    nothing newer than our record — a cheap guard against adopting a stranger.
+    """
+    if not pid:
+        return False
+    try:
+        os.kill(pid, 0)
+    except (OSError, ProcessLookupError, PermissionError):
+        return False
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as fh:
+            cmd = fh.read().decode("utf-8", "replace")
+        # Our jobs always run out of the jobs data dir.
+        return JOBS_DATA_DIR in cmd or "python" in cmd or "node" in cmd
+    except Exception:
+        return True          # cannot verify; os.kill said it exists
+
+
+class _AdoptedProc:
+    """Minimal stand-in for subprocess.Popen for a re-adopted process.
+
+    We cannot recover the original Popen object across a restart, but the only
+    things the runner asks of it are poll() and pid.
+    """
+
+    def __init__(self, pid):
+        self.pid = pid
+        self._rc = None
+
+    def poll(self):
+        if self._rc is not None:
+            return self._rc
+        try:
+            os.kill(self.pid, 0)
+            return None                      # still alive
+        except Exception:
+            self._rc = -1
+            return self._rc
+
+    def wait(self, timeout=None):
+        import time as _t
+        deadline = (_t.time() + timeout) if timeout else None
+        while self.poll() is None:
+            if deadline and _t.time() > deadline:
+                raise subprocess.TimeoutExpired(str(self.pid), timeout)
+            _t.sleep(0.2)
+        return self._rc
+
+
+def _recover_jobs() -> None:
+    """On boot, re-adopt jobs whose processes outlived the previous runner."""
+    try:
+        if not os.path.isdir(JOBS_DATA_DIR):
+            return
+        adopted = 0
+        for job_id in os.listdir(JOBS_DATA_DIR):
+            mp = os.path.join(JOBS_DATA_DIR, job_id, _MANIFEST)
+            if not os.path.isfile(mp):
+                continue
+            try:
+                with open(mp) as fh:
+                    m = json.load(fh)
+            except Exception:
+                continue
+            pid = m.get("pid")
+            if not _pid_alive(pid, m.get("started_at") or 0):
+                continue
+            j = {
+                "id": m["id"], "name": m.get("name") or "job",
+                "lang": m.get("lang") or "python",
+                "dir": os.path.join(JOBS_DATA_DIR, job_id),
+                "file": m.get("file"), "bin": m.get("bin"),
+                "pylibs": m.get("pylibs"),
+                "proc": _AdoptedProc(pid),
+                "status": "running",
+                "log": deque(maxlen=JOB_LOG_LINES),
+                "restarts": 0,
+                "restart_enabled": bool(m.get("restart_enabled", True)),
+                "stop_requested": False,
+                "started_at": m.get("started_at") or time.time(),
+                "last_proxy_time": time.time(),
+                "port": m.get("port"),
+                "web": False,
+                "web_slug": m.get("web_slug") or _slugify(m.get("name") or job_id),
+                "web_public": bool(m.get("web_public", True)),
+                "access_key": m.get("access_key") or secrets.token_urlsafe(12),
+                "repo_url": m.get("repo_url"),
+                "env": m.get("env") or {},
+                "adopted": True,
+            }
+            j["log"].append("[system] re-adopted after a runner restart (process still alive)")
+            with _jobs_lock:
+                _jobs[m["id"]] = j
+            if j.get("port"):
+                threading.Thread(target=_web_watch, args=(j, j["proc"], j["port"]),
+                                 daemon=True).start()
+            adopted += 1
+        if adopted:
+            logger.info("Recovered %d still-running job(s) after restart", adopted)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("job recovery failed: %s", exc)
+
+
 def _job_public(j: dict) -> dict:
     """Safe public view of a job (no internal objects)."""
     running = j["proc"] is not None and j["proc"].poll() is None
@@ -956,18 +1100,73 @@ def _job_public(j: dict) -> dict:
     }
 
 
+def _clear_manifest_pid(j: dict) -> None:
+    """Mark a job as intentionally not-running so boot recovery skips it."""
+    try:
+        mp = _manifest_path(j["id"])
+        if not os.path.isfile(mp):
+            return
+        with open(mp) as fh:
+            m = json.load(fh)
+        m["pid"] = None
+        with open(mp, "w") as fh:
+            json.dump(m, fh)
+    except Exception:
+        pass
+
+
 def _kill_job_tree(j: dict) -> None:
-    """Kill the whole process group so children die with the parent."""
+    """Kill the whole process group, and VERIFY it actually died.
+
+    Restart used to hang here: if SIGTERM was ignored (or the process was a
+    re-adopted one whose group we no longer own) the old process stayed alive
+    holding the job's port, and the restart then spawned a second copy that
+    fought it. Now we escalate to SIGKILL and confirm the pid is gone before
+    returning, so a restart can never leave two copies running.
+    """
     proc = j.get("proc")
-    if proc and proc.poll() is None:
+    if not proc or proc.poll() is not None:
+        return
+    pid = proc.pid
+
+    def _signal_all(sig):
+        sent = False
+        try:                                    # whole group first
+            os.killpg(os.getpgid(pid), sig)
+            sent = True
+        except Exception:
+            pass
+        try:                                    # then the pid itself
+            os.kill(pid, sig)
+            sent = True
+        except Exception:
+            pass
+        return sent
+
+    _signal_all(signal.SIGTERM)
+    try:
+        proc.wait(timeout=3)
+    except Exception:
+        pass
+
+    if proc.poll() is None:                     # still alive -> force it
+        _signal_all(signal.SIGKILL)
         try:
-            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
             proc.wait(timeout=3)
         except Exception:
-            try:
-                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-            except Exception:
-                pass
+            pass
+
+    # Final confirmation. Never return while the pid is still around, or the
+    # caller will start a duplicate on the same port.
+    deadline = time.time() + 3
+    while time.time() < deadline:
+        try:
+            os.kill(pid, 0)
+        except Exception:
+            break                               # gone
+        time.sleep(0.1)
+    else:
+        logger.warning("job %s pid %s did not exit after SIGKILL", j.get("id"), pid)
 
 
 def _spawn(j: dict) -> None:
@@ -1000,6 +1199,9 @@ def _spawn(j: dict) -> None:
     j["proc"] = proc
     j["status"] = "running"
     j["log"].append(f"[system] started (pid {proc.pid})")
+    # Record the pid so a future runner boot can re-adopt this process
+    # instead of reporting the job offline and cold-starting a duplicate.
+    _save_manifest(j)
 
     # Reset the web flag for this incarnation and start a fresh port watchdog.
     j["web"] = False
@@ -1201,6 +1403,8 @@ def job_stop(job_id: str, authorization: Optional[str] = Header(None)):
     _kill_job_tree(j)
     j["status"] = "stopped"
     j["log"].append("[system] stopped by user")
+    # An intentional stop must not be re-adopted as "running" on the next boot.
+    _clear_manifest_pid(j)
     # Release the reserved port + web flag so the pool serves other jobs.
     j["web"] = False
     with _jobs_lock:
@@ -1678,6 +1882,12 @@ async def _ws_inbound_loop(websocket, sess):
                 await websocket.send_json({"type": "pong"})
         except Exception:
             pass
+
+
+@app.on_event("startup")
+def _startup_recover_jobs():
+    """Re-adopt jobs whose processes outlived the previous runner instance."""
+    _recover_jobs()
 
 
 if __name__ == "__main__":
