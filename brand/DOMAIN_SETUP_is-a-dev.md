@@ -365,10 +365,118 @@ Telegram-এ **@BotFather** খোলো:
 
 ---
 
+## 🔴 "We weren't able to verify codenest.is-a.dev" — এর মানে কী
+
+Render এই মেসেজ দিলে **তুমি ঠিক পথেই আছ**। এটা ভুল না — এটা ধাপ ২-এর স্বাভাবিক অবস্থা।
+
+### আমি চেক করে দেখেছি — সমস্যাটা কী
+
+`codenest.is-a.dev`-এর DNS জিজ্ঞেস করলাম (Google DNS, 2026-07-27):
+
+```
+codenest.is-a.dev        A → 104.18.5.103, 104.18.4.103
+```
+
+দেখে মনে হতে পারে "আরে, DNS তো কাজ করছে!" — **কিন্তু না।** আমি একটা সম্পূর্ণ বানানো নাম দিয়েও চেক করেছি:
+
+```
+zzzq9-nonexistent-xyz123.is-a.dev   A → 104.18.5.103, 104.18.4.103   ← হুবহু একই!
+```
+
+**একই IP।** মানে ওগুলো তোমার রেকর্ড না — ওগুলো is-a.dev-এর **wildcard catch-all** (Cloudflare-এর IP), যেটা প্রতিটা অ-নিবন্ধিত নামের জন্য রিটার্ন হয়।
+
+### 🎯 আসল কারণ
+
+> **তোমার Pull Request এখনো merge হয়নি।**
+
+`codenest.is-a.dev` এখনো তোমার নয়। DNS-এ তোমার কোনো রেকর্ড **নেই**। Render `ahadorg.onrender.com` বা `216.24.57.1` খুঁজছে, পাচ্ছে Cloudflare-এর wildcard IP — তাই verify fail করছে।
+
+**এটা তোমার ভুল না। Render-এর ভুলও না। শুধু PR-টা merge হওয়া বাকি।**
+
+### কোন অবস্থায় আছ তা নিজে চেক করো
+
+ব্রাউজারে খোলো:
+
+```
+https://github.com/is-a-dev/register/blob/main/domains/codenest.json
+```
+
+| যা দেখছ | মানে | করণীয় |
+|---|---|---|
+| **404 Not Found** | PR merge হয়নি (বা পাঠাওইনি) | নিচে দেখো ↓ |
+| **তোমার JSON ফাইল** | merge হয়ে গেছে ✅ | DNS ছড়াতে ১০ মিনিট – ২ ঘণ্টা দাও, তারপর Render-এ `Verify` |
+
+### 404 দেখালে
+
+**PR পাঠাওনি?** → এই ডকের **ধাপ ৩ থেকে ধাপ ৫** করো।
+
+**PR পাঠিয়েছ কিন্তু এখনো merge হয়নি?** → তোমার কিছুই করার নাই, অপেক্ষা ছাড়া। is-a.dev-এর FAQ:
+
+> *"We're a team of volunteers, and is-a.dev is a side project for us, so review times can vary."*
+
+কয়েক ঘণ্টা থেকে কয়েক দিন লাগতে পারে। এর মধ্যে:
+
+- ✅ Render-এ ডোমেইনটা যোগ করাই থাক — **সরিয়ে ফেলবে না**। merge হওয়ার সাথে সাথে Render নিজেই ধরে ফেলবে।
+- ✅ is-a.dev Discord-এর `#pull-requests`-এ PR লিংক একবার পোস্ট করো
+- ❌ মেইনটেইনারদের mention/DM কোরো না → **"low priority" লেবেল পড়বে, আরো দেরি হবে**
+- ❌ Render-এ বারবার `Verify` চেপে লাভ নাই — DNS না থাকলে কিছুই হবে না
+
+### PR-এ কোন রেকর্ডটা দেবে
+
+Render তোমাকে **দুটো অপশনই** দিয়েছে। যেকোনো একটা কাজ করবে:
+
+**অপশন A — CNAME (আমার সুপারিশ):**
+```json
+{
+    "owner": {
+        "username": "তোমার-github-username",
+        "email": "তোমার@ইমেইল.com"
+    },
+    "records": {
+        "CNAME": "ahadorg.onrender.com"
+    }
+}
+```
+
+**অপশন B — A record (is-a.dev-এর অফিশিয়াল Render গাইডে এটাই আছে):**
+```json
+{
+    "owner": {
+        "username": "তোমার-github-username",
+        "email": "তোমার@ইমেইল.com"
+    },
+    "records": {
+        "A": ["216.24.57.1"]
+    }
+}
+```
+
+**CNAME কেন ভালো:** Render ভবিষ্যতে IP বদলালে CNAME নিজে নিজে ঠিক থাকে, A record চুপচাপ ভেঙে যায়।
+
+**A কেন ভালো:** is-a.dev-এর নিজের Render গাইডে এটাই লেখা, মেইনটেইনাররা এটা দেখে অভ্যস্ত — প্রশ্ন কম করবে।
+
+> ⚠️ **দুটো একসাথে দেবে না।** FAQ-তে স্পষ্ট: *"A CNAME cannot be combined with other record types."* একটাই বেছে নাও।
+>
+> ⚠️ **`"proxied": true` লিখবে না।** Render-এর নিজের ডকে লেখা আছে DNS **"DNY only"** থাকতে হবে, নইলে সার্টিফিকেট ইস্যু হবে না। is-a.dev-এ ডিফল্টই `false` — তাই কিছু লেখার দরকার নেই।
+>
+> ⚠️ **AAAA রেকর্ড দেবে না।** Render IPv6 সাপোর্ট করে না, AAAA থাকলে ডোমেইন ভেঙে যায়।
+
+### Merge হওয়ার পর কীভাবে বুঝবে
+
+এই ওয়েবসাইটে চেক করো: **https://dnschecker.org** → `codenest.is-a.dev`
+
+| দেখছ | মানে |
+|---|---|
+| `104.18.x.x` (Cloudflare) | ❌ এখনো wildcard — merge হয়নি |
+| `216.24.57.1` অথবা `ahadorg.onrender.com` | ✅ তোমার রেকর্ড লাইভ — Render-এ `Verify` চাপো |
+
+---
+
 ## 🔧 সমস্যা হলে
 
 | যা দেখছ | কারণ | সমাধান |
 |---|---|---|
+| **"We weren't able to verify..."** | **PR এখনো merge হয়নি** | উপরের 🔴 সেকশন দেখো |
 | is-a.dev-এর homepage-এ চলে যাচ্ছে | ব্রাউজার ক্যাশ (FAQ-তে লেখা #১ সমস্যা) | ক্যাশ ক্লিয়ার / incognito-তে খোলো |
 | `DNS_PROBE_FINISHED_NXDOMAIN` | DNS এখনো ছড়ায়নি | ১-২ ঘণ্টা অপেক্ষা |
 | Render-এ "Certificate pending" আটকে আছে | Verify চালানো হয়নি | Render-এ `Verify` চাপো, ১০ মিনিট পর আবার |
