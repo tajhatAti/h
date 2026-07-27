@@ -20,6 +20,8 @@
 <link rel="stylesheet" href="/static/terminal.css?v=20260724m">
 <!-- RunSpace GitHub-dark raw theme -->
 <link rel="stylesheet" href="/static/runspace-dark.css?v=20260724m">
+<!-- Landing page styles — loaded last so they own the marketing pages. -->
+<link rel="stylesheet" href="/static/landing.css?v=20260724m">
 <!-- xterm.js (browser terminal emulator for the live PTY) -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css">
 <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
@@ -164,8 +166,8 @@
     </div>
     <div class="nav-links">
       <a class="nav-link" onclick="showScreen('screen-landing')">Overview</a>
+      <a class="nav-link" onclick="scrollToId('how')">How it works</a>
       <a class="nav-link" onclick="scrollToId('features')">Features</a>
-      <a class="nav-link" onclick="scrollToId('security')">Security</a>
     </div>
     <div class="nav-cta">
       <button class="btn-ghost" onclick="showScreen('screen-signin')">Sign in</button>
@@ -185,72 +187,115 @@
 <section class="hero" id="screen-landing">
   <div class="hero-grid">
     <div class="hero-copy reveal">
-      <div class="eyebrow"><span class="dot-live"></span> Free hosting · online 24/7</div>
-      <h1 class="hero-title">Host your Telegram bot,<br><span class="grad">live in seconds — free.</span></h1>
-      <p class="hero-sub"><b>RunSpace</b> runs your bot, scraper or API around the clock: paste the code, press deploy, share the public URL. Missing libraries install themselves, and there is no proprietary language to learn — it is just your code.</p>
+      <div class="eyebrow"><span class="dot-live"></span> Free tier · no credit card</div>
+      <h1 class="hero-title">Your Telegram bot,<br><span class="grad">online 24/7.</span></h1>
+      <p class="hero-sub">Paste your Python or Node code, press deploy, and CodeNest keeps it running — restarting it when it crashes and installing the libraries it imports. No server to rent, nothing to configure.</p>
       <div class="hero-actions">
-        <button class="btn-primary lg" onclick="showScreen('screen-signup')">Create free account <span class="arr">→</span></button>
-        <button class="btn-ghost lg" onclick="showScreen('screen-signin')">I have an account</button>
+        <button class="btn-primary lg" onclick="showScreen('screen-signup')">Deploy your first bot <span class="arr">→</span></button>
+        <button class="btn-ghost lg" onclick="scrollToId('how')">See how it works</button>
       </div>
-      <div class="hero-trust">
-        <div class="trust-item"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg> Live URL in seconds</div>
-        <div class="trust-item"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 5 13.5h5L8.8 22l8-11.5h-5L13 2z"/></svg> Libraries auto-install</div>
-        <div class="trust-item"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 13.9 9l5.6 1.9-5.6 1.9L12 18.4l-1.9-5.6L4.5 10.9 10.1 9z"/></svg> No lock-in — real code</div>
-      </div>
+      <p class="hero-note">Free forever for 3 apps · Python, Node, Bash, Ruby, PHP</p>
     </div>
+
+    <!-- Real terminal transcript instead of a fake dashboard mockup: it shows
+         exactly what the product does, in the user's own language. -->
     <div class="hero-art reveal">
-      <div class="glass-card">
-        <div class="gc-top">
-          <span class="gc-chip gc-live">LIVE</span>
-          <span class="gc-lock"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg></span>
+      <div class="term-card" role="img" aria-label="Deploy transcript: installing dependencies and starting a bot">
+        <div class="tc-bar">
+          <span class="tc-dot"></span><span class="tc-dot"></span><span class="tc-dot"></span>
+          <span class="tc-title">my-tg-bot · deploy</span>
         </div>
-        <div class="gc-row"><span class="gc-k">App</span><span class="gc-v">my-tg-bot</span></div>
-        <div class="gc-row"><span class="gc-k">Status</span><span class="gc-v active">● running · 24/7</span></div>
-        <div class="gc-row"><span class="gc-k">Public URL</span><span class="gc-v">/live/my-tg-bot</span></div>
-        <div class="gc-bar"><i></i></div>
-        <div class="gc-foot">python · requests auto-installed · restarts itself</div>
+        <pre class="tc-body"><span class="tc-mut">$</span> <span class="tc-cmd">codenest deploy main.py</span>
+<span class="tc-mut">→</span> detected <span class="tc-hi">python 3.11</span>
+<span class="tc-mut">→</span> installing <span class="tc-hi">python-telegram-bot</span>, <span class="tc-hi">requests</span>
+<span class="tc-ok">✓</span> dependencies ready <span class="tc-mut">(4.2s)</span>
+<span class="tc-ok">✓</span> bot started · pid 4417
+
+<span class="tc-mut">[10:24:01]</span> polling for updates…
+<span class="tc-mut">[10:24:07]</span> /start from @ahad_r
+<span class="tc-mut">[10:24:07]</span> replied in 41ms<span class="tc-caret"></span></pre>
+        <div class="tc-foot">
+          <span class="tc-live"><i></i> running</span>
+          <span class="tc-mut">uptime 6d 14h · 0 crashes</span>
+        </div>
       </div>
     </div>
     </div>
   </div>
+</section>
+
+<!-- ============ HOW IT WORKS ============ -->
+<section class="section" id="how">
+  <div class="section-head reveal">
+    <div class="eyebrow center">HOW IT WORKS</div>
+    <h2>Three steps, <span class="grad">about a minute</span></h2>
+  </div>
+  <ol class="steps">
+    <li class="step reveal">
+      <span class="step-n">1</span>
+      <h3>Paste your code</h3>
+      <p>Bring the bot you already wrote. No rewriting, no proprietary framework, no config file.</p>
+    </li>
+    <li class="step reveal">
+      <span class="step-n">2</span>
+      <h3>Press deploy</h3>
+      <p>CodeNest reads your imports, installs what is missing, and starts the process.</p>
+    </li>
+    <li class="step reveal">
+      <span class="step-n">3</span>
+      <h3>It stays up</h3>
+      <p>Crashed at 3am? It restarts itself. Watch live logs and stop or redeploy whenever you want.</p>
+    </li>
+  </ol>
 </section>
 
 <!-- ============ FEATURES ============ -->
-<section class="section" id="features">
+<section class="section alt" id="features">
   <div class="section-head reveal">
-    <div class="eyebrow center">FEATURES</div>
-    <h2>Write code here, <span class="grad">run it here — free</span></h2>
-    <p>A code studio and a 24/7 runner up front — and nothing else competing for your attention.</p>
+    <div class="eyebrow center">WHAT YOU GET</div>
+    <h2>Built for people who <span class="grad">ship bots</span></h2>
   </div>
   <div class="feat-grid">
-    <div class="feat reveal"><div class="feat-ic"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg></div><h3>RunSpace · free hosting</h3><p>Deploy a Telegram bot, scraper or API in seconds. It restarts itself and stays online 24/7 — up to 3 apps free.</p></div>
-    <div class="feat reveal"><div class="feat-ic"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 8l-4.5 4L9 16M15 8l4.5 4L15 16"/></svg></div><h3>Code Studio</h3><p>Write, run and publish right in the browser — share a live page of your work with a single tap.</p></div>
-    <div class="feat reveal"><div class="feat-ic"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5a13.5 13.5 0 0 1 0 17M12 3.5a13.5 13.5 0 0 0 0 17"/></svg></div><h3>Public live URLs</h3><p>Open a web server on the PORT env variable and a free /live/… link appears. Switch it public or private anytime.</p></div>
-    <div class="feat reveal"><div class="feat-ic"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 3.5h-8a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h8M17 8l4 4-4 4M8 12h13"/></svg></div><h3>Zero lock-in</h3><p>Python, JavaScript, Bash, Ruby, PHP — your real code as-is. No proprietary scripting language to learn, ever.</p></div>
-    <div class="feat reveal"><div class="feat-ic"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 5 13.5h5L8.8 22l8-11.5h-5L13 2z"/></svg></div><h3>Free forever tier</h3><p>3 apps per account, auto library install, live logs and public URLs included. No credit card, no trial countdown.</p></div>
-    <div class="feat reveal"><div class="feat-ic"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20.5h16"/><path d="M7 16.5v-4M12 16.5v-9M17 16.5v-6.5"/></svg></div><h3>Full visibility</h3><p>Live log streaming for running apps, plus a record of sign-ins and security events.</p></div>
+    <div class="feat reveal">
+      <h3>Always-on hosting</h3>
+      <p>Long-running processes, not request handlers. Pollers, schedulers and workers stay alive between messages.</p>
+    </div>
+    <div class="feat reveal">
+      <h3>Automatic restarts</h3>
+      <p>A crash is not an outage. The supervisor brings your process back and records what happened in the log.</p>
+    </div>
+    <div class="feat reveal">
+      <h3>Dependencies handled</h3>
+      <p>Imports are detected and installed on deploy. No requirements file to maintain by hand.</p>
+    </div>
+    <div class="feat reveal">
+      <h3>Live logs</h3>
+      <p>Stream stdout as it happens, so you can debug a running bot without SSH or a log service.</p>
+    </div>
+    <div class="feat reveal">
+      <h3>Public URLs</h3>
+      <p>Bind a web server to <code>$PORT</code> and get a free HTTPS link — useful for webhooks and dashboards.</p>
+    </div>
+    <div class="feat reveal">
+      <h3>Your code stays yours</h3>
+      <p>Plain Python, Node, Bash, Ruby or PHP. Download it, move it elsewhere, stop any time.</p>
+    </div>
   </div>
 </section>
 
-<!-- ============ SECURITY ============ -->
-<section class="section alt" id="security">
-  <div class="section-head reveal">
-    <div class="eyebrow center">SECURITY</div>
-    <h2>Your account, <span class="grad">looked after</span></h2>
-    <p>Sensible protection that stays out of your way.</p>
-  </div>
-  <div class="sec-grid">
-    <div class="sec-card reveal"><h4><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg> Protected sign-in</h4><p>Passwords are hashed, never stored as text.</p></div>
-    <div class="sec-card reveal"><h4><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 8.5a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v1.3a2.7 2.7 0 1 0 0 5.4v1.3a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2v-1.3a2.7 2.7 0 1 0 0-5.4z"/><path d="M12 8v1.6M12 11.6v1.6M12 15.2v1.3"/></svg> One-time codes</h4><p>Email OTP expires automatically after 10 minutes.</p></div>
-    <div class="sec-card reveal"><h4><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 5 6v5.5c0 4.5 3 7.6 7 9 4-1.4 7-4.5 7-9V6z"/><path d="M9.2 11.8l2 2 3.6-4"/></svg> Session control</h4><p>Review and revoke active devices instantly.</p></div>
-    <div class="sec-card reveal"><h4><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4 2.8 19.5h18.4z"/><path d="M12 10v4.2M12 17.2v.1"/></svg> Abuse protection</h4><p>Repeated sign-in attempts are blocked automatically.</p></div>
+<!-- ============ CLOSING CTA ============ -->
+<section class="section cta-band">
+  <div class="cta-inner reveal">
+    <h2>Put your bot online tonight</h2>
+    <p>Three apps free, forever. Sign in with Telegram — it takes one tap.</p>
+    <button class="btn-primary lg" onclick="showScreen('screen-signup')">Get started free <span class="arr">→</span></button>
   </div>
 </section>
 
 <footer class="foot">
   <div class="foot-inner">
     <div class="brand"><div class="brand-mark sm"><object type="image/svg+xml" data="/static/codenest-mark.svg?v=20260724m" aria-label="CodeNest"></object></div><span class="brand-text">CodeNest</span></div>
-    <p>© 2026 CodeNest · Free code hosting. · <a href="/report-abuse" style="color:inherit">Report abuse</a></p>
+    <p>© 2026 CodeNest · <a href="/terms">Terms</a> · <a href="/report-abuse">Report abuse</a></p>
   </div>
 </footer>
 

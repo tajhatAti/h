@@ -94,15 +94,6 @@ body {
 }
 
 a, button, input, select, textarea, .quick-card, .stat-card,
-.feat, .sec-card, .job-card {
-  transition:
-    transform .18s var(--ease),
-    box-shadow .18s var(--ease),
-    background-color .18s var(--ease),
-    border-color .18s var(--ease),
-    color .18s var(--ease),
-    opacity .18s var(--ease) !important;
-}
 
 ::selection { background: var(--acc) !important; color: #fff !important; }
 
@@ -172,10 +163,6 @@ a, button, input, select, textarea, .quick-card, .stat-card,
   font-family: var(--serif) !important; font-weight: 600 !important;
   color: var(--ink) !important; letter-spacing: -.01em !important;
 }
-.nav .brand-mark, .dash-bar .brand-mark, .foot .brand-mark {
-  background: var(--cream) !important; color: var(--on-cream) !important;
-}
-.nav .brand-text, .dash-bar .brand-text, .foot .brand-text { color: var(--cream) !important; }
 .auth .brand-mark { background: var(--btn) !important; color: var(--btn-fg) !important; }
 
 /* ================= 3. MARKETING NAV (black band) ==================== */
@@ -257,91 +244,14 @@ html[data-theme="light"] .nav { background: var(--band) !important; }
 .link:hover, .auth-switch a:hover { text-decoration: underline !important; }
 
 /* ================= 5. HERO (black statement) ======================== */
-.hero { background: var(--band) !important; color: var(--cream) !important; }
-.eyebrow {
-  color: var(--acc) !important;
-  font-family: var(--mono) !important; font-size: 11px !important;
-  font-weight: 600 !important; letter-spacing: .22em !important;
-  text-transform: uppercase !important;
-}
-.hero .eyebrow { color: var(--acc-ink) !important; }
-.dot-live { background: var(--acc-ink) !important; box-shadow: none !important; animation: ahPulse 2.2s var(--ease) infinite !important; }
-.hero-title, .hero-title * { color: var(--cream) !important; }
-.hero-title {
-  font-family: var(--serif) !important; font-weight: 560 !important;
-  letter-spacing: -.02em !important; line-height: 1.06 !important;
-}
-.hero-title .grad {
-  background: none !important; -webkit-text-fill-color: unset !important;
-  color: var(--acc-ink) !important; font-style: italic !important;
-}
-.hero-sub { color: var(--cream-dim) !important; }
-.hero-actions .btn-primary { background: var(--acc) !important; border-color: var(--acc) !important; color: #fff !important; }
-.hero-actions .btn-primary:hover { background: #a63a06 !important; box-shadow: var(--shadow-l) !important; }
-.hero-actions .btn-primary .arr { transition: transform .18s var(--ease); display: inline-block; }
-.hero-actions .btn-primary:hover .arr { transform: translateX(4px); }
-.hero-actions .btn-ghost {
-  background: transparent !important; color: var(--cream) !important;
-  border: 1px solid var(--cream-line) !important;
-}
-.hero-actions .btn-ghost:hover { border-color: var(--cream) !important; }
-.hero-trust .trust-item { color: var(--cream-dim) !important; border-color: var(--cream-line) !important; }
 
 /* product ledger card in the hero */
-.glass-card {
-  background: var(--panel) !important;
-  backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
-  border: 1px solid var(--line) !important;
-  border-radius: var(--r-lg) !important;
-  box-shadow: var(--shadow-l) !important;
-  color: var(--ink) !important;
-}
-.gc-chip {
-  background: var(--btn) !important; color: var(--btn-fg) !important;
-  border-radius: 99px !important; font-family: var(--mono) !important;
-  font-size: 10px !important; letter-spacing: .18em !important;
-}
-.gc-k { color: var(--muted) !important; }
-.gc-v { color: var(--ink) !important; font-family: var(--serif) !important; font-weight: 600 !important; }
-.gc-v.active { color: var(--green) !important; }
-.gc-bar { background: var(--paper-2) !important; }
-.gc-bar i { background: var(--acc) !important; }
-.gc-foot { color: var(--muted) !important; border-top-color: var(--line) !important; }
 
 /* ================= 6. SECTIONS ====================================== */
 .section { background: var(--paper) !important; }
 .section.alt { background: var(--paper-2) !important; }
-.section-head h2 {
-  font-family: var(--serif) !important; font-weight: 560 !important;
-  color: var(--ink) !important; letter-spacing: -.02em !important;
-}
-.section-head h2 .grad {
-  background: none !important; -webkit-text-fill-color: unset !important;
-  color: var(--acc) !important; font-style: italic !important;
-}
-.section-head p { color: var(--ink-2) !important; }
 
-.feat, .sec-card {
-  background: var(--panel) !important;
-  border: 1px solid var(--line) !important;
-  border-radius: var(--r-md) !important;
-  box-shadow: var(--shadow-s) !important;
-}
-.feat:hover, .sec-card:hover {
-  transform: translateY(-4px) !important;
-  border-color: var(--line-2) !important;
-  box-shadow: var(--shadow-m) !important;
-}
-.feat h3 { font-family: var(--serif) !important; font-weight: 600 !important; color: var(--ink) !important; }
-.feat p, .sec-card p { color: var(--ink-2) !important; }
-.sec-card h4 { color: var(--ink) !important; }
-.feat-ic {
-  background: var(--paper) !important; border: 1px solid var(--line) !important;
-  border-radius: 50% !important; box-shadow: none !important;
-}
 
-.foot { background: var(--band) !important; border-top: 1px solid var(--cream-line) !important; }
-.foot p, .foot-inner p { color: var(--cream-dim) !important; }
 
 /* ================= 7. AUTH ========================================== */
 .auth { background: var(--paper) !important; background-image: none !important; }
@@ -577,10 +487,6 @@ svg.ic { width: 1em; height: 1em; display: inline-block; vertical-align: -.14em;
 .toast-ic { display: inline-flex; font-size: 15px; }
 #themeIcon .ic, #cmdBtn .ic, .icon-btn .ic { font-size: 16px; }
 .pub-ic .ic { font-size: 15px; color: var(--acc); }
-.feat-ic .ic { font-size: 24px; }
-.sec-card h4 .ic { font-size: 17px; vertical-align: -.18em; margin-right: 4px; }
-.trust-item .ic { font-size: 15px; color: var(--acc-ink); }
-.gc-lock .ic { font-size: 17px; }
 .ed-exit .ic { font-size: 16px; }
 .stat-ic .ic { font-size: 20px; color: var(--acc); }
 .qc-ic .ic { font-size: 20px; color: var(--acc); }
@@ -1468,16 +1374,6 @@ body.ed-full { overflow: hidden !important; }
    - Code Studio + RunSpace are the primary sidebar entries;
      code & hosting tools stay fully working but visually quieter
      (.tab-secondary), separated by hairlines (.tab-sep).
-   - Overview opens with two big entry cards (.feat-card).
-   - Signup carries a Terms-of-Use checkbox (.tos-check).
-   - Owner-only admin console (.adm-*) — plain data, calm layout.
-============================================================ */
-
-/* ---------- sidebar: groups & secondary tools ---------- */
-.tab-sep {
-  height: 1px !important; background: var(--cream-line) !important;
-  margin: 8px 10px 6px !important; flex: none;
-}
 .dash-tab.tab-secondary { opacity: .68 !important; }
 .dash-tab.tab-secondary:hover { opacity: 1 !important; }
 .dash-tab.tab-secondary.active { opacity: 1 !important; }
@@ -1488,28 +1384,10 @@ body.ed-full { overflow: hidden !important; }
 .dash-tab.hidden { display: none !important; }
 
 /* ---------- overview: the two hero entry cards ---------- */
-.feat-cards {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
-  margin: 18px 0 22px;
-}
-.feat-card {
-  display: flex; align-items: center; gap: 14px; text-align: left;
-  padding: 18px 16px; border-radius: var(--r-md) !important;
-  border: 1.5px solid var(--line) !important; background: var(--panel) !important;
-  cursor: pointer; box-shadow: var(--shadow-s);
-  transition: transform .2s var(--ease), box-shadow .2s var(--ease), border-color .2s var(--ease);
-}
-.feat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-m); border-color: var(--line-2) !important; }
-.feat-card:active { transform: translateY(0); }
-.feat-card.acc {
-  border-color: rgba(188, 67, 8, .38) !important;
-  background: linear-gradient(135deg, var(--acc-soft), transparent 55%), var(--panel) !important;
-}
 .fc-ic {
   width: 44px; height: 44px; flex: 0 0 auto; display: grid; place-items: center;
   border-radius: 12px; background: var(--panel-2); color: var(--ink);
 }
-.feat-card.acc .fc-ic { background: rgba(188, 67, 8, .14); color: var(--acc); }
 .fc-ic .ic { width: 22px; height: 22px; }
 .fc-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .fc-body b { font-size: 15px; font-weight: 700; color: var(--ink); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -1520,16 +1398,10 @@ body.ed-full { overflow: hidden !important; }
 }
 .fc-body small { font-size: 12.5px; line-height: 1.5; color: var(--muted); }
 .fc-go { flex: 0 0 auto; font-size: 17px; color: var(--muted); transition: transform .2s var(--ease), color .2s var(--ease); }
-.feat-card:hover .fc-go { transform: translateX(3px); color: var(--acc); }
 @media (max-width: 768px) {
-  .feat-cards { grid-template-columns: 1fr; gap: 10px; }
 }
 
 /* ---------- hero mock card: LIVE chip ---------- */
-.gc-chip.gc-live {
-  background: rgba(30, 122, 60, .16) !important; color: var(--green) !important;
-  animation: admLivePulse 1.8s ease-in-out infinite;
-}
 @keyframes admLivePulse { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
 
 /* ---------- signup: Terms-of-Use checkbox ---------- */
@@ -1611,6 +1483,4 @@ body.ed-full { overflow: hidden !important; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .feat-card, .fc-go, .adm-bar, .adm-act { transition: none !important; }
-  .gc-chip.gc-live { animation: none !important; }
 }
