@@ -4,13 +4,15 @@ Thin ASGI shell: app init, middleware, static mount, the SPA host (landing +
 deep-link negotiation for client-routed sections), /terms, /health, and the
 include_router lines for every domain module in routes/.
 """
+import hashlib
 import os
 import logging
+import re
 from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from database import DIALECT, init_db  # noqa: F401  (init_db already ran via routes.deps)
@@ -118,13 +120,54 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 # -------------------------------
+# Static asset cache-busting
+# -------------------------------
+# index.html shipped a HARDCODED "?v=20260724m" on every css/js link, so once a
+# browser cached those files it kept the old copies after every deploy — fixes
+# looked like they had not shipped at all. The version is now derived from the
+# real contents of the asset files, so it changes automatically whenever one of
+# them changes (and stays stable when nothing changed, preserving caching).
+def _asset_version() -> str:
+    h = hashlib.sha1()
+    try:
+        for f in sorted(STATIC_DIR.rglob("*")):
+            if f.suffix.lower() in (".css", ".js", ".svg") and f.is_file():
+                h.update(f.name.encode())
+                h.update(str(f.stat().st_mtime_ns).encode())
+                h.update(str(f.stat().st_size).encode())
+        if INDEX_FILE.exists():
+            h.update(str(INDEX_FILE.stat().st_mtime_ns).encode())
+    except Exception as exc:  # pragma: no cover - never block page delivery
+        logger.warning("asset version fallback: %s", exc)
+        return "dev"
+    return h.hexdigest()[:12]
+
+
+ASSET_VERSION = _asset_version()
+logger.info("Static asset version: %s", ASSET_VERSION)
+
+_VERSION_RE = re.compile(r'(/static/[^"\'?]+\.(?:css|js|svg))\?v=[^"\']*')
+
+
+def _index_html() -> str:
+    """index.html with every ?v= stamp rewritten to the current build."""
+    raw = INDEX_FILE.read_text(encoding="utf-8")
+    return _VERSION_RE.sub(lambda m: f"{m.group(1)}?v={ASSET_VERSION}", raw)
+
+
+# -------------------------------
 # SPA host (landing + client-routed sections)
 # -------------------------------
 @app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
 def read_index():
     if not INDEX_FILE.exists():
         raise HTTPException(status_code=404, detail="index.html not found.")
-    return FileResponse(INDEX_FILE)
+    # HTML itself must never be cached, or the browser keeps requesting the
+    # old asset URLs and the new version stamp never reaches it.
+    return HTMLResponse(
+        _index_html(),
+        headers={"Cache-Control": "no-cache, must-revalidate"},
+    )
 
 
 # Client-side routing: every app section has a real URL (/code, /jobs, …).
@@ -144,7 +187,7 @@ def _spa_negotiator(fn_name: str):
         if "text/html" in accept and not auth_hdr:
             if not INDEX_FILE.exists():
                 raise HTTPException(status_code=404, detail="index.html not found.")
-            return FileResponse(INDEX_FILE)
+            return HTMLResponse(_index_html(), headers={"Cache-Control": "no-cache, must-revalidate"})
         fn = _NEGOTIATED_FNS.get(fn_name)   # resolved at request time
         if fn is None:
             raise HTTPException(status_code=404, detail="Not found.")
@@ -176,7 +219,7 @@ for _p in CLIENT_ONLY_PATHS:
 def read_runspace_deep(username: str, slug: str):
     if not INDEX_FILE.exists():
         raise HTTPException(status_code=404, detail="index.html not found.")
-    return FileResponse(INDEX_FILE)
+    return HTMLResponse(_index_html(), headers={"Cache-Control": "no-cache, must-revalidate"})
 
 # Back-compat heal: a frontend bug once produced published-page links like
 # /code/s/<token> (the tab path was glued onto the origin). Redirect any

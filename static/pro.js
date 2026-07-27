@@ -2771,6 +2771,11 @@ let _logSSE = null;
 let _logFollow = true;
 let _jobDirty = false;          // code changed since last deploy (enables Run button)
 let _suppressAutoSelect = 0;   // ms epoch until which renderJobs() must NOT auto-select a job (New-flow race guard)
+// TRUE from the moment "New" is clicked until the job is actually deployed.
+// The old guard was a 1500ms timer, but the jobs list polls every 7s — so the
+// first poll after that window auto-selected an existing job and wiped the
+// blank editor while the user was still typing (it looked like a page reload).
+let _composingNew = false;
 
 function _fmtStatus(st) {
   st = (st || "offline").toLowerCase();
@@ -3048,6 +3053,7 @@ function selectJob(id) {
     return;
   }
   _selectedJobId = id;
+  _composingNew = false;      // an existing job was chosen; New-flow is over
   // 👉 Paint sidebar selection + swap to workspace IMMEDIATELY (don't wait for
   // fetch/SSE to round-trip — that's what makes tab switches feel laggy).
   // Data fills in behind the paint with a subtle fade.
@@ -3268,8 +3274,9 @@ function renderJobs(jobs) {
       closeJobDetails({noUrl: true});
     }
   }
-  else if (Date.now() < _suppressAutoSelect) {
-    // New was just clicked — do NOT auto-select; keep blank editor.
+  else if (_composingNew || Date.now() < _suppressAutoSelect) {
+    // A new job is being written — never auto-select, never repaint the
+    // editor. Losing what the user typed is far worse than a stale list.
     document.querySelectorAll("#jobsList .job-item.active").forEach(el => el.classList.remove("active"));
     return;
   }
@@ -3280,7 +3287,9 @@ function renderJobs(jobs) {
     else _showEmpty(false);
   } else {
     const cur = jobs.find(x => String(x.id) === String(_selectedJobId));
-    if (cur) { _showWorkspace(cur); _updateJobUrl(cur); }
+    // _jobDirty => unsaved edits in the editor. Re-showing the workspace here
+    // would reset the pane from server data and discard them.
+    if (cur && !_jobDirty) { _showWorkspace(cur); _updateJobUrl(cur); }
   }
 }
 
@@ -3305,6 +3314,9 @@ function _initWbWiring() {
     stopLogStream();
     _selectedJobId = null;
     _jobDirty = false;
+    // Stays true until this job is deployed or the user picks another job, so
+    // background polling can never replace the blank editor mid-typing.
+    _composingNew = true;
     document.querySelectorAll("#jobsList .job-item.active").forEach(el => el.classList.remove("active"));
     const btn = document.getElementById("btnStartJob");
     if (btn) delete btn.dataset.editingId;
@@ -3974,6 +3986,7 @@ async function startJob() {
     toast("Deployed \u2713", "success");
     _setHint("ok", "");
     _jobDirty = false;
+    _composingNew = false;      // deployed — polling may take over again
     // 👉 Optimistic UI update: insert the new job into _lastJobs immediately
     // with status="starting" so sidebar + stats reflect the launch right away
     // instead of waiting 7s for the next poll round. SSE will correct to

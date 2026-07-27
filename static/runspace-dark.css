@@ -1060,3 +1060,113 @@ body.rs-detail-open #tab-jobs .rs-side {
   #tab-jobs .jd-scroll { padding: 10px; gap: 10px; }
   #tab-jobs .jd-logs { max-height: 38vh; }
 }
+
+/* ============================================================
+   RUNSPACE TOOLBAR — unified control sizing
+   The fields had drifted apart: inputs 24px tall, icon buttons 28px,
+   the language select in a different font/size, and the GitHub field
+   shrunk to 11.5px. Everything below is driven by ONE height token so
+   the row reads as a single, deliberate set of controls.
+   ============================================================ */
+#tab-jobs {
+  --rs-ctl-h: 30px;          /* single source of truth for control height */
+  --rs-ctl-r: 7px;           /* consistent corner radius */
+  --rs-ctl-fs: 12.5px;
+}
+
+#tab-jobs .rs-ed-bar {
+  flex: 0 0 auto !important;
+  height: auto !important;
+  min-height: 44px;
+  padding: 7px 10px !important;
+  gap: 8px !important;
+  flex-wrap: wrap;
+}
+#tab-jobs .rs-ed-group { gap: 8px !important; flex-wrap: wrap; }
+#tab-jobs .rs-ed-actions { gap: 6px !important; }
+
+/* Text inputs, select and buttons all share height, radius and font. */
+#tab-jobs .rs-inp,
+#tab-jobs .rs-sel,
+#tab-jobs .rs-run-btn,
+#tab-jobs .rs-ed-actions .rs-icon-btn,
+#tab-jobs .rs-ed-group .rs-icon-btn {
+  height: var(--rs-ctl-h) !important;
+  min-height: var(--rs-ctl-h);
+  border-radius: var(--rs-ctl-r) !important;
+  font-size: var(--rs-ctl-fs) !important;
+  box-sizing: border-box;
+}
+
+/* Job name: the primary field, so it gets the most room. */
+#tab-jobs .rs-inp#jobName {
+  flex: 2 1 190px;
+  min-width: 150px;
+  padding: 0 11px !important;
+  font-weight: 550;
+}
+
+/* Language select: now visibly a control, matching the inputs. */
+#tab-jobs .rs-sel {
+  flex: 0 0 auto;
+  min-width: 106px;
+  padding: 0 9px !important;
+  background: #0d1117 !important;
+  border: 1px solid #30363d !important;
+  color: #c9d1d9 !important;
+  font-family: inherit !important;
+  font-weight: 550;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+}
+#tab-jobs .rs-sel:hover { border-color: #484f58 !important; background: #161b22 !important; }
+#tab-jobs .rs-sel:focus { border-color: #388bfd !important; box-shadow: 0 0 0 2px rgba(56,139,253,.2) !important; }
+
+/* GitHub URL: same treatment as the other text field. */
+#tab-jobs .rs-gh {
+  flex: 2 1 210px;
+  min-width: 160px;
+  padding: 0 11px !important;
+  font-size: var(--rs-ctl-fs) !important;
+  color: #c9d1d9 !important;
+  font-family: inherit !important;
+}
+#tab-jobs .rs-inp::placeholder { font-style: normal !important; color: #6e7681; }
+
+/* Square icon buttons that line up with the inputs. */
+#tab-jobs .rs-ed-actions .rs-icon-btn,
+#tab-jobs .rs-ed-group .rs-icon-btn,
+#tab-jobs .rs-ed-actions .rs-icon-btn.rs-tb,
+#tab-jobs .rs-ed-group .rs-icon-btn.rs-tb {
+  width: var(--rs-ctl-h) !important;
+  border: 1px solid #30363d;
+  background: #0d1117;
+}
+#tab-jobs .rs-ed-actions .rs-icon-btn:hover,
+#tab-jobs .rs-ed-group .rs-icon-btn:hover { background: #21262d; border-color: #484f58; }
+
+/* Run button: same height, a little more horizontal presence. */
+#tab-jobs .rs-run-btn {
+  padding: 0 15px !important;
+  font-weight: 600;
+  gap: 7px !important;
+}
+#tab-jobs .rs-run-btn .rs-run-ic .rs-ic-sm { width: 11px; height: 11px; }
+
+@media (max-width: 760px) {
+  #tab-jobs { --rs-ctl-h: 34px; }        /* comfortable tap targets */
+  #tab-jobs .rs-inp#jobName { flex: 1 1 100%; }
+  #tab-jobs .rs-gh { flex: 1 1 100%; }
+  #tab-jobs .rs-sel { flex: 1 1 auto; }
+}
+
+/* ============================================================
+   FULL-CLEAN RUNSPACE
+   RunSpace is an IDE: the mobile bottom nav stole vertical space and
+   overlapped the log pane. Hide it whenever RunSpace (or its Details
+   page) is on screen — navigation is still available from the sidebar
+   and the in-app back controls.
+   ============================================================ */
+body.rs-active .bottom-nav { display: none !important; }
+/* Nothing needs to reserve space for a nav that is not there. */
+body.rs-active .dash-main { padding-bottom: 0 !important; }
