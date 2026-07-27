@@ -23,23 +23,23 @@ const check = (n, c, x) => {
 };
 
 // ---- a real editor library is in use (not custom highlighting) ---------
-check("RunSpace editor is CodeMirror", /_jobCm = CodeMirror\.fromTextArea/.test(js));
-check("Code Studio editor is CodeMirror", /cmEditor = CodeMirror\.fromTextArea/.test(js));
+check("RunSpace editor is CodeMirror 6", /_jobCm = CN6\.create\(/.test(js));
+check("Code Studio editor is CodeMirror 6", /cmEditor = CN6\.create\(/.test(js));
 
 // ---- RunSpace change handler -------------------------------------------
-const jobH = js.slice(js.indexOf('_jobCm.on("change"'), js.indexOf('_jobCmSetMode("python")'));
+const jobH = js.slice(js.indexOf("_jobCm = CN6.create("), js.indexOf("let _chgRaf = 0;"));
 check("job handler coalesces into one frame", /requestAnimationFrame/.test(jobH));
 check("job handler guards against re-entry", /if \(_chgRaf\) return;/.test(jobH));
 check("job handler no longer mirrors into the textarea",
-  !/ta\.value = cm\.getValue\(\)/.test(jobH));
+  !/ta\.value = /.test(jobH));
 check("toolbar repaint only on dirty transition", /if \(!wasDirty\) _reflectJobStatus/.test(jobH));
 check("programmatic loads skip the handler", /if \(_jobCmLoading\) return;/.test(jobH));
 
 // ---- Code Studio change handler ----------------------------------------
-const csH = js.slice(js.indexOf('cmEditor.on("change"'), js.indexOf("updateCodeMirrorMode();"));
+const csH = js.slice(js.indexOf("cmEditor = CN6.create("), js.indexOf("updateCodeMirrorMode();"));
 check("studio handler coalesces into one frame", /requestAnimationFrame/.test(csH));
 check("studio handler no longer mirrors into the textarea",
-  !/ta\.value = cm\.getValue\(\)/.test(csH));
+  !/ta\.value = cm/.test(csH));
 
 // ---- O(1) line counting instead of full-document splits ----------------
 const stats = js.slice(js.indexOf("function _updateStats"), js.indexOf("function _reflectJobStatus"));
@@ -51,7 +51,7 @@ check("_updateStats skips identical writes", /if \(txt === _statsLast\) return;/
 check("hand-rolled gutter no longer rebuilds line numbers",
   !/getElementById\("csGutter"\)/.test(js));
 check("gutter work is delegated to CodeMirror",
-  /function updateGutter\(\) \{ \/\* CodeMirror owns the gutter \*\/ \}/.test(js));
+  /CodeMirror owns the gutter/.test(js));
 
 const meta = js.slice(js.indexOf("function updateEditorMeta"), js.indexOf("function _buildPreviewSrcdoc"));
 check("editor meta uses lineCount()", /cmEditor\.lineCount\(\)/.test(meta));

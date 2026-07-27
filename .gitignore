@@ -69,3 +69,6 @@ yarn-error.log
 # Render
 .data/
 tests/e2e/pydeps/
+
+# CodeMirror 6 build deps (the built bundle in static/ IS committed)
+editor-src/node_modules/

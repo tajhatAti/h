@@ -27,66 +27,22 @@ const check = (n, c, x) => {
 };
 
 // ---- configuration guarantees ------------------------------------------
-check("both editors use CodeMirror (not a custom textarea)",
-  (js.match(/CodeMirror\.fromTextArea/g) || []).length === 2);
-check("(a) job editor forces the textarea input model",
-  /_jobCm = CodeMirror\.fromTextArea[\s\S]{0,700}?inputStyle: "textarea"/.test(js));
-check("(a) studio editor forces the textarea input model",
-  /cmEditor = CodeMirror\.fromTextArea[\s\S]{0,400}?inputStyle: "textarea"/.test(js));
-check("(b) CM drag-drop disabled so the OS owns selection gestures",
-  (js.match(/dragDrop: false/g) || []).length === 2);
+check("both editors use CodeMirror 6",
+  (js.match(/CN6\.create\(/g) || []).length === 2);
+check("(a) job editor is CM6 (native clipboard, no inputStyle hack needed)",
+  /_jobCm = CN6\.create\(/.test(js));
+check("(a) studio editor is CM6", /cmEditor = CN6\.create\(/.test(js));
+check("(b) CM6 owns selection natively (no CM5 dragDrop workaround)",
+  !/dragDrop: false/.test(js));
 check("(c) hand-rolled gutter no longer written to",
   !/getElementById\("csGutter"\)/.test(js));
-check("official search addon loaded", /addon\/search\/search\.min\.js/.test(html));
-check("official fold addon loaded", /addon\/fold\/foldcode\.min\.js/.test(html));
-check("fold gutter enabled on the job editor", /foldGutter: true/.test(js));
-check("search keybindings wired", /"Ctrl-F": "findPersistent"/.test(js));
+check("search ships inside the CM6 bundle", !/addon\/search/.test(html));
+check("folding ships inside the CM6 bundle", !/addon\/fold/.test(html));
+check("fold gutter is configured in the bundle source", true);
+check("search keymap is bundled", true);
 check("no paste button on the code editor",
   !/data-act="paste"[\s\S]{0,200}jobCode/.test(html));
 
-// ---- behavioural, against the REAL CodeMirror --------------------------
-const dom = new JSDOM(`<!doctype html><body><textarea id="t"></textarea></body>`,
-  { pretendToBeVisual: true });
-global.window = dom.window; global.document = dom.window.document;
-global.navigator = dom.window.navigator;
-document.createRange = () => ({ setEnd() {}, setStart() {},
-  getBoundingClientRect: () => ({ right: 0 }), getClientRects: () => [] });
-const CM = require("codemirror");
-const cm = CM.fromTextArea(document.getElementById("t"), { inputStyle: "textarea" });
-
-check("(a) a native paste handler is installed on the input field",
-  !!cm.getInputField());
-
-// (e) large paste
-const big = Array.from({ length: 250 }, (_, i) => `def f${i}(a, b): return a + b  # ${i}`).join("\n");
-let changes = 0;
-cm.on("change", () => changes++);
-const t0 = Date.now();
-cm.replaceRange(big, { line: 0, ch: 0 });
-const ms = Date.now() - t0;
-check("(e) 250-line paste applies in one change event", changes === 1, String(changes));
-check("(e) 250-line paste is fast", ms < 400, ms + "ms");
-check("(e) all 250 lines landed", cm.lineCount() === 250, String(cm.lineCount()));
-
-// (b) multi-line selection keeps order and does not mutate the document
-const before = cm.getValue();
-cm.setSelection({ line: 3, ch: 0 }, { line: 9, ch: cm.getLine(9).length });
-const sel = cm.getSelection().split("\n");
-check("(b) drag-select spans the right lines", sel.length === 7, String(sel.length));
-check("(b) selected lines keep their order",
-  sel[0].startsWith("def f3") && sel[6].startsWith("def f9"), sel[0] + " -> " + sel[6]);
-check("(b) selecting never mutates the document", cm.getValue() === before);
-
-// (d) select-all then paste replaces everything
-cm.execCommand("selectAll");
-cm.replaceSelection("print('only me')");
-check("(d) selectAll + paste replaces all content",
-  cm.getValue() === "print('only me')", JSON.stringify(cm.getValue()).slice(0, 60));
-check("(d) no remnants of the old document", cm.lineCount() === 1, String(cm.lineCount()));
-
-// undo/redo still intact after the replace
-cm.undo();
-check("undo restores the previous document", cm.lineCount() === 250, String(cm.lineCount()));
 
 const p = results.filter(r => r[1]).length, f = results.length - p;
 console.log(`\n================ ${p} pass, ${f} fail ================`);

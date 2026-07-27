@@ -1118,64 +1118,45 @@ function toggleEditorFullscreen() {
 let cmEditor = null;
 function initCodeMirror() {
   const ta = document.getElementById("snippetContent");
-  if (!ta || typeof CodeMirror === "undefined") return;
-  if (cmEditor) return;
-  cmEditor = CodeMirror.fromTextArea(ta, {
-    lineNumbers: true,
-    theme: "default",
-    mode: "python",
-    // Same mobile clipboard fix as the RunSpace editor (see there).
-    inputStyle: "textarea",
-    dragDrop: false,
-    spellcheck: false,
-    autocorrect: false,
-    autocapitalize: false,
-    lineWrapping: true,
-    indentUnit: 2,
-    tabSize: 2,
-    extraKeys: {
-      "Ctrl-S": function(cm) { saveSnippet(); },
-      "Cmd-S": function(cm) { saveSnippet(); },
-      "Ctrl-Enter": function(cm) {
-        const curLang = (document.getElementById("snippetLanguage").value || "").toLowerCase();
-        if (_RUNNABLE_LANGS[curLang]) { runLivePreview(); } else { executeCode(); }
-      },
-      "Cmd-Enter": function(cm) {
-        const curLang = (document.getElementById("snippetLanguage").value || "").toLowerCase();
-        if (_RUNNABLE_LANGS[curLang]) { runLivePreview(); } else { executeCode(); }
-      }
-    }
-  });
-  // PERF: same problem as the RunSpace editor — this ran a full-document
-  // serialise (ta.value = cm.getValue()), another inside updateEditorMeta(),
-  // and rebuilt the whole line-number gutter string, on EVERY keystroke.
-  // Coalesce into one animation frame; CodeMirror owns the text, so the
-  // textarea only needs syncing where it is actually read (save/run).
-  let _csRaf = 0;
-  cmEditor.on("change", () => {
-    clearTimeout(_livePreviewTimer);
+  if (!ta || cmEditor) return;
+  if (typeof CN6 === "undefined") { console.error("cm6 bundle missing"); return; }
+  const host = document.createElement("div");
+  host.className = "cs-cm-host";
+  ta.parentNode.insertBefore(host, ta);
+  ta.style.display = "none";
+
+  const runOrPreview = () => {
     const l = (document.getElementById("snippetLanguage").value || "").toLowerCase();
-    if (_RUNNABLE_LANGS[l]) _livePreviewTimer = setTimeout(runLivePreview, 400);
-    if (_csRaf) return;
-    _csRaf = requestAnimationFrame(() => { _csRaf = 0; updateEditorMeta(); });
+    if (_RUNNABLE_LANGS[l]) { runLivePreview(); } else { executeCode(); }
+    return true;
+  };
+
+  let _csRaf = 0;
+  cmEditor = CN6.create(host, {
+    value: ta.value || "",
+    language: "python",
+    lineWrapping: true,
+    extraKeys: [
+      { key: "Mod-s", preventDefault: true, run: () => { saveSnippet(); return true; } },
+      { key: "Mod-Enter", preventDefault: true, run: runOrPreview },
+    ],
+    onChange: () => {
+      clearTimeout(_livePreviewTimer);
+      const l = (document.getElementById("snippetLanguage").value || "").toLowerCase();
+      if (_RUNNABLE_LANGS[l]) _livePreviewTimer = setTimeout(runLivePreview, 400);
+      if (_csRaf) return;
+      _csRaf = requestAnimationFrame(() => { _csRaf = 0; updateEditorMeta(); });
+    },
   });
   updateCodeMirrorMode();
 }
 
 function updateCodeMirrorMode() {
-  if (!cmEditor || typeof CodeMirror === "undefined") return;
+  if (!cmEditor) return;
+  // CM6 resolves the language itself (see LANGS in editor-src/cm6.js), so the
+  // long CM5 mode-string mapping is no longer needed.
   const lang = (document.getElementById("snippetLanguage").value || "text").toLowerCase();
-  let mode = "text/plain";
-  if (lang === "python" || lang === "python3") mode = "python";
-  else if (lang === "javascript" || lang === "js") mode = "javascript";
-  else if (lang === "html") mode = "htmlmixed";
-  else if (lang === "css") mode = "css";
-  else if (lang === "markdown" || lang === "md") mode = "markdown";
-  else if (lang === "bash" || lang === "sh") mode = "shell";
-  else if (lang === "c" || lang === "cpp" || lang === "c++") mode = "text/x-csrc";
-  else if (lang === "java") mode = "text/x-java";
-  else if (lang === "sql") mode = "sql";
-  cmEditor.setOption("mode", mode);
+  cmEditor.setLanguage(lang);
 }
 
 function newSnippetDraft(quiet) {
@@ -2551,92 +2532,45 @@ function _jobCmModeForLang(lang) {
 
 function initJobCodeMirror() {
   const ta = document.getElementById("jobCode");
-  if (!ta || typeof CodeMirror === "undefined") return;
-  if (_jobCm) return;
+  const host = document.getElementById("jobCmHost");
+  if (!ta || !host || _jobCm) return;
+  if (typeof CN6 === "undefined") { console.error("cm6 bundle missing"); return; }
   try {
-    _jobCm = CodeMirror.fromTextArea(ta, {
-      lineNumbers: true,
-      theme: "default",
-      mode: "python",
-      // MOBILE CLIPBOARD FIX: CodeMirror 5 picks contenteditable input on
-      // mobile, where Gboard's clipboard chip and long-press Paste frequently
-      // fail to deliver a paste event. Forcing the hidden-textarea input model
-      // restores native OS clipboard paste (and Ctrl/Cmd+V) everywhere.
-      inputStyle: "textarea",
-      // Let the browser/OS own text selection gestures.
-      dragDrop: false,
-      spellcheck: false,
-      autocorrect: false,
-      autocapitalize: false,
+    // CodeMirror 6. Replaces CM5, whose gutter was positioned by JavaScript on
+    // every horizontal scroll (gutters.style.left = compensateForHScroll(...)),
+    // making the line numbers visibly drift/wobble while dragging a long line
+    // sideways. CM6 pins the gutter with CSS position:sticky instead.
+    ta.style.display = "none";
+    _jobCm = CN6.create(host, {
+      value: ta.value || "",
+      language: "python",
       lineWrapping: false,
-      indentUnit: 2,
-      tabSize: 2,
-      indentWithTabs: false,
-      autoCloseBrackets: true,
-      matchBrackets: true,
-      styleActiveLine: true,
-      // Official fold addon (brace/indent/comment aware) + fold gutter.
-      foldGutter: true,
-      gutters: ["CodeMirror-linenumbers", "CodeMirror-foldgutter"],
-      extraKeys: {
-        // Official search/replace addon keybindings.
-        "Ctrl-F": "findPersistent",
-        "Cmd-F":  "findPersistent",
-        "Ctrl-H": "replace",
-        "Cmd-Alt-F": "replace",
-        "Alt-G": "jumpToLine",
-        "Ctrl-K Ctrl-0": function(cm) { cm.execCommand("foldAll"); },
-        "Ctrl-K Ctrl-J": function(cm) { cm.execCommand("unfoldAll"); },
-        "Ctrl-S": function(cm) { startJob(); },
-        "Cmd-S":  function(cm) { startJob(); },
-        "Ctrl-Enter": function(cm) { startJob(); },
-        "Cmd-Enter":  function(cm) { startJob(); },
-        "Tab": function(cm) {
-          if (cm.somethingSelected()) cm.indentSelection("add");
-          else cm.replaceSelection("  ", "end");
-        },
-        "Shift-Tab": function(cm) {
-          if (cm.somethingSelected()) cm.indentSelection("subtract");
-          else cm.execCommand("indentLess");
-        },
-        "Ctrl-/": function(cm) { cm.toggleComment && cm.toggleComment(); },
-        "Cmd-/":  function(cm) { cm.toggleComment && cm.toggleComment(); },
-      }
+      extraKeys: [
+        { key: "Mod-s", preventDefault: true, run: () => { startJob(); return true; } },
+        { key: "Mod-Enter", preventDefault: true, run: () => { startJob(); return true; } },
+      ],
+      onChange: () => {
+        if (_jobCmLoading) return;          // programmatic load, not a user edit
+        const wasDirty = _jobDirty;
+        _jobDirty = true;
+        if (_chgRaf) return;
+        _chgRaf = requestAnimationFrame(() => {
+          _chgRaf = 0;
+          _updateStats();
+          if (!wasDirty) _reflectJobStatus(_selectedJobId);
+        });
+      },
     });
-    // PERF: this used to run on EVERY change (every keystroke, and on paste
-    // while the user is still typing). Each run did TWO full-document
-    // serialisations — ta.value = cm.getValue() and another getValue() inside
-    // _updateStats() — plus ~21 DOM reads/writes in _reflectJobStatus(), which
-    // forces synchronous layout. On a large paste followed by typing that is
-    // O(document) work per character and the tab locks up.
-    //
-    // CodeMirror already holds the authoritative text, so mirroring it into the
-    // hidden <textarea> on every change is pure waste: _jobCmGetValue() reads
-    // from CM, and the few places that need the textarea sync it explicitly.
-    // Everything else is coalesced into one animation frame.
-    let _chgRaf = 0;
-    _jobCm.on("change", () => {
-      if (_jobCmLoading) return;          // programmatic load, not a user edit
-      const wasDirty = _jobDirty;
-      _jobDirty = true;
-      if (_chgRaf) return;                       // already scheduled this frame
-      _chgRaf = requestAnimationFrame(() => {
-        _chgRaf = 0;
-        _updateStats();
-        // Only touch the toolbar when the dirty flag actually flipped —
-        // repainting identical button state on every keystroke is what made
-        // large pastes feel like a freeze.
-        if (!wasDirty) _reflectJobStatus(_selectedJobId);
-      });
-    });
-    _jobCmSetMode("python");
   } catch (e) { console.error("initJobCodeMirror:", e); }
 }
 
+let _chgRaf = 0;
+
 function _jobCmSetMode(lang) {
-  if (!_jobCm || typeof CodeMirror === "undefined") return;
-  const m = _jobCmModeForLang(lang);
-  _jobCm.setOption("mode", m);
+  if (!_jobCm) return;
+  // CM6 swaps the language through a Compartment (see cm6.js), which is an
+  // incremental reconfigure rather than CM5's full-document re-tokenise.
+  _jobCm.setLanguage(lang || "python");
   const el = document.getElementById("cmMode");
   if (el) el.textContent = lang || "python";
 }

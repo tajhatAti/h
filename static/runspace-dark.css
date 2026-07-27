@@ -389,40 +389,14 @@ body.rs-active #tab-jobs { display: flex !important; flex: 1 1 auto !important; 
 #tab-jobs .rs-cm-host {
   flex: 1 1 auto; position: relative; overflow: hidden;
 }
-#tab-jobs .rs-cm-host .CodeMirror {
+/* CodeMirror 6. The editor's own theme (editor-src/cm6.js) owns colours and
+   the sticky gutter; these rules only make it fill the host box. */
+#tab-jobs .rs-cm-host .cm-editor {
   position: absolute !important; inset: 0 !important;
-  width: 100% !important; height: 100% !important;
-  background: #0d1117 !important;
-  color: #c9d1d9 !important;
-  font-family: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace !important;
-  font-size: 14px !important;
-  line-height: 1.55 !important;
-  padding: 8px 0 !important;
+  height: 100% !important;
 }
-#tab-jobs .rs-cm-host .CodeMirror-gutters {
-  background: #0d1117 !important;
-  border-right: 1px solid #1d252f !important;
-  padding-right: 2px;
-}
-#tab-jobs .rs-cm-host .CodeMirror-linenumber {
-  color: #484f58 !important;
-  padding: 0 8px !important;
-  font-size: 12px !important;
-  user-select: none !important;
-}
-#tab-jobs .rs-cm-host .CodeMirror-cursor { border-left: 2px solid #58a6ff !important; }
-#tab-jobs .rs-cm-host .CodeMirror-selected { background: rgba(56,139,253,.25) !important; }
-#tab-jobs .rs-cm-host .CodeMirror-focused .CodeMirror-selected { background: rgba(56,139,253,.35) !important; }
-#tab-jobs .rs-cm-host .CodeMirror-activeline-background { background: rgba(255,255,255,.03) !important; }
-/* Syntax (GitHub dark) */
-#tab-jobs .rs-cm-host .cm-keyword { color: #ff7b72 !important; font-weight: normal !important; }
-#tab-jobs .rs-cm-host .cm-atom, #tab-jobs .rs-cm-host .cm-number { color: #79c0ff !important; }
-#tab-jobs .rs-cm-host .cm-def { color: #d2a8ff !important; }
-#tab-jobs .rs-cm-host .cm-variable, #tab-jobs .rs-cm-host .cm-variable-2 { color: #c9d1d9 !important; }
-#tab-jobs .rs-cm-host .cm-property { color: #79c0ff !important; }
-#tab-jobs .rs-cm-host .cm-comment { color: #8b949e !important; font-style: normal !important; }
-#tab-jobs .rs-cm-host .cm-string { color: #a5d6ff !important; }
-#tab-jobs .rs-cm-host .cm-string-2 { color: #79c0ff !important; }
+#tab-jobs .rs-cm-host .cm-editor.cm-focused { outline: none !important; }
+#tab-jobs .rs-cm-host .cm-scroller { overflow: auto !important; }
 #tab-jobs .rs-code {
   display: none; /* replaced by CM */
 }
@@ -501,7 +475,6 @@ body.rs-side-open #tab-jobs .rs-menu-backdrop { display: block; }
   #tab-jobs .rs-editor { flex: 1 1 auto !important; min-height: 0; }
   body.rs-logs-open #tab-jobs .rs-editor { flex: 0 0 50% !important; }
   body.rs-logs-open #tab-jobs .rs-logs   { flex: 0 0 50% !important; height: 50% !important; }
-  #tab-jobs .rs-cm-host .CodeMirror { font-size: 13.5px !important; padding: 6px 0 !important; }
   #tab-jobs .rs-log-body { font-size: 11.5px; padding: 6px 8px; }
   /* Tighten top bar for mobile */
   #tab-jobs .rs-title { font-size: 12.5px; }
@@ -1260,46 +1233,6 @@ body.rs-active .dash-main { padding-bottom: 0 !important; }
   #tab-jobs .jd-dot,
   #tab-jobs .jd-badge { animation: none !important; }
 }
-
-/* ============================================================
-   CODEMIRROR ADDONS — fold gutter + search dialog
-   Official CM5 addons, themed to match the editor.
-   ============================================================ */
-#tab-jobs .rs-cm-host .CodeMirror-foldgutter { width: 14px; }
-#tab-jobs .rs-cm-host .CodeMirror-foldgutter-open,
-#tab-jobs .rs-cm-host .CodeMirror-foldgutter-folded {
-  color: #6e7681;
-  cursor: pointer;
-}
-#tab-jobs .rs-cm-host .CodeMirror-foldgutter-open:hover,
-#tab-jobs .rs-cm-host .CodeMirror-foldgutter-folded:hover { color: #c9d1d9; }
-#tab-jobs .rs-cm-host .CodeMirror-foldmarker {
-  color: #d29922;
-  background: rgba(210, 153, 34, .12);
-  border: 1px solid rgba(210, 153, 34, .35);
-  border-radius: 4px;
-  padding: 0 5px;
-  font-family: inherit;
-  text-shadow: none;
-}
-/* Search / replace dialog */
-#tab-jobs .rs-cm-host .CodeMirror-dialog {
-  background: #161b22;
-  border-bottom: 1px solid #30363d;
-  color: #c9d1d9;
-  font-size: 12.5px;
-  padding: 7px 10px;
-}
-#tab-jobs .rs-cm-host .CodeMirror-dialog input {
-  background: #0d1117;
-  border: 1px solid #30363d;
-  color: #e6edf3;
-  border-radius: 6px;
-  padding: 4px 8px;
-  font-family: ui-monospace, monospace;
-  outline: none;
-}
-#tab-jobs .rs-cm-host .CodeMirror-dialog input:focus { border-color: #58a6ff; }
 #tab-jobs .rs-cm-host .cm-searching {
   background: rgba(210, 153, 34, .28);
   outline: 1px solid rgba(210, 153, 34, .5);
