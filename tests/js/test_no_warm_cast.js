@@ -1,9 +1,19 @@
-/* Regression guard: the whole site once had a warm/orange cast on every box
-   and button. It was never a per-button rule — the classic.css palette itself
-   was warm (--panel #fffdf7, --line-2 #c9bfa4 ... hue ~44°, sat ~0.3), and
-   .btn-secondary/.btn-ghost/cards/inputs all resolve to those tokens.
-   This test computes real colours through jsdom and fails if any core token
-   or rendered control drifts back into the 10–60° hue band. */
+/* Regression guard for the site palette.
+ *
+ * Round 1: every box and button had a warm/orange cast. It was never a
+ * per-button rule — the classic.css palette itself was warm (--panel #fffdf7,
+ * --line-2 #c9bfa4 ... hue ~44°, sat ~0.3) and .btn-secondary/.btn-ghost/cards/
+ * inputs all resolve to those tokens.
+ *
+ * Round 2: de-warming the palette also swapped the ACCENT to indigo, which
+ * nobody asked for — the whole UI turned blue. The brief is black / white /
+ * grey: emphasis comes from weight and contrast, never hue. Only status
+ * (green / amber / red) may be coloured, because there colour carries meaning.
+ *
+ * So this file now asserts two things on real computed colours, in BOTH
+ * themes: (1) no core token has a visible hue at all, and (2) the primary
+ * button still passes WCAG AA contrast — a near-white button inherits
+ * color:#fff from a shared rule, which would be invisible. */
 const fs = require('fs');
 const path = require('path');
 const { JSDOM } = require('jsdom');
@@ -48,6 +58,29 @@ function isWarm(c) {
   return h >= 10 && h <= 60 && s > 0.22 && l > 0.12;
 }
 
+/* ANY visible hue on a core token is wrong now, not just a warm one. The
+   threshold is deliberately loose (0.12) because the dark IDE greys are very
+   slightly blue-tinted by design and must not trip this. */
+function hasHue(c) {
+  if (!c) return false;
+  return hsl(c).s >= 0.12;
+}
+
+/* WCAG relative luminance -> contrast ratio. Guards the case where a token
+   flip makes a button's background and its inherited text colour collide. */
+function contrast(a, b) {
+  const lum = c => {
+    const v = c.map(x => {
+      x /= 255;
+      return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
+    });
+    return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+  };
+  const L1 = Math.max(lum(a), lum(b));
+  const L2 = Math.min(lum(a), lum(b));
+  return (L1 + 0.05) / (L2 + 0.05);
+}
+
 const TOKENS = ['--panel','--paper','--paper-2','--line','--line-2',
                 '--acc','--acc-ink','--btn','--btn-fg','--ink','--ink-2',
                 '--muted','--code-bg','--band','--cream'];
@@ -69,7 +102,10 @@ for (const theme of [null, 'dark']) {
   for (const t of TOKENS) {
     const v = root.getPropertyValue(t).trim();
     if (!v) continue;
-    ok(`[${label}] token ${t}`, !isWarm(rgb(v)), v);
+    ok(`[${label}] token ${t} is not warm`, !isWarm(rgb(v)), v);
+    // Round 2: and not blue, or any other hue either.
+    ok(`[${label}] token ${t} has no hue`, !hasHue(rgb(v)),
+       `${v} sat=${hsl(rgb(v)).s.toFixed(2)}`);
   }
   for (const sel of CONTROLS) {
     const el = d.querySelector(sel);
@@ -77,6 +113,19 @@ for (const theme of [null, 'dark']) {
     const cs = dom.window.getComputedStyle(el);
     for (const prop of ['backgroundColor','borderTopColor','color']) {
       ok(`[${label}] ${sel}.${prop}`, !isWarm(rgb(cs[prop])), cs[prop]);
+    }
+  }
+  // A hue-less palette makes "primary" a light solid on dark (and vice
+  // versa). If the label colour is not flipped to match, the button reads as
+  // blank. Check the rendered pair, not the stylesheet text.
+  const primary = d.querySelector('.btn-primary');
+  if (primary) {
+    const cs = dom.window.getComputedStyle(primary);
+    const bg = rgb(cs.backgroundColor), fg = rgb(cs.color);
+    if (bg && fg) {
+      const ratio = contrast(bg, fg);
+      ok(`[${label}] .btn-primary label is readable (AA 4.5:1)`, ratio >= 4.5,
+         `ratio=${ratio.toFixed(2)} bg=${cs.backgroundColor} fg=${cs.color}`);
     }
   }
 }

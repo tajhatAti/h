@@ -26,8 +26,11 @@
   --muted:   #7c7c85;   /* tertiary text               */
   --line:    #e3e3e6;   /* hairline                    */
   --line-2:  #c9c9cf;   /* stronger hairline           */
-  --acc:     #5b6cff;   /* indigo — the only hue       */
-  --acc-soft: rgba(91, 108, 255, .10);
+  /* NO accent hue. The site is black / white / grey; emphasis comes from
+     weight and contrast, never from colour. Only status (green/amber/red)
+     is allowed to be coloured, because there the colour carries meaning. */
+  --acc:     #111113;   /* ink — emphasis, not a hue   */
+  --acc-soft: rgba(17, 17, 19, .07);
   --code-bg: #ffffff;   /* editor canvas               */
 
   /* invertible solids (buttons, chips) */
@@ -41,7 +44,7 @@
   --cream-dim:  #a9a9b2;   /* muted text on band     */
   --cream-line: rgba(245, 245, 246, .16);
   --on-cream:   #111113;   /* dark text on cream pill */
-  --acc-ink:    #8b97ff;   /* indigo used ON black    */
+  --acc-ink:    #f5f5f6;   /* emphasis ON black bands */
 
   --scrim: rgba(17, 17, 19, .5);
 
@@ -73,8 +76,8 @@ html[data-theme="dark"] {
   --muted:   #85858f;
   --line:    #2a2a30;
   --line-2:  #3a3a42;
-  --acc:     #8b97ff;
-  --acc-soft: rgba(139, 151, 255, .15);
+  --acc:     #e9e9ec;
+  --acc-soft: rgba(233, 233, 236, .12);
   --code-bg: #141417;
 
   --btn:      #e9e9ec;
@@ -427,8 +430,8 @@ html[data-theme="light"] .dash-bar { background: var(--band) !important; }
 
   /* ⚡ JOBS — THE SPECIAL ONE in the DEV group: orange, tagged 24/7 */
   .dash-tab[data-tab="jobs"] {
-    background: rgba(139, 151, 255, .12) !important;
-    border: 1px solid rgba(139, 151, 255, .38) !important;
+    background: rgba(17, 17, 19, .06) !important;
+    border: 1px solid rgba(17, 17, 19, .28) !important;
     color: var(--acc-ink) !important;
     font-weight: 700 !important;
   }
@@ -438,14 +441,14 @@ html[data-theme="light"] .dash-bar { background: var(--band) !important; }
     margin-left: auto;
     font-family: var(--mono); font-size: 9px; font-weight: 600;
     letter-spacing: .1em; padding: 3px 7px; border-radius: 99px;
-    background: rgba(139, 151, 255, .18); color: inherit;
+    background: rgba(17, 17, 19, .08); color: inherit;
   }
-  .dash-tab[data-tab="jobs"]:hover { background: rgba(139, 151, 255, .2) !important; color: #a3adff !important; }
+  .dash-tab[data-tab="jobs"]:hover { background: rgba(17, 17, 19, .10) !important; color: #f5f5f6 !important; }
   .dash-tab[data-tab="jobs"].active {
     background: var(--acc) !important;
     border-color: var(--acc) !important;
     color: #fff !important;
-    box-shadow: 0 6px 20px rgba(91, 108, 255, .35) !important;
+    box-shadow: 0 6px 20px rgba(17, 17, 19, .18) !important;
   }
   .dash-tab[data-tab="jobs"].active::after { background: rgba(255,255,255,.25); }
   html[data-theme="dark"] .dash-tab[data-tab="jobs"].active { color: var(--on-cream) !important; }
@@ -720,7 +723,7 @@ html[data-theme="light"] .more-sheet { background: var(--panel) !important; }
 
 .session-chip, .badge, .tag {
   background: var(--acc-soft) !important; color: var(--acc) !important;
-  border: 1px solid rgba(91, 108, 255, .3) !important;
+  border: 1px solid rgba(17, 17, 19, .22) !important;
   border-radius: 99px !important; font-weight: 600 !important;
 }
 .toggle, .switch {
@@ -1027,7 +1030,7 @@ body.ed-full { overflow: hidden !important; }
 /* ---- warning callout (shared) ---- */
 .warn-box {
   display: flex; gap: 10px; align-items: flex-start;
-  background: rgba(91, 108, 255, .10) !important; border: 1px solid rgba(91, 108, 255, .4) !important;
+  background: rgba(17, 17, 19, .06) !important; border: 1px solid rgba(17, 17, 19, .28) !important;
   color: var(--ink) !important; border-radius: var(--r-sm) !important;
   padding: 11px 12px; font-size: 12.5px; line-height: 1.45; margin-bottom: 14px;
 }
@@ -1212,7 +1215,7 @@ body.ed-full { overflow: hidden !important; }
 #tab-jobs .job-dot.running { background: var(--green); box-shadow: 0 0 8px rgba(30,122,60,.5); }
 #tab-jobs .job-dot.crashed, #tab-jobs .job-dot.install_failed { background: var(--red); }
 #tab-jobs .job-dot.stopped, #tab-jobs .job-dot.offline { background: var(--muted); }
-#tab-jobs .job-dot.installing { background: var(--acc); box-shadow: 0 0 8px rgba(91,108,255,.5); }
+#tab-jobs .job-dot.installing { background: var(--acc); box-shadow: 0 0 8px rgba(17,17,19,.35); }
 #tab-jobs .jobs-empty { font-size: 13px; }
 /* public URL row of a web-server job */
 .job-url {
@@ -1232,7 +1235,7 @@ body.ed-full { overflow: hidden !important; }
   border: 1px solid var(--line-2); color: var(--muted);
 }
 .job-pill.pub { color: var(--green); border-color: rgba(30,122,60,.45); }
-.job-pill.priv { color: var(--acc); border-color: rgba(91,108,255,.5); }
+.job-pill.priv { color: var(--acc); border-color: rgba(17,17,19,.35); }
 
 /* ============================================================
 §25  jobs live-note
@@ -1401,7 +1404,7 @@ body.ed-full { overflow: hidden !important; }
 .fc-body b i {
   font-style: normal; font-family: var(--mono); font-size: 9.5px; font-weight: 600;
   letter-spacing: .1em; text-transform: uppercase; color: var(--acc);
-  background: rgba(91, 108, 255, .12); padding: 3px 8px; border-radius: 99px;
+  background: rgba(17, 17, 19, .07); padding: 3px 8px; border-radius: 99px;
 }
 .fc-body small { font-size: 12.5px; line-height: 1.5; color: var(--muted); }
 .fc-go { flex: 0 0 auto; font-size: 17px; color: var(--muted); transition: transform .2s var(--ease), color .2s var(--ease); }
