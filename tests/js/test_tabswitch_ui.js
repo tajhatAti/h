@@ -1,0 +1,67 @@
+/* Tab-switch UI: stale-status guard (§1 client half), progress bar (§2),
+   status animation (§3). */
+const fs = require("fs");
+const path = require("path");
+const ROOT = path.join(__dirname, "..", "..");
+const js = fs.readFileSync(path.join(ROOT, "static", "pro.js"), "utf8");
+const css = fs.readFileSync(path.join(ROOT, "static", "runspace-dark.css"), "utf8");
+
+const results = [];
+const check = (n, c, x) => {
+  results.push([n, !!c]);
+  console.log((c ? "\u2713 " : "\u2717 FAIL ") + n.padEnd(58) + (c ? "" : " \u2014 " + (x || "")));
+};
+
+// ---- §1 client half -----------------------------------------------------
+check("every switch re-fetches from the server", /fetchJobDetail\(id\)/.test(js));
+check("an 'unknown' reply never overwrites a known status",
+  /if \(job\.status_stale && idx >= 0\)[\s\S]{0,240}prev\.status !== "unknown"/.test(js));
+check("stale replies schedule an automatic re-check", /_scheduleStatusRecheck\(id\)/.test(js));
+check("re-check backs off and gives up", /if \(attempt > 4\)/.test(js) && /attempt \* 1500/.test(js));
+check("re-check stops if the user switched away",
+  /if \(String\(_selectedJobId\) !== id\) return;/.test(js));
+check("silent re-check never rewrites the editor buffer",
+  /if \(!opts\.silent && !_jobDirty && curCode !== \(job\.code \|\| ""\)\)/.test(js));
+check("'unknown' has a neutral label, not STOPPED", /"unknown":\s*\{[^}]*CHECKING/.test(js));
+check("log stream is reset on switch (no stale buffer)",
+  /function restartLogStream[\s\S]{0,80}stopLogStream\(\);[\s\S]{0,40}_renderLogs\(""\)/.test(js));
+
+// ---- §2 progress bar ----------------------------------------------------
+check("bar starts the instant a switch begins",
+  /_progressStart\(\);\s*\n\s*\/\/ Kick off data/.test(js));
+check("bar is released when the fetch settles", /fetchJobDetail\(id\)\.finally\(\(\) => _progressDone\(\)\)/.test(js));
+check("nested loads share one bar", /_progDepth\+\+;[\s\S]{0,60}if \(_progDepth > 1\) return;/.test(js));
+check("crawl approaches ~90% asymptotically",
+  /const remaining = 0\.9 - _progVal;/.test(js) && /remaining \* 0\.12/.test(js));
+check("completion snaps to 100% then fades",
+  /_progressSet\(1\);[\s\S]{0,80}classList\.add\("done"\)/.test(js));
+check("bar animates with transform, never width",
+  /_progressSet[\s\S]{0,160}transform = "scaleX\(/.test(js));
+check("bar CSS uses scaleX + will-change",
+  /\.rs-progress-fill \{[^}]*transform: scaleX\(0\)/.test(css) &&
+  /\.rs-progress-fill \{[^}]*will-change: transform/.test(css));
+check("bar CSS never transitions width",
+  !/\.rs-progress-fill \{[^}]*transition:[^;]*width/.test(css));
+check("bar is thin and pinned to the top",
+  /\.rs-progress \{[^}]*height: 3px/.test(css) && /\.rs-progress \{[^}]*top: 0/.test(css));
+const z = css.match(/\.rs-progress \{[^}]*z-index:\s*(\d+)/);
+check("bar sits above the Details page (2400)", z && Number(z[1]) > 2400, z && z[1]);
+
+// ---- §3 status animation ------------------------------------------------
+check("status dots cross-fade rather than flip",
+  /#tab-jobs \.rs-status-dot,[\s\S]{0,220}transition: background-color \.18s/.test(css));
+check("running dot pulses on a ~1.8s cycle",
+  /animation: rsStatusPulse 1\.8s ease-in-out infinite/.test(css));
+check("pulse animates opacity/transform only",
+  /@keyframes rsStatusPulse \{[^}]*opacity[\s\S]{0,120}transform: scale/.test(css));
+check("'checking' is visually distinct from stopped",
+  /\.jstatus-dot\.checking,[\s\S]{0,140}background: #d29922/.test(css));
+check("label cross-fades when the status changes",
+  /_reflectJobStatus\._last !== st\.label/.test(js) &&
+  /classList\.add\("status-changed"\)/.test(js));
+check("reduced-motion disables the pulse",
+  /@media \(prefers-reduced-motion: reduce\)[\s\S]{0,260}jd-badge \{ animation: none/.test(css));
+
+const p = results.filter(r => r[1]).length, f = results.length - p;
+console.log(`\n================ ${p} pass, ${f} fail ================`);
+process.exit(f ? 1 : 0);

@@ -285,10 +285,12 @@ def list_jobs(authorization: Optional[str] = Header(None)):
 
     # Live status from the runner — best effort (it may be asleep/restarted).
     live, runner_state = {}, "ok"
+    runner_ok = False          # did the runner actually answer?
     try:
         resp = runner_client._runner_http("GET", "/internal/jobs")
         if resp.status_code == 200:
             live = {j["id"]: j for j in resp.json().get("jobs", [])}
+            runner_ok = True
         else:
             runner_state = "Waking up your RunSpace... this can take up to a minute on the free tier"
     except HTTPException as e:
@@ -304,8 +306,13 @@ def list_jobs(authorization: Optional[str] = Header(None)):
                       "restarts": info.get("restarts", 0), "port": info.get("port"),
                       "cpu_pct": info.get("cpu_pct"), "mem_mb": info.get("mem_mb")})
             r.update(runner_client._job_web_fields(info))                # web / web_url / access
-        else:
+        elif runner_ok:
+            # The runner answered and did not list this job -> genuinely down.
             r.update({"status": "offline", "uptime_s": 0, "restarts": 0})
+        else:
+            # Runner unreachable: we do NOT know the state. Saying "offline"
+            # here is what made running jobs appear stopped after a tab switch.
+            r.update({"status": "unknown", "status_stale": True})
         r["env"] = _row_env(r)          # saved env vars (Details page)
         r.pop("code", None)  # never ship stored code back in list payloads
         jobs.append(r)
@@ -318,8 +325,13 @@ def get_job(job_id: int, authorization: Optional[str] = Header(None)):
     user, _ = get_current_user_and_session(authorization)
     row = _get_own_job(job_id, user)
     row = dict(row)
-    # Attach live status (best-effort)
+    # Attach live status. CRITICAL: never report a RUNNING job as "offline"
+    # just because the runner was momentarily unreachable (free-tier cold
+    # start returns 503). That lie is what made a tab show "not running" after
+    # switching away and back. "unknown" tells the client to keep what it has
+    # and retry, instead of painting a wrong state.
     rid = row.get("runner_job_id")
+    row["status_stale"] = False
     if rid:
         try:
             resp = runner_client._runner_http("GET", f"/internal/jobs/{rid}")
@@ -328,6 +340,9 @@ def get_job(job_id: int, authorization: Optional[str] = Header(None)):
                 row["status"] = info.get("status")
                 row["uptime_s"] = info.get("uptime_s", 0)
                 row["restarts"] = info.get("restarts", 0)
+                row["port"] = info.get("port")
+                row["cpu_pct"] = info.get("cpu_pct")
+                row["mem_mb"] = info.get("mem_mb")
                 # Populate web URL fields
                 info2 = dict(info)
                 info2.update(runner_client._job_web_fields(info))
@@ -335,12 +350,19 @@ def get_job(job_id: int, authorization: Optional[str] = Header(None)):
                 row["web_url"] = info2.get("web_url")
                 row["web_private_url"] = info2.get("web_private_url")
                 row["web_public"] = info2.get("web_public", True)
-            else:
+            elif resp.status_code == 404:
+                # Runner is up and says this job does not exist -> truly gone.
                 row["status"] = "offline"
+            else:
+                row["status"] = "unknown"
+                row["status_stale"] = True
         except HTTPException:
-            row["status"] = "offline"
+            # Runner unreachable / waking up — we simply do not know yet.
+            row["status"] = "unknown"
+            row["status_stale"] = True
     else:
         row["status"] = "offline"
+    row["env"] = _row_env(row)
     return row
 
 

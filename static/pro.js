@@ -2887,6 +2887,9 @@ function _fmtStatus(st) {
     "offline":        {cls:"warn", label:"OFFLINE",       badge:"offline",    dot:"offline"},
     "crashed":        {cls:"err",  label:"CRASHED",       badge:"crashed",    dot:"crashed"},
     "install_failed": {cls:"err",  label:"INSTALL FAILED",badge:"error",     dot:"crashed"},
+    // Runner unreachable — we genuinely do not know yet. Shown as a neutral
+    // "checking" state instead of falsely claiming the job is stopped.
+    "unknown":        {cls:"warn", label:"CHECKING…",     badge:"checking",   dot:"checking"},
   };
   return map[st] || {cls:"", label:st.toUpperCase(), badge:st, dot:"offline"};
 }
@@ -3102,6 +3105,15 @@ function _reflectJobStatus(jobOrId) {
   }
   const stKey = (job && job.status) ? (job.status || "").toLowerCase() : "stopped";
   const st = _fmtStatus(job && job.status);
+  // §3: brief cross-fade whenever the status text changes, never a hard flip.
+  if (_reflectJobStatus._last !== st.label) {
+    _reflectJobStatus._last = st.label;
+    document.querySelectorAll("#tab-jobs .rs-badge, #tab-jobs .jd-badge").forEach(b => {
+      b.classList.remove("status-changed");
+      void b.offsetWidth;                  // reflow so the animation restarts
+      b.classList.add("status-changed");
+    });
+  }
   const isLive = (stKey === "running" || stKey === "starting" || stKey === "installing");
 
   const btnRun  = document.getElementById("btnStartJob");
@@ -3180,8 +3192,11 @@ function selectJob(id) {
   });
   const btn = document.getElementById("btnStartJob");
   if (btn) btn.dataset.editingId = _selectedJobId;
+  // §2: show the bar the instant the switch is initiated (not after the
+  // request resolves), so the wait never looks like a frozen UI.
+  _progressStart();
   // Kick off data + log stream but DON'T await them. Instant visual response.
-  fetchJobDetail(id);
+  fetchJobDetail(id).finally(() => _progressDone());
   restartLogStream(id);
   requestAnimationFrame(() => { try { _jobCmRefresh(); } catch(e){} });
   // Update URL once job detail loads (we need the name)
@@ -3206,16 +3221,53 @@ function deselectJob() {
   _showEmpty(false);
 }
 
-async function fetchJobDetail(id) {
+/* When the runner was unreachable the status is "unknown". Retry a few times
+   with backoff so the tab resolves itself — the user must never have to click
+   something to discover a job is actually running. */
+const _statusRecheck = {};
+function _scheduleStatusRecheck(id, attempt) {
+  id = String(id);
+  attempt = attempt || 1;
+  if (attempt > 4) { delete _statusRecheck[id]; return; }
+  if (_statusRecheck[id]) clearTimeout(_statusRecheck[id]);
+  _statusRecheck[id] = setTimeout(() => {
+    delete _statusRecheck[id];
+    // Only keep chasing while this job is still the one on screen.
+    if (String(_selectedJobId) !== id) return;
+    fetchJobDetail(id, { silent: true, attempt: attempt + 1 });
+  }, attempt * 1500);
+}
+
+async function fetchJobDetail(id, opts) {
+  opts = opts || {};
   try {
     const token = localStorage.getItem("ahad_token") || "";
     const r = await fetch("/api/jobs/" + id, {
       headers: token ? {"Authorization": "Bearer " + token} : {}
     });
-    if (!r.ok) { _showEmpty(false); return; }
+    if (!r.ok) {
+      // The caller owns the progress bar bracket; do not release it here.
+      // A failed refresh must not blank an open editor.
+      if (!_selectedJobId) _showEmpty(false);
+      return;
+    }
     const job = await r.json();
     window._lastJobs = window._lastJobs || [];
     const idx = window._lastJobs.findIndex(x => String(x.id) === String(id));
+    // The runner was unreachable, so the server could not determine the state.
+    // Keep the last KNOWN status rather than downgrading a running job, and
+    // schedule a re-check — this is the stale-status bug's real fix.
+    if (job.status_stale && idx >= 0) {
+      const prev = window._lastJobs[idx];
+      if (prev && prev.status && prev.status !== "unknown") {
+        job.status = prev.status;
+        job.uptime_s = prev.uptime_s;
+        job.restarts = prev.restarts;
+      }
+      _scheduleStatusRecheck(id);
+    } else if (job.status_stale) {
+      _scheduleStatusRecheck(id);
+    }
     if (idx >= 0) window._lastJobs[idx] = job; else window._lastJobs.push(job);
     // Avoid wiping + re-setting identical code (CM setValue is the slow part on
     // tab switch, especially for large files, and fires 'change' handlers).
@@ -3227,8 +3279,11 @@ async function fetchJobDetail(id) {
       langEl.value = newLang; _jobCmSetMode(newLang);
     }
     const curCode = _jobCmGetValue();
-    if (curCode !== (job.code || "")) _jobCmSetValue(job.code || "");
-    _jobDirty = false;
+    // A background status re-check must never touch the editor buffer.
+    if (!opts.silent && !_jobDirty && curCode !== (job.code || "")) {
+      _jobCmSetValue(job.code || "");
+      _jobDirty = false;
+    }
     _updateStats();
     _showWorkspace(job, true);   // animate: this is a job→job switch (§4)
     _reflectJobStatus(job);
@@ -3236,7 +3291,9 @@ async function fetchJobDetail(id) {
     // If the detail drawer is open, re-render it with the new job's data so
     // clicking a different job in the sidebar swaps the drawer content too.
     if (_jdOpen) { renderJobDetails(); }
-  } catch (e) { _showEmpty(false); }
+  } catch (e) {
+    if (!_selectedJobId) _showEmpty(false);
+  }
 }
 
 function stopLogStream() {
@@ -4904,3 +4961,61 @@ window.addEventListener("beforeunload", function (e) {
   e.returnValue = "";
   return "";
 });
+
+
+/* ============================================================
+   TOP PROGRESS BAR (§2) — Chrome / NProgress style
+   Grows smoothly toward ~90% while a tab switch loads, then snaps to
+   100% and fades. Animated with transform: scaleX() only, so the
+   compositor handles it and no layout/paint work is triggered.
+   ============================================================ */
+let _progEl = null, _progTimer = 0, _progVal = 0, _progDepth = 0;
+
+function _progressBar() {
+  if (_progEl) return _progEl;
+  const el = document.createElement("div");
+  el.id = "rsProgress";
+  el.className = "rs-progress";
+  el.innerHTML = '<div class="rs-progress-fill"></div>';
+  document.body.appendChild(el);
+  _progEl = el;
+  return el;
+}
+
+function _progressSet(v) {
+  const fill = _progressBar().querySelector(".rs-progress-fill");
+  _progVal = v;
+  fill.style.transform = "scaleX(" + v + ")";
+}
+
+function _progressStart() {
+  // Nested loads share one bar instead of restarting it.
+  _progDepth++;
+  if (_progDepth > 1) return;
+  const el = _progressBar();
+  el.classList.remove("done");
+  el.classList.add("active");
+  _progressSet(0.08);
+  clearInterval(_progTimer);
+  // Asymptotic crawl: each tick closes part of the remaining gap, so the bar
+  // keeps moving but never reaches the end until the load actually finishes.
+  _progTimer = setInterval(() => {
+    const remaining = 0.9 - _progVal;
+    if (remaining <= 0.001) return;
+    _progressSet(_progVal + remaining * 0.12);
+  }, 120);
+}
+
+function _progressDone() {
+  if (_progDepth > 0) _progDepth--;
+  if (_progDepth > 0) return;          // another load still running
+  clearInterval(_progTimer);
+  _progTimer = 0;
+  const el = _progressBar();
+  _progressSet(1);
+  el.classList.add("done");
+  setTimeout(() => {
+    el.classList.remove("active", "done");
+    _progressSet(0);
+  }, 260);
+}
