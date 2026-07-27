@@ -1463,7 +1463,16 @@ async def live_ws(websocket: WebSocket, slug: str, full_path: str = ""):
 # ============================================================
 # INTERACTIVE TERMINAL (Termux-style PTY over WebSocket)
 # ============================================================
-from runner import terminal as _term
+# This module runs in TWO layouts:
+#   • embedded  — the whole repo is on the path, so it is `runner.terminal`
+#   • standalone — runner/Dockerfile copies runner/* FLAT into /app, so there
+#     is no `runner` package at all and it is just `terminal`.
+# Importing only the package form crashed the standalone service on boot with
+# `ModuleNotFoundError: No module named 'runner'` (uvicorn never started).
+try:
+    from runner import terminal as _term
+except ModuleNotFoundError:
+    import terminal as _term
 
 
 class TerminalCreateRequest(BaseModel):
