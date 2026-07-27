@@ -91,7 +91,7 @@
   display: grid;
   place-items: center;
   color: #fff;
-  background: linear-gradient(120deg, #f59e0b, #ef6c00, #fcd34d, #f59e0b) !important;
+  background: linear-gradient(120deg, #5b6cff, #4453e0, #8b97ff, #5b6cff) !important;
   background-size: 300% 300% !important;
   animation: brand-gradient 8s ease infinite;
   transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1);

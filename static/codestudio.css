@@ -562,7 +562,7 @@ body.ed-full { overflow: hidden !important; }
 
 /* ---------- Publish = primary rocket with emphasis ---------- */
 .code-studio .cs-act.publish-btn {
-  background: linear-gradient(135deg, #f97316, #ef4444) !important;  /* orange→red rocket glow */
+  background: linear-gradient(135deg, #5b6cff, #4453e0) !important;  /* orange→red rocket glow */
   border-color: transparent !important;
   color: #fff !important;
   font-weight: 600 !important;
@@ -572,7 +572,7 @@ body.ed-full { overflow: hidden !important; }
   box-shadow: 0 1px 0 rgba(255,255,255,.08) inset, 0 2px 6px rgba(249,115,22,.35) !important;
 }
 .code-studio .cs-act.publish-btn:hover {
-  background: linear-gradient(135deg, #fb923c, #f87171) !important;
+  background: linear-gradient(135deg, #6d7cff, #4e5ce8) !important;
   box-shadow: 0 1px 0 rgba(255,255,255,.12) inset, 0 3px 10px rgba(249,115,22,.5) !important;
 }
 .code-studio .cs-act.publish-btn .btn-svg { stroke: #fff !important; }

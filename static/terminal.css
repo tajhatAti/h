@@ -186,12 +186,12 @@
 .wb-term-slots .slot-tab:active { background: #1d1d1d; }
 .wb-term-slots .slot-tab.active {
   background: #242017;
-  border-color: #3a321f;
-  color: #ffd38a;
+  border-color: #33333a;
+  color: #c3ccff;
 }
 .wb-term-slots .slot-tab .slot-badge {
   font-size: 9px;
-  color: #ff9640;
+  color: #8b97ff;
   opacity: .9;
 }
 .wb-term-slots .slot-tab.add {
@@ -250,7 +250,7 @@ body.term-fullscreen .wb-term-slots { display: flex; }
   font-size: 10px;
 }
 .wb-term-kbd button.kbd-nano {
-  color: #ffe38a; background: #2a2820; border-color: #3c3621;
+  color: #c3ccff; background: #1c1c22; border-color: #2e2e36;
   font-size: 10px;
 }
 .wb-term-kbd button.kbd-ok { background: #1f4d2a !important; color: #8affa0 !important; border-color:#2f6a3a !important; }
