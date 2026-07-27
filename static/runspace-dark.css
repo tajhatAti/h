@@ -555,9 +555,13 @@ body.rs-active #tab-jobs { display: flex !important; flex: 1 1 auto !important; 
 #tab-jobs .rs-log-body .log-warn { color: var(--warn); }
 #tab-jobs .rs-log-body .log-url { color: var(--accent); text-decoration: underline; }
 
-/* Mobile backdrop — only ever visible when the drawer is open on a phone. */
+/* Mobile backdrop — only ever visible when the drawer is open on a phone.
+   It is a sibling of .rs-head, so inset:0 covered the header as well: while
+   the drawer was open the toggle button itself was under the scrim and could
+   not be pressed to close it. Start it below the header instead. */
 #tab-jobs .rs-menu-backdrop {
-  position: absolute; inset: 0; background: rgba(1,4,9,.6);
+  position: absolute; inset: var(--rs-head-h) 0 0 0;
+  background: rgba(1,4,9,.6);
   z-index: 20; display: none;
 }
 body.rs-side-open #tab-jobs .rs-menu-backdrop { display: block; }
@@ -580,8 +584,15 @@ body.rs-side-open #tab-jobs .rs-menu-backdrop { display: block; }
   /* The drawer used to be 78vw — on a 412px phone that is 321px, burying
      the editor under it. A 280px cap keeps the code visible behind it, so
      you can see what you are switching away from. */
+  /* BUG (reported as "menu button all time উপরে উঠে আছে, কাজ হয় না"):
+     .rs-side is positioned against .rs-body, and .rs-head is a SIBLING of
+     .rs-body, not its parent. So `top: var(--rs-head-h)` pushed the drawer a
+     further 44px down from a box that already started below the header —
+     leaving a dead 44px gap under the toolbar and running the panel 44px past
+     the bottom of the screen, so the end of the job list was unreachable.
+     The drawer must fill its containing block exactly. */
   #tab-jobs .rs-side {
-    position: absolute; top: var(--rs-head-h); bottom: 0; left: 0;
+    position: absolute; inset: 0 auto 0 0;
     width: min(280px, 82vw); flex-basis: auto; z-index: 30;
     transform: translateX(-100%);
     transition: transform .18s cubic-bezier(.2,.7,.2,1);
@@ -589,6 +600,9 @@ body.rs-side-open #tab-jobs .rs-menu-backdrop { display: block; }
     box-shadow: 8px 0 24px rgba(1,4,9,.5);
     will-change: transform;
   }
+  /* Its own header is redundant on mobile — the app header is right above it
+     and the close affordance is the backdrop. Reclaim the 44px. */
+  #tab-jobs .rs-side-head { flex-basis: 40px; height: 40px; }
   body.rs-side-open #tab-jobs .rs-side { transform: translateX(0); }
   #tab-jobs .rs-inp { min-width: 0; }
   #tab-jobs .rs-head { padding: 0 var(--s-1) 0 var(--s-2) !important; gap: 4px !important; }
