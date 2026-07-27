@@ -402,6 +402,38 @@ _HOP_BY_HOP = {
 }
 
 
+# Environment variables a job must never be allowed to set: they control how
+# the process is found, linked and loaded, so overriding them is a sandbox
+# escape / hijack risk rather than configuration.
+_ENV_BLOCKED = {
+    "PATH", "PYTHONPATH", "PORT", "HOME", "LD_PRELOAD", "LD_LIBRARY_PATH",
+    "PYTHONSTARTUP", "PYTHONHOME", "BASH_ENV", "ENV", "SHELL", "IFS",
+    "RUNNER_SERVICE_SECRET", "DATABASE_URL",
+}
+_ENV_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+_ENV_MAX_VARS = 40
+_ENV_MAX_VALUE = 4096
+
+
+def _clean_env(raw) -> dict:
+    """Validate user-supplied env vars before they reach a spawned process."""
+    if not isinstance(raw, dict):
+        return {}
+    out = {}
+    for k, v in raw.items():
+        k = str(k).strip()
+        if not _ENV_KEY_RE.match(k) or k.upper() in _ENV_BLOCKED:
+            continue
+        v = "" if v is None else str(v)
+        if len(v) > _ENV_MAX_VALUE:
+            v = v[:_ENV_MAX_VALUE]
+        # NUL bytes / newlines can forge extra entries in some runtimes.
+        out[k] = v.replace("\x00", "").replace("\n", " ").replace("\r", " ")
+        if len(out) >= _ENV_MAX_VARS:
+            break
+    return out
+
+
 def _alloc_port() -> Optional[int]:
     """Lowest free port in the pool, or None when the pool is exhausted."""
     with _jobs_lock:
@@ -512,6 +544,9 @@ class JobStartRequest(BaseModel):
     restart: Optional[bool] = True
     repo_url: Optional[str] = ""
     entry: Optional[str] = ""
+    # User-supplied environment variables (API keys, bot tokens, ...). These
+    # are injected into the job process at spawn time.
+    env: Optional[dict] = None
 
 
 class JobAccessRequest(BaseModel):
@@ -859,6 +894,41 @@ def _prepare_and_run(j: dict, reqs: list, is_repo: bool = False) -> None:
     _spawn(j)
 
 
+def _proc_stats(proc) -> dict:
+    """Best-effort CPU%/memory for a running job, read straight from /proc.
+
+    Deliberately dependency-free (psutil is not installed on the runner). All
+    failures degrade to {} so the Details page simply shows no numbers rather
+    than erroring.
+    """
+    if not proc or proc.poll() is not None:
+        return {}
+    pid = proc.pid
+    out = {}
+    try:
+        with open(f"/proc/{pid}/status", "r") as fh:
+            for line in fh:
+                if line.startswith("VmRSS:"):
+                    out["mem_mb"] = round(int(line.split()[1]) / 1024, 1)
+                    break
+    except Exception:
+        pass
+    try:
+        clk = os.sysconf("SC_CLK_TCK") or 100
+        with open(f"/proc/{pid}/stat", "r") as fh:
+            parts = fh.read().rsplit(") ", 1)[-1].split()
+        # utime/stime are fields 14/15 (1-based) => index 11/12 after the comm.
+        used = (int(parts[11]) + int(parts[12])) / clk
+        with open("/proc/uptime", "r") as fh:
+            up = float(fh.read().split()[0])
+        start = int(parts[19]) / clk
+        alive = max(up - start, 1e-6)
+        out["cpu_pct"] = round(min(used / alive * 100.0, 999.0), 1)
+    except Exception:
+        pass
+    return out
+
+
 def _job_public(j: dict) -> dict:
     """Safe public view of a job (no internal objects)."""
     running = j["proc"] is not None and j["proc"].poll() is None
@@ -873,6 +943,10 @@ def _job_public(j: dict) -> dict:
         "web": bool(j.get("web")),
         # The Details page shows a Port row; without this it was always "—".
         "port": j.get("port") if running else None,
+        # Live resource usage (Details page). Empty dict when unavailable.
+        **(_proc_stats(j.get("proc")) if running else {}),
+        # Only the KEYS — values may hold bot tokens and must not be echoed.
+        "env_keys": sorted((j.get("env") or {}).keys()),
         "web_slug": j.get("web_slug"),
         "web_public": bool(j.get("web_public", True)),
         # access_key only reaches the main site (this API is secret-guarded) —
@@ -905,6 +979,10 @@ def _spawn(j: dict) -> None:
     env = dict(os.environ)
     if j.get("pylibs"):
         env["PYTHONPATH"] = j["pylibs"] + os.pathsep + env.get("PYTHONPATH", "")
+    # User env vars. Applied AFTER the base environment so a job can override
+    # its own settings, but PATH/PYTHONPATH/PORT are protected below.
+    for k, v in (j.get("env") or {}).items():
+        env[k] = v
     # Web-capable jobs: every job gets a reserved private port. Frameworks
     # (Flask/Express/FastAPI/http.server) bound through $PORT get a public
     # /live/{slug}/ address the moment their listener comes up.
@@ -1083,6 +1161,7 @@ def job_start(req: JobStartRequest, authorization: Optional[str] = Header(None))
         "web_public": True,
         "access_key": secrets.token_urlsafe(12),
         "repo_url": repo_url or None,
+        "env": _clean_env(req.env),
     }
     with _jobs_lock:
         _jobs[job_id] = job
@@ -1173,6 +1252,7 @@ class JobUpdateRequest(BaseModel):
     language: Optional[str] = None
     code: Optional[str] = None
     restart: Optional[bool] = True
+    env: Optional[dict] = None
     repo_url: Optional[str] = ""
     entry: Optional[str] = ""
 
@@ -1198,6 +1278,10 @@ def job_update(job_id: str, req: JobUpdateRequest, authorization: Optional[str] 
     new_lang = (req.language or j["lang"]).lower().strip()
     if new_lang != j["lang"] and new_lang in LANGS:
         j["lang"] = new_lang
+    # Env edits must reach the RESPAWNED process, otherwise the runner keeps
+    # serving the values it was originally created with.
+    if req.env is not None:
+        j["env"] = _clean_env(req.env)
     cfg = LANGS[j["lang"]]
 
     if req.code is not None and req.code.strip():

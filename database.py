@@ -508,6 +508,7 @@ _SCHEMA_TABLES = [
         language TEXT NOT NULL,
         code TEXT NOT NULL,
         runner_job_id TEXT,
+        env TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
@@ -655,6 +656,11 @@ def init_db():
             conn.execute("ALTER TABLE users ADD COLUMN fingerprint TEXT")
         if not _column_exists(conn, "users", "last_ip"):
             conn.execute("ALTER TABLE users ADD COLUMN last_ip TEXT")
+
+        # Job environment variables (JSON blob). Added after launch, so
+        # existing deployments need the ALTER too.
+        if not _column_exists(conn, "jobs", "env"):
+            conn.execute("ALTER TABLE jobs ADD COLUMN env TEXT")
 
         # Same story for the sessions table.
         if not _column_exists(conn, "sessions", "fingerprint"):

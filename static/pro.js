@@ -3728,6 +3728,8 @@ function renderJobDetails() {
   _jdText("jdLangName", job.language || "—");
   _jdText("jdPid", job.runner_job_id || "—");
   _jdText("jdPort", job.port || "—");
+  _jdText("jdCpu", job.cpu_pct != null ? job.cpu_pct + "%" : "—");
+  _jdText("jdMem", job.mem_mb != null ? job.mem_mb + " MB" : "—");
 
   // ---- 2 controls: reflect what is actually possible right now -------
   const start = document.getElementById("jdStart");
@@ -3833,30 +3835,50 @@ function _jdEnvRow(k, v) {
   return row;
 }
 
-function _jdEnvKey() { return "codenest_env_" + String(_selectedJobId || ""); }
-
-function _jdEnvSave() {
+/* Env vars are stored SERVER-SIDE on the job row and injected into the
+   process at spawn. They used to be written to localStorage only, so the job
+   never actually received them and they vanished on another device. */
+function _jdEnvCollect() {
   const list = document.getElementById("jdEnvList");
-  if (!list || !_selectedJobId) return;
   const out = {};
+  if (!list) return out;
   list.querySelectorAll(".jd-env-row").forEach(r => {
     const k = r.querySelector("[data-k]").value.trim();
     const v = r.querySelector("[data-v]").value;
     if (k) out[k] = v;
   });
-  try { localStorage.setItem(_jdEnvKey(), JSON.stringify(out)); } catch (e) {}
-  _jdText("jdEnvHint", "Saved locally · applies on next restart.");
+  return out;
+}
+
+let _jdEnvTimer = null;
+function _jdEnvSave() {
+  if (!_selectedJobId) return;
+  // Debounce: typing a token fires a change per field.
+  if (_jdEnvTimer) clearTimeout(_jdEnvTimer);
+  _jdText("jdEnvHint", "Saving…");
+  _jdEnvTimer = setTimeout(async () => {
+    const id = _selectedJobId;
+    try {
+      await api("/api/jobs/" + id, "PATCH", { env: _jdEnvCollect() }, true);
+      const job = (window._lastJobs || []).find(x => String(x.id) === String(id));
+      if (job) job.env = _jdEnvCollect();
+      _jdText("jdEnvHint", "Saved · applies on the next restart.");
+    } catch (e) {
+      _jdText("jdEnvHint", "Could not save: " + (e.message || "error"));
+    }
+  }, 600);
 }
 
 function _jdEnvLoad() {
   const list = document.getElementById("jdEnvList");
   if (!list) return;
   list.innerHTML = "";
-  let data = {};
-  try { data = JSON.parse(localStorage.getItem(_jdEnvKey()) || "{}"); } catch (e) {}
+  const job = _jdCurrentJob();
+  const data = (job && job.env) || {};
   const keys = Object.keys(data);
   if (!keys.length) list.appendChild(_jdEnvRow("", ""));
   else keys.forEach(k => list.appendChild(_jdEnvRow(k, data[k])));
+  _jdText("jdEnvHint", "Changes apply on the next restart.");
 }
 
 /* ---- downloads ------------------------------------------------------ */

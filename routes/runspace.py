@@ -13,6 +13,7 @@ class JobCreateRequest(BaseModel):
     code: str
     repo_url: Optional[str] = None
     entry: Optional[str] = None
+    env: Optional[dict] = None
 
 
 class JobUpdateRequest(BaseModel):
@@ -21,6 +22,7 @@ class JobUpdateRequest(BaseModel):
     code: Optional[str] = None
     repo_url: Optional[str] = None
     entry: Optional[str] = None
+    env: Optional[dict] = None
 
 
 class GithubImportRequest(BaseModel):
@@ -131,6 +133,38 @@ def _get_own_job(job_id: int, user: dict) -> dict:
     return dict(row)
 
 
+def _row_env(row) -> dict:
+    """Env vars saved for a job row (empty when unset / unparsable)."""
+    try:
+        raw = dict(row).get("env")
+        return json.loads(raw) if raw else {}
+    except Exception:
+        return {}
+
+
+_ENV_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+_ENV_BLOCKED = {
+    "PATH", "PYTHONPATH", "PORT", "HOME", "LD_PRELOAD", "LD_LIBRARY_PATH",
+    "PYTHONSTARTUP", "PYTHONHOME", "BASH_ENV", "ENV", "SHELL", "IFS",
+    "RUNNER_SERVICE_SECRET", "DATABASE_URL",
+}
+
+
+def _clean_env_map(raw) -> dict:
+    """Validate env vars here too — never trust the browser to have done it."""
+    if not isinstance(raw, dict):
+        return {}
+    out = {}
+    for k, v in raw.items():
+        k = str(k).strip()
+        if not _ENV_KEY_RE.match(k) or k.upper() in _ENV_BLOCKED:
+            continue
+        out[k] = ("" if v is None else str(v))[:4096]
+        if len(out) >= 40:
+            break
+    return out
+
+
 @router.post("/api/jobs")
 def create_job(payload: JobCreateRequest, request: Request, authorization: Optional[str] = Header(None)):
     user, _ = get_current_user_and_session(authorization)
@@ -199,10 +233,12 @@ def create_job(payload: JobCreateRequest, request: Request, authorization: Optio
     except HTTPException:
         raise
 
+    env_map = _clean_env_map(payload.env)
     body = {
         "language": payload.language or "python",
         "code": payload.code or "",
         "name": f"u{user['id']}-{name}",
+        "env": env_map,
     }
     if repo_url:
         body["repo_url"] = repo_url
@@ -224,10 +260,11 @@ def create_job(payload: JobCreateRequest, request: Request, authorization: Optio
     try:
         cursor = conn.execute(
             """
-            INSERT INTO jobs (user_id, name, language, code, runner_job_id, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO jobs (user_id, name, language, code, runner_job_id, env, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (user["id"], name, payload.language, payload.code, info["id"], now, now),
+            (user["id"], name, payload.language, payload.code, info["id"],
+             json.dumps(env_map) if env_map else None, now, now),
         )
         conn.commit()
         info["job_db_id"] = cursor.lastrowid
@@ -264,10 +301,12 @@ def list_jobs(authorization: Optional[str] = Header(None)):
         if rid and rid in live:
             info = live[rid]
             r.update({"status": info["status"], "uptime_s": info.get("uptime_s", 0),
-                      "restarts": info.get("restarts", 0), "port": info.get("port")})
+                      "restarts": info.get("restarts", 0), "port": info.get("port"),
+                      "cpu_pct": info.get("cpu_pct"), "mem_mb": info.get("mem_mb")})
             r.update(runner_client._job_web_fields(info))                # web / web_url / access
         else:
             r.update({"status": "offline", "uptime_s": 0, "restarts": 0})
+        r["env"] = _row_env(r)          # saved env vars (Details page)
         r.pop("code", None)  # never ship stored code back in list payloads
         jobs.append(r)
     return {"jobs": jobs, "runner": runner_state, "max_per_user": MAX_JOBS_PER_USER}
@@ -543,6 +582,9 @@ def restart_job(job_id: int, request: Request, authorization: Optional[str] = He
         resp = runner_client._runner_http("POST", "/internal/jobs", {
             "language": row["language"], "code": row["code"],
             "name": f"u{user['id']}-{row['name']}",
+            # Replay saved env, otherwise a cold restart silently loses the
+            # job's API keys / bot tokens and it crash-loops.
+            "env": _row_env(row),
         })
         if resp.status_code == 201:
             info = resp.json()
@@ -591,6 +633,8 @@ def update_job(job_id: int, payload: JobUpdateRequest, request: Request, authori
     new_code = payload.code if payload.code is not None else row["code"]
     new_repo = (payload.repo_url or "").strip()
     new_entry = (payload.entry or "").strip()
+    # env omitted from the request => keep what is already saved.
+    new_env = _clean_env_map(payload.env) if payload.env is not None else _row_env(row)
     now = now_utc_str()
     if new_name != (row["name"] or ""):
         conn0 = get_db_connection()
@@ -606,15 +650,16 @@ def update_job(job_id: int, payload: JobUpdateRequest, request: Request, authori
     conn = get_db_connection()
     try:
         conn.execute(
-            "UPDATE jobs SET name = ?, language = ?, code = ?, updated_at = ? WHERE id = ?",
-            (new_name, new_lang, new_code, now, job_id),
+            "UPDATE jobs SET name = ?, language = ?, code = ?, env = ?, updated_at = ? WHERE id = ?",
+            (new_name, new_lang, new_code,
+             json.dumps(new_env) if new_env else None, now, job_id),
         )
         conn.commit()
     finally:
         conn.close()
 
     # Forward to runner for in-place update (same dir, same slug, same port).
-    patch_body = {"name": new_name, "language": new_lang, "code": new_code}
+    patch_body = {"name": new_name, "language": new_lang, "code": new_code, "env": new_env}
     if new_repo:
         patch_body["repo_url"] = new_repo
         if new_entry: patch_body["entry"] = new_entry
@@ -623,7 +668,8 @@ def update_job(job_id: int, payload: JobUpdateRequest, request: Request, authori
         info = resp.json()
     elif resp.status_code == 404:
         # Runner restarted — fall back to cold-start Restart path.
-        create_body = {"language": new_lang, "code": new_code, "name": f"u{user['id']}-{new_name}"}
+        create_body = {"language": new_lang, "code": new_code,
+                       "name": f"u{user['id']}-{new_name}", "env": new_env}
         if new_repo:
             create_body["repo_url"] = new_repo
             if new_entry: create_body["entry"] = new_entry
