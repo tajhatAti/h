@@ -105,7 +105,7 @@ body {
 
 a, button, input, select, textarea, .quick-card, .stat-card,
 
-::selection { background: var(--acc) !important; color: #fff !important; }
+::selection { background: var(--acc) !important; color: var(--paper) !important; }
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: var(--paper) !important; }
@@ -250,8 +250,28 @@ html[data-theme="light"] .nav { background: var(--band) !important; }
 }
 .nav .btn-primary:hover { background: #fff !important; box-shadow: var(--shadow-m) !important; }
 
-.link, .auth-switch a { color: var(--acc) !important; font-weight: 600 !important; }
-.link:hover, .auth-switch a:hover { text-decoration: underline !important; }
+/* Inline links must never carry a fill of their own — a highlighted <a> that
+   inherits a surface colour is what produced "white rectangles with unreadable
+   text". They take the surrounding text colour plus an underline, so they stay
+   legible on ANY surface even if a theme mismatch leaves the card light. */
+.link, .auth-switch a, .tos-check a, .field-taken a {
+  background: none !important;
+  background-color: transparent !important;
+  color: inherit !important;
+  font-weight: 600 !important;
+  text-decoration: underline !important;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+  border-radius: 2px;
+}
+.link:hover, .auth-switch a:hover, .tos-check a:hover, .field-taken a:hover {
+  text-decoration-color: currentColor;
+}
+.link:focus-visible, .auth-switch a:focus-visible,
+.tos-check a:focus-visible, .field-taken a:focus-visible {
+  outline: 2px solid currentColor; outline-offset: 2px;
+}
 
 /* ================= 5. HERO (black statement) ======================== */
 
@@ -447,7 +467,7 @@ html[data-theme="light"] .dash-bar { background: var(--band) !important; }
   .dash-tab[data-tab="jobs"].active {
     background: var(--acc) !important;
     border-color: var(--acc) !important;
-    color: #fff !important;
+    color: var(--paper) !important;
     box-shadow: 0 6px 20px rgba(17, 17, 19, .18) !important;
   }
   .dash-tab[data-tab="jobs"].active::after { background: rgba(255,255,255,.25); }
@@ -558,7 +578,7 @@ svg.ic { width: 1em; height: 1em; display: inline-block; vertical-align: -.14em;
   border-color: var(--acc) !important;
 }
 .cs-act.primary:hover, #btnSaveSnippet:hover, #btnShareSnippet:hover {
-  background: var(--acc) !important; color: #fff !important;
+  background: var(--acc) !important; color: var(--paper) !important;
 }
 
 .cs-canvas {
@@ -691,13 +711,20 @@ html[data-theme="light"] .activity-panel { background: var(--panel) !important; 
 }
 
 /* ================= 15. MOBILE ======================================= */
+/* Bottom nav: a translucent dark bar, not a solid slab. classic.css loads
+   last, and it was force-disabling the blur that pro.css sets — so the nav
+   read as a hard block glued to the bottom of the screen. */
 .bottom-nav, .bn {
-  background: var(--band) !important;
-  border-top: 1px solid var(--cream-line) !important;
+  background: rgba(9, 9, 11, .88) !important;
+  border-top: 1px solid rgba(255, 255, 255, .09) !important;
   box-shadow: none !important;
-  backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+  backdrop-filter: blur(18px) saturate(140%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(140%) !important;
 }
-html[data-theme="light"] .bottom-nav { background: var(--band) !important; }
+@supports not (backdrop-filter: blur(1px)) {
+  .bottom-nav, .bn { background: #09090b !important; }
+}
+html[data-theme="light"] .bottom-nav { background: rgba(9, 9, 11, .88) !important; }
 .bn-item { color: var(--cream-dim) !important; }
 .bn-item.active { color: var(--cream) !important; }
 .bn-item.active .bn-ic {
@@ -770,7 +797,7 @@ html[data-theme="light"] .more-sheet { background: var(--panel) !important; }
 
 /* sign-up "already registered" inline notice + reset-password link */
 .field-taken { margin-top: 6px; font-size: 12.5px; font-weight: 600; color: var(--red) !important; }
-.field-taken a { color: var(--acc) !important; font-weight: 700 !important; cursor: pointer; text-decoration: underline; }
+.field-taken a { font-weight: 700 !important; cursor: pointer; }
 input.taken { border-color: var(--red) !important; }
 input.taken:focus { box-shadow: 0 0 0 4px rgba(179, 38, 30, .12) !important; }
 

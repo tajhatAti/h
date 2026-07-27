@@ -1717,7 +1717,18 @@ function toggleTheme() {
   applyTheme(cur === "light" ? "dark" : "light");
 }
 (function initTheme() {
-  try { applyTheme(localStorage.getItem("ahad_theme") || "light"); } catch (e) { applyTheme("light"); }
+  // Dark is the product's identity: the landing page, RunSpace and the code
+  // editor are all hardcoded dark surfaces. Defaulting to "light" meant the
+  // shared chrome (cards, hero blocks, modals) rendered on a #ffffff --panel
+  // INSIDE an otherwise dark app — that is the "white boxes in dark mode"
+  // report. Honour a saved choice, then the OS, then fall back to dark.
+  let saved = null;
+  try { saved = localStorage.getItem("ahad_theme"); } catch (e) {}
+  if (saved !== "light" && saved !== "dark") {
+    saved = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches)
+      ? "light" : "dark";
+  }
+  applyTheme(saved);
 })();
 
 /* ==================== PROFILE ==================== */

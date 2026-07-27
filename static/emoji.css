@@ -90,7 +90,7 @@
 .brand-mark, .boot-logo {
   display: grid;
   place-items: center;
-  color: #fff;
+  color: #111113;
   background: linear-gradient(120deg, #e6e6ea, #c9c9d1, #b9b9c2, #e6e6ea) !important;
   background-size: 300% 300% !important;
   animation: brand-gradient 8s ease infinite;

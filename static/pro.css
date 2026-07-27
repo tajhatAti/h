@@ -132,8 +132,8 @@ body {
 /* Brand */
 .brand { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; }
 .brand-mark {
-  width: 32px; height: 32px; border-radius: 9px; background: var(--grad);
-  display: grid; place-items: center; font-weight: 800; color: #fff;
+  width: 32px; height: 32px; border-radius: 9px; background: var(--grad); color: #111113;
+  display: grid; place-items: center; font-weight: 800; color: #111113;
   box-shadow: 0 5px 16px rgba(245, 158, 11, .32);
   overflow: hidden; flex-shrink: 0;
 }
@@ -160,8 +160,8 @@ html:not(.booting) .boot-splash { display: none !important; }
 html.booting .nav, html.booting .hero, html.booting .section, html.booting .foot,
 html.booting .auth, html.booting .dashboard { display: none !important; }
 .boot-logo {
-  width: 64px; height: 64px; border-radius: 17px; background: var(--grad);
-  display: grid; place-items: center; font-weight: 800; color: #fff; font-size: 20px;
+  width: 64px; height: 64px; border-radius: 17px; background: var(--grad); color: #111113;
+  display: grid; place-items: center; font-weight: 800; color: #111113; font-size: 20px;
   box-shadow: 0 12px 36px rgba(255,255,255,.42);
 }
 .boot-logo svg { width: 56%; height: 56%; }
@@ -274,7 +274,7 @@ html.booting .auth, html.booting .dashboard { display: none !important; }
 .link { color: var(--brand-3); cursor: pointer; font-size: 13px; font-weight: 600; }
 .link:hover { text-decoration: underline; }
 .auth-switch { text-align: center; margin-top: 18px; color: var(--muted); font-size: 13.5px; }
-.auth-switch a { color: var(--brand-1); font-weight: 600; cursor: pointer; }
+.auth-switch a { color: inherit; font-weight: 600; cursor: pointer; text-decoration: underline; }
 .auth-hint { text-align: center; margin-top: 14px; font-size: 12px; color: var(--muted-2); line-height: 1.5; }
 
 .input-text, .input-textarea, .input-select, .field input {
@@ -333,7 +333,7 @@ html.booting .auth, html.booting .dashboard { display: none !important; }
   white-space: nowrap;
 }
 .dash-tab:hover { color: var(--text); }
-.dash-tab.active { background: var(--grad); color: #fff; }
+.dash-tab.active { background: var(--grad); color: #111113; }
 .dash-user { display: flex; align-items: center; gap: 12px; }
 .user-name { font-size: 14px; font-weight: 600; }
 
@@ -593,7 +593,7 @@ html.booting .auth, html.booting .dashboard { display: none !important; }
   width: 28px; height: 28px; border-radius: 8px;
   background: linear-gradient(135deg, #e6e6ea, #c9c9d1);
   display: grid; place-items: center;
-  font-family: var(--mono); font-weight: 800; font-size: 12px; color: #fff;
+  font-family: var(--mono); font-weight: 800; font-size: 12px; color: #111113;
   flex-shrink: 0;
 }
 .cs-name {
@@ -628,7 +628,7 @@ html.booting .auth, html.booting .dashboard { display: none !important; }
 .cs-act:active { transform: scale(.96); transition-duration: .1s; }
 .cs-act.primary {
   background: linear-gradient(135deg, #e6e6ea, #c9c9d1);
-  border-color: transparent; color: #fff;
+  border-color: transparent; color: #111113;
 }
 .cs-act.primary:hover { box-shadow: 0 6px 18px rgba(255,255,255,.35); }
 
@@ -636,13 +636,13 @@ html.booting .auth, html.booting .dashboard { display: none !important; }
 .cs-canvas { flex: 1; display: flex; min-height: 0; position: relative; }
 .cs-editor-zone {
   flex: 1; display: flex; min-width: 0;
-  background: #14110f; position: relative; overflow: hidden;
+  background: #0e0e10; position: relative; overflow: hidden;
 }
 .cs-gutter {
   width: 46px; flex-shrink: 0;
-  background: #110e0c; border-right: 1px solid rgba(255,255,255,.04);
+  background: #0b0b0d; border-right: 1px solid rgba(255,255,255,.06);
   font-family: var(--mono); font-size: 13px; line-height: 1.75;
-  color: #4a423a; text-align: right;
+  color: #6e6e78; text-align: right;
   padding: 20px 12px 20px 0;
   overflow: hidden; white-space: pre; user-select: none;
 }

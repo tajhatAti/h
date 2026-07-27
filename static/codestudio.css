@@ -564,7 +564,7 @@ body.ed-full { overflow: hidden !important; }
 .code-studio .cs-act.publish-btn {
   background: linear-gradient(135deg, #e6e6ea, #c9c9d1) !important;  /* orange→red rocket glow */
   border-color: transparent !important;
-  color: #fff !important;
+  color: #111113 !important;
   font-weight: 600 !important;
   margin-left: 4px !important;
   position: relative !important;
