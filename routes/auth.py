@@ -14,7 +14,6 @@ import pyotp
 import qrcode
 
 from services import email as email_service
-from services import captcha as captcha_service
 from services.twofa import _verify_second_factor
 
 router = APIRouter()
@@ -66,9 +65,11 @@ def signup(user: UserSignup, request: Request):
     if user.agreed_terms is not True:
         raise HTTPException(status_code=400, detail="Please accept the Terms of Use to create an account.")
 
-    # CAPTCHA: Turnstile/hCaptcha when configured, arithmetic fallback otherwise.
-    if not captcha_service.verify(user.captcha_token, user.captcha, client_ip(request)):
-        raise HTTPException(status_code=400, detail="CAPTCHA verification failed.")
+    # CAPTCHA removed: the arithmetic question stopped no real abuse and cost
+    # every genuine user a step. Signup is still protected by the per-IP daily
+    # cap (SIGNUP_DAILY_MAX), the rate limiter, and e-mail OTP verification —
+    # an address must be real and reachable before the account works.
+    # services/captcha.py is kept so a provider can be re-enabled if needed.
 
     # Device fingerprint (§3) — stored on the account so §4 can aggregate job
     # counts across every account that shares this device.

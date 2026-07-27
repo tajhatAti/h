@@ -493,15 +493,35 @@ function _clearTaken(el) {
   if (n) n.remove();
   el.classList.remove("taken");
 }
-function _showTaken(el) {
+function _showTaken(el, field) {
   if (!el || el.classList.contains("taken")) return;
   const f = el.closest(".field");
   if (!f) return;
   const note = document.createElement("div");
   note.className = "field-taken";
-  note.innerHTML = 'This email/username is already registered. <a onclick="showScreen(\'screen-forgot1\')">Reset password →</a>';
+  // An account already exists, so the useful next step is SIGN IN — not
+  // "reset password", which implies the user forgot something they may not
+  // have forgotten. The email is carried across so they do not retype it.
+  if (field === "email") {
+    const v = (el.value || "").trim().replace(/"/g, "&quot;");
+    note.innerHTML = 'This email already has an account. ' +
+      '<a onclick="_goSignIn(\'' + v + '\')">Sign in instead →</a>';
+  } else {
+    note.textContent = "That username is taken — try another.";
+  }
   f.appendChild(note);
   el.classList.add("taken");
+}
+
+/** Jump to sign-in with the address pre-filled. */
+function _goSignIn(prefill) {
+  showScreen("screen-signin");
+  const u = document.getElementById("si_username");
+  if (u) {
+    if (prefill) u.value = prefill;
+    const pw = document.getElementById("si_password");
+    setTimeout(() => (prefill && pw ? pw : u).focus(), 60);
+  }
 }
 function _wireAvailability(inputId, field) {
   const el = document.getElementById(inputId);
@@ -513,7 +533,7 @@ function _wireAvailability(inputId, field) {
     try {
       const r = await api("/auth/check-availability", "POST",
         field === "username" ? { username: v } : { email: v });
-      if ((field === "username" && r.username_taken) || (field === "email" && r.email_taken)) _showTaken(el);
+      if ((field === "username" && r.username_taken) || (field === "email" && r.email_taken)) _showTaken(el, field);
     } catch (e) { /* endpoint hiccup — the submit check will catch it */ }
   });
   el.addEventListener("input", () => _clearTaken(el));
@@ -728,23 +748,11 @@ async function handleSignup(e) {
   try {
     const av = await api("/auth/check-availability", "POST", { username, email });
     if (av.username_taken || av.email_taken) {
-      _showTaken(document.getElementById(av.username_taken ? "su_username" : "su_email"));
-      toast("This email/username is already registered.", "error");
+      _showTaken(document.getElementById(av.username_taken ? "su_username" : "su_email"),
+                 av.username_taken ? "username" : "email");
       return;
     }
   } catch (e) { /* check endpoint hiccup — /signup will decide anyway */ }
-
-  // CAPTCHA — provider widget when configured, arithmetic box otherwise.
-  // The math input existed in the markup but was never read, so the server
-  // saw captcha=undefined and rejected EVERY signup.
-  const captchaEl = document.getElementById("su_captcha");
-  const captcha = captchaEl ? captchaEl.value.trim() : "";
-  const captchaToken = _captchaToken();
-  if (!captchaToken && captchaEl && !captcha) {
-    toast("Please answer the CAPTCHA question", "error");
-    captchaEl.focus();
-    return;
-  }
 
   // Collect strong device fingerprint for abuse prevention
   const fingerprint = await ensureFingerprint();
@@ -752,14 +760,13 @@ async function handleSignup(e) {
   try {
     const res = await api("/signup", "POST", {
       username, email, password, agreed_terms: true,
-      captcha, captcha_token: captchaToken,
       fingerprint: fingerprint
     });
     signupUsername = username;
     localStorage.setItem("ahad_signup_username", username);
     localStorage.setItem("ahad_signup_email", email);
     clearOtpBoxes("otpBoxesSignup");
-    document.getElementById("otpEmailNote").textContent = `A 6-digit code was sent to ${email}. It's valid for 10 minutes — you can switch apps to check your mail safely.`;
+    document.getElementById("otpEmailNote").textContent = `Sent to ${email}`;
     logEvent("success", "Verification email sent", `Code sent to ${email}`);
     const toastMsg = res.resent ? "Welcome back — a fresh code was sent to your email." : "Verification code sent! Check your email.";
     btnOk(btn, () => {
@@ -848,14 +855,13 @@ async function handleSignin(e) {
       signupUsername = data.username;
       localStorage.setItem("ahad_signup_username", data.username);
       clearOtpBoxes("otpBoxesSignup");
-      document.getElementById("otpEmailNote").textContent =
-        "Your email isn't verified yet. Enter the 6-digit code, or resend a new one below.";
+      document.getElementById("otpEmailNote").textContent = "Email not verified yet";
       logEvent("warning", "Verification required", `Please verify ${data.username}`);
       btnOk(btn, () => {
         showScreen("screen-otp");
         startResendTimer(10);
         startOtpExpiry(data.expires_in || 600, "otpExpire");
-        toast("Please verify your email to continue.", "warning");
+        toast("Verify your email to continue", "warning");
       });
       return;
     }
@@ -887,8 +893,44 @@ async function handleSignin(e) {
   } catch (err) {
     btnFail(btn);
     logEvent("error", "Sign-in failed", err.message);
-    toast(err.message, "error");
+    // The server deliberately does NOT say whether the account exists — that
+    // would let anyone test which e-mails are registered. So we keep its
+    // wording, but still offer the two things a stuck user actually needs.
+    const wrongCreds = /incorrect|invalid/i.test(err.message || "");
+    if (wrongCreds) {
+      const v = (document.getElementById("si_username") || {}).value || "";
+      _authNote("si_username", err.message, "Create an account →",
+                () => _goSignUp(v));
+    } else {
+      toast(err.message, "error");
+    }
   }
+}
+
+/** Inline note under an auth field, with one clear next step. */
+function _authNote(inputId, text, linkText, onClick) {
+  const el = document.getElementById(inputId);
+  const f = el && el.closest(".field");
+  if (!f) { toast(text, "error"); return; }
+  f.querySelectorAll(".field-taken").forEach(n => n.remove());
+  const note = document.createElement("div");
+  note.className = "field-taken";
+  note.textContent = text + " ";
+  const a = document.createElement("a");
+  a.textContent = linkText;
+  a.addEventListener("click", onClick);
+  note.appendChild(a);
+  f.appendChild(note);
+  el.addEventListener("input", () => note.remove(), { once: true });
+}
+
+/** Jump to sign-up, carrying the address over. */
+function _goSignUp(prefill) {
+  showScreen("screen-signup");
+  const em = document.getElementById("su_email");
+  if (em && prefill && prefill.includes("@")) em.value = prefill;
+  const first = document.getElementById("su_username");
+  setTimeout(() => first && first.focus(), 60);
 }
 
 /* ==================== FORGOT PASSWORD ==================== */
@@ -2464,12 +2506,11 @@ function restoreOtpScreen() {
   const email = localStorage.getItem("ahad_signup_email") || "your email";
   signupUsername = username;
   clearOtpBoxes("otpBoxesSignup");
-  document.getElementById("otpEmailNote").textContent =
-    "Welcome back, " + username + "! Enter your 6-digit code to finish verifying. (Sent to " + email + ".)";
+  document.getElementById("otpEmailNote").textContent = "Sent to " + email;
   showScreen("screen-otp");
   startResendTimer(10);
   logEvent("info", "Verification resumed", "Restored pending verification for " + username);
-  toast("Pick up where you left off — enter your code.", "info");
+
 }
 
 /* Paste a copied 6-digit code from the clipboard into the OTP boxes. */
@@ -4822,62 +4863,6 @@ window.onTelegramAuth = async function (user) {
 })();
 
 
-/* ============================================================
-   CAPTCHA PROVIDER (Cloudflare Turnstile / hCaptcha)
-   Which provider — if any — is active comes from /api/public-config.
-   With no provider configured the arithmetic question in the markup
-   stays visible and is validated server-side instead.
-   ============================================================ */
-let _captchaProvider = "none";
-let _captchaWidgetId = null;
-
-function _captchaToken() {
-  if (_captchaProvider === "turnstile" && window.turnstile) {
-    try { return window.turnstile.getResponse(_captchaWidgetId) || ""; } catch (e) { return ""; }
-  }
-  if (_captchaProvider === "hcaptcha" && window.hcaptcha) {
-    try { return window.hcaptcha.getResponse(_captchaWidgetId) || ""; } catch (e) { return ""; }
-  }
-  return "";
-}
-
-function _captchaReset() {
-  try {
-    if (_captchaProvider === "turnstile" && window.turnstile) window.turnstile.reset(_captchaWidgetId);
-    if (_captchaProvider === "hcaptcha" && window.hcaptcha) window.hcaptcha.reset(_captchaWidgetId);
-  } catch (e) {}
-}
-
-(function initCaptcha() {
-  async function mount() {
-    let cfg = {};
-    try {
-      const r = await fetch("/api/public-config");
-      if (r.ok) cfg = await r.json();
-    } catch (e) { return; }
-    _captchaProvider = cfg.captcha_provider || "none";
-    const key = cfg.captcha_site_key || "";
-    if (_captchaProvider === "none" || !key) return;   // keep the math fallback
-
-    const box = document.querySelector(".captcha-box");
-    if (!box) return;
-    box.innerHTML = '<div id="captchaWidget"></div>';   // replace the math input
-
-    const src = _captchaProvider === "turnstile"
-      ? "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
-      : "https://js.hcaptcha.com/1/api.js?render=explicit";
-    const s = document.createElement("script");
-    s.src = src; s.async = true; s.defer = true;
-    s.onload = function () {
-      const api = _captchaProvider === "turnstile" ? window.turnstile : window.hcaptcha;
-      if (!api) return;
-      try { _captchaWidgetId = api.render("#captchaWidget", { sitekey: key }); } catch (e) {}
-    };
-    document.head.appendChild(s);
-  }
-  if (document.readyState === "complete" || document.readyState === "interactive") setTimeout(mount, 80);
-  else document.addEventListener("DOMContentLoaded", function () { setTimeout(mount, 80); });
-})();
 
 // Warm the fingerprint cache at boot so the first job-create request already
 // carries X-Fingerprint (the device limit is useless if the header is absent).
