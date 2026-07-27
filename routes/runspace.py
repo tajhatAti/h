@@ -263,7 +263,8 @@ def list_jobs(authorization: Optional[str] = Header(None)):
         rid = r.get("runner_job_id")
         if rid and rid in live:
             info = live[rid]
-            r.update({"status": info["status"], "uptime_s": info.get("uptime_s", 0), "restarts": info.get("restarts", 0)})
+            r.update({"status": info["status"], "uptime_s": info.get("uptime_s", 0),
+                      "restarts": info.get("restarts", 0), "port": info.get("port")})
             r.update(runner_client._job_web_fields(info))                # web / web_url / access
         else:
             r.update({"status": "offline", "uptime_s": 0, "restarts": 0})

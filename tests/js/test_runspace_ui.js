@@ -23,7 +23,7 @@ const check = (n, c, x) => {
 check("a persistent _composingNew flag exists", /let _composingNew = false;/.test(js));
 check("'New' sets the flag", /_composingNew = true;/.test(js));
 check("selecting an existing job clears it",
-  /_selectedJobId = id;\s*\n\s*_composingNew = false;/.test(js));
+  /_selectedJobId = id;[\s\S]{0,120}?_composingNew = false;/.test(js));
 check("a successful deploy clears it", /_jobDirty = false;\s*\n\s*_composingNew = false;/.test(js));
 check("renderJobs refuses to auto-select while composing",
   /else if \(_composingNew \|\| Date\.now\(\) < _suppressAutoSelect\)/.test(js));

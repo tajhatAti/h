@@ -871,6 +871,8 @@ def _job_public(j: dict) -> dict:
         "started_at": j["started_at"],
         "uptime_s": int(time.time() - j["started_at"]) if running else 0,
         "web": bool(j.get("web")),
+        # The Details page shows a Port row; without this it was always "—".
+        "port": j.get("port") if running else None,
         "web_slug": j.get("web_slug"),
         "web_public": bool(j.get("web_public", True)),
         # access_key only reaches the main site (this API is secret-guarded) —

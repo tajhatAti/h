@@ -2743,6 +2743,17 @@ async function loadJobs() {
     const jobs = (data && data.jobs) || [];
     const sig = jobs.map(j => [j.id, j.status, j.restarts, j.web ? 1 : 0, j.web_public === false ? 0 : 1].join(":")).join("|");
     _lastJobsTs = Date.now();
+
+    // The user is writing a brand-new job, or has unsaved edits in the open
+    // one. _showEmpty()/_showWorkspace() below would hide or repaint the
+    // editor and destroy that text — which is exactly what looked like a
+    // spontaneous page reload. Refresh ONLY the sidebar list and stop.
+    if (_composingNew || _jobDirty) {
+      _setJobsStatus(jobs.length ? "loaded" : "empty");
+      if (sig !== _lastJobsSig) { _lastJobsSig = sig; _renderJobList(jobs); }
+      return;
+    }
+
     if (jobs.length === 0) {
       // Confirmed zero — render once, preserve sig
       _lastJobsSig = sig;
@@ -3073,7 +3084,12 @@ function selectJob(id) {
     if (tab) tab.classList.remove("side-open");
     return;
   }
+  // Switching away from unsaved work silently threw it away. Ask first.
+  if (_jobDirty || (_composingNew && (_jobCmGetValue() || "").trim())) {
+    if (!confirm("You have unsaved changes. Discard them and open this job?")) return;
+  }
   _selectedJobId = id;
+  _jobDirty = false;
   _composingNew = false;      // an existing job was chosen; New-flow is over
   // 👉 Paint sidebar selection + swap to workspace IMMEDIATELY (don't wait for
   // fetch/SSE to round-trip — that's what makes tab switches feel laggy).
@@ -3223,6 +3239,29 @@ function _langIcon(lang) {
   if (l === "ruby" || l === "rb") return "rb";
   if (l === "php") return "php";
   return (lang || "py").slice(0,2).toLowerCase();
+}
+
+/** Refresh ONLY the sidebar list + count. Never touches the editor panes.
+ *  Used while the user is composing a new job or has unsaved edits, so the
+ *  job list stays live without their typing being wiped. */
+function _renderJobList(jobs) {
+  window._lastJobs = jobs || [];
+  const countEl = document.getElementById("txJobCount");
+  if (countEl) countEl.textContent = (jobs || []).length;
+  const list = document.getElementById("jobsList");
+  if (!list) return;
+  (jobs || []).forEach(j => {
+    const row = list.querySelector('.job-item[data-jid="' + String(j.id).replace(/"/g, '\\"') + '"]');
+    if (!row) return;
+    const sk = (j.status || "").toLowerCase();
+    row.classList.toggle("running", sk === "running" || sk === "starting" || sk === "installing");
+    row.classList.toggle("crashed", sk === "crashed" || sk === "install_failed");
+    const dot = row.querySelector(".jstatus-dot");
+    if (dot) {
+      dot.classList.toggle("running", sk === "running" || sk === "starting" || sk === "installing");
+      dot.classList.toggle("crashed", sk === "crashed" || sk === "install_failed");
+    }
+  });
 }
 
 function renderJobs(jobs) {
@@ -4749,3 +4788,16 @@ function _captchaReset() {
   if (document.readyState === "complete" || document.readyState === "interactive") setTimeout(go, 300);
   else document.addEventListener("DOMContentLoaded", function () { setTimeout(go, 300); });
 })();
+
+
+/* Warn before the tab/window closes with unsaved RunSpace work. Without this
+   a refresh or accidental close silently discarded whatever was typed. */
+window.addEventListener("beforeunload", function (e) {
+  const hasWork = (typeof _jobDirty !== "undefined" && _jobDirty) ||
+    (typeof _composingNew !== "undefined" && _composingNew &&
+     (function () { try { return (_jobCmGetValue() || "").trim().length > 0; } catch (err) { return false; } })());
+  if (!hasWork) return;
+  e.preventDefault();
+  e.returnValue = "";
+  return "";
+});
