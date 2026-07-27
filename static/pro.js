@@ -3763,6 +3763,7 @@ function openJobDetails(id, opts) {
 
   renderJobDetails();
   _jdEnvLoad();
+  _jdRefreshBackupRow();
   // The visible log pane just changed: repaint the cached text into it.
   _renderLogs(_lastLogText || "", true);
   const sc = document.getElementById("jdScroll");
@@ -4026,21 +4027,77 @@ async function _jdDownload(kind) {
     return;
   }
 
-  // database: ask the server which files exist, then fetch the best match
+  // database / data files.
+  //
+  // /api/jobs/{id}/files reads the runner's filesystem with plain os.path,
+  // which only works when the runner is EMBEDDED in this process. In the
+  // two-service deployment (the production layout) the runner is a separate
+  // host, so that path finds nothing. /download goes through the runner's own
+  // snapshot endpoint and additionally falls back to the stored backup, so it
+  // still returns data after a deploy has wiped the container.
   try {
-    const r = await fetch("/api/jobs/" + job.id + "/files",
-                          {headers: token ? {Authorization: "Bearer " + token} : {}});
-    const d = await r.json();
-    const files = (d && d.files) || [];
-    const pick = files.find(f => /\.(db|sqlite3?|json)$/i.test(f.path || f.name || ""));
-    if (!pick) { toast("No database file in this workspace yet", "error"); return; }
-    const p = pick.path || pick.name;
-    const dl = await fetch("/api/jobs/" + job.id + "/files/" + encodeURI(p),
+    const dl = await fetch("/api/jobs/" + job.id + "/download",
                            {headers: token ? {Authorization: "Bearer " + token} : {}});
-    if (!dl.ok) { toast("Could not fetch the file", "error"); return; }
-    _downloadBlob(await dl.blob(), p.split("/").pop());
-    toast("Database downloaded", "success");
+    if (dl.ok) {
+      _downloadBlob(await dl.blob(), safe + "-data.tar.gz");
+      toast("Data downloaded", "success");
+      return;
+    }
+    let msg = "No data files yet";
+    try { msg = (await dl.json()).detail || msg; } catch (_e) {}
+    toast(msg, "error");
   } catch (e) { toast("Download failed", "error"); }
+}
+
+/* Back up this job's data files to the database right now. */
+async function _jdBackupNow() {
+  const job = _jdCurrentJob();
+  if (!job) return;
+  try {
+    const d = await api("/api/jobs/" + job.id + "/snapshot", "POST", null, true);
+    toast(`Backed up ${d.files} file(s)`, "success");
+    _jdRefreshBackupRow();
+  } catch (e) { toast(e.message || "Backup failed", "error"); }
+}
+
+/* Force the stored backup back over the live workspace. Destructive, so it
+   asks first — this rolls the bot back to the backup's point in time. */
+async function _jdRestoreBackup() {
+  const job = _jdCurrentJob();
+  if (!job) return;
+  if (!confirm("Restore the last backup?\n\nThis OVERWRITES the job's current "
+             + "data files and restarts it. Anything the bot has written since "
+             + "the backup will be lost.")) return;
+  try {
+    const d = await api("/api/jobs/" + job.id + "/snapshot/restore", "POST", null, true);
+    toast(`Restored ${d.restored} file(s) — restarting`, "success");
+    _jdRefreshBackupRow();
+  } catch (e) { toast(e.message || "Restore failed", "error"); }
+}
+
+/* Show when the data was last backed up. */
+async function _jdRefreshBackupRow() {
+  const job = _jdCurrentJob();
+  const el = document.getElementById("jdBackup");
+  if (!job || !el) return;
+  try {
+    const d = await api("/api/jobs/" + job.id + "/snapshot", "GET", null, true);
+    if (!d.enabled) { el.textContent = "disabled"; return; }
+    if (!d.snapshot) { el.textContent = "no backup yet"; return; }
+    const kb = Math.max(1, Math.round((d.snapshot.bytes || 0) / 1024));
+    el.textContent = `${d.snapshot.files} file(s) · ${kb} KB · ${_agoText(d.snapshot.updated_at)}`;
+  } catch (e) { el.textContent = "—"; }
+}
+
+function _agoText(iso) {
+  if (!iso) return "unknown";
+  const t = Date.parse(iso.endsWith("Z") ? iso : iso + "Z");
+  if (isNaN(t)) return iso;
+  const s = Math.max(0, Math.round((Date.now() - t) / 1000));
+  if (s < 90) return "just now";
+  if (s < 3600) return Math.round(s / 60) + "m ago";
+  if (s < 86400) return Math.round(s / 3600) + "h ago";
+  return Math.round(s / 86400) + "d ago";
 }
 
 /* ---- wiring: every control below performs a real action ------------- */
@@ -4107,6 +4164,9 @@ function _initDetailWiring() {
   on("jdDlSource", () => _jdDownload("source"));
   on("jdDlLogs",   () => _jdDownload("logs"));
   on("jdDlDb",     () => _jdDownload("db"));
+
+  on("jdBackupNow",     () => _jdBackupNow());
+  on("jdRestoreBackup", () => _jdRestoreBackup());
 
   // Escape closes the page, like any full-screen view.
   document.addEventListener("keydown", e => {

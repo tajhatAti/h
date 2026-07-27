@@ -142,6 +142,36 @@ def _row_env(row) -> dict:
         return {}
 
 
+def _restore_then_restart(job_id: int, info: dict) -> dict:
+    """After a COLD start, push the last snapshot into the fresh workspace.
+
+    A cold start means the runner lost the directory (a deploy on the free
+    tier). The job is already running at this point, against an empty dir — a
+    bot that opened database.db has just created a blank one. So we restore the
+    saved data files and restart the process in place so it re-opens them.
+
+    Entirely best-effort: if there is no snapshot, or the runner refuses, the
+    job keeps running exactly as it did before this feature existed.
+    """
+    rid = info.get("id")
+    if not rid:
+        return info
+    try:
+        from services import snapshots
+        res = snapshots.restore_snapshot(job_id, rid, overwrite=True)
+        if res.get("restored"):
+            r = runner_client._runner_http("POST", f"/internal/jobs/{rid}/restart")
+            if r.status_code == 200:
+                fresh = r.json()
+                fresh["restored_files"] = res["restored"]
+                return fresh
+            info["restored_files"] = res["restored"]
+    except Exception as exc:  # never block a start on a restore problem
+        logging.getLogger(__name__).warning(
+            "snapshot restore after cold start failed (job %s): %s", job_id, exc)
+    return info
+
+
 _ENV_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
 _ENV_BLOCKED = {
     "PATH", "PYTHONPATH", "PORT", "HOME", "LD_PRELOAD", "LD_LIBRARY_PATH",
@@ -565,12 +595,122 @@ def download_job_file(job_id: int, file_path: str, authorization: Optional[str] 
                         media_type=ctype or "application/octet-stream")
 
 
+@router.get("/api/jobs/{job_id}/snapshot")
+def get_job_snapshot_status(job_id: int, authorization: Optional[str] = Header(None)):
+    """When was this job's data last backed up, and how big is it?"""
+    user, _ = get_current_user_and_session(authorization)
+    _get_own_job(job_id, user)
+    from services import snapshots
+    meta = snapshots.snapshot_meta(job_id)
+    return {
+        "enabled": snapshots.SNAPSHOTS_ENABLED,
+        "snapshot": meta,
+        "interval_s": snapshots.SNAPSHOT_INTERVAL_S,
+    }
+
+
+@router.post("/api/jobs/{job_id}/snapshot")
+def create_job_snapshot(job_id: int, authorization: Optional[str] = Header(None)):
+    """Back up this job's data files right now (the "Backup data" button)."""
+    user, _ = get_current_user_and_session(authorization)
+    row = _get_own_job(job_id, user)
+    rid = row.get("runner_job_id")
+    if not rid:
+        raise HTTPException(status_code=409, detail="Job is not deployed yet.")
+    from services import snapshots
+    res = snapshots.save_snapshot(job_id, rid)
+    if not res.get("saved"):
+        reason = res.get("reason") or "nothing to back up"
+        # "no data files" is a normal state for a bot that hasn't written
+        # anything yet — say so plainly instead of returning a scary error.
+        raise HTTPException(status_code=409, detail=f"No backup taken — {reason}.")
+    return res
+
+
+@router.post("/api/jobs/{job_id}/snapshot/restore")
+def restore_job_snapshot(job_id: int, authorization: Optional[str] = Header(None)):
+    """Force-restore the stored data over the live workspace, then restart.
+
+    Destructive on purpose (overwrite=True) — this is the "my bot wiped its own
+    database, put yesterday's copy back" button, so the caller means it.
+    """
+    user, _ = get_current_user_and_session(authorization)
+    row = _get_own_job(job_id, user)
+    rid = row.get("runner_job_id")
+    if not rid:
+        raise HTTPException(status_code=409, detail="Job is not deployed yet.")
+    from services import snapshots
+    if not snapshots.load_snapshot(job_id):
+        raise HTTPException(status_code=404, detail="No backup stored for this job.")
+    res = snapshots.restore_snapshot(job_id, rid, overwrite=True)
+    if not res.get("restored"):
+        raise HTTPException(status_code=502,
+                            detail=f"Restore failed — {res.get('reason') or 'unknown error'}.")
+    try:
+        runner_client._runner_http("POST", f"/internal/jobs/{rid}/restart")
+    except Exception as exc:
+        logger.warning("restart after restore failed (job %s): %s", job_id, exc)
+    return res
+
+
+@router.get("/api/jobs/{job_id}/download")
+def download_job_workspace(job_id: int, authorization: Optional[str] = Header(None)):
+    """Download the whole workspace (database + data files) as one .tar.gz.
+
+    Serves the live workspace when the runner can reach it, and falls back to
+    the last stored snapshot when it cannot — so a download still works after a
+    deploy has wiped the container, which is exactly when a user panics and
+    wants their data.
+    """
+    import base64 as _b64
+    from fastapi.responses import Response as _Response
+    user, _ = get_current_user_and_session(authorization)
+    row = _get_own_job(job_id, user)
+    rid = row.get("runner_job_id")
+    safe = re.sub(r"[^A-Za-z0-9_.-]+", "-", (row.get("name") or "job")).strip("-") or "job"
+
+    b64 = None
+    if rid:
+        try:
+            resp = runner_client._runner_http("GET", f"/internal/jobs/{rid}/snapshot")
+            if resp.status_code == 200:
+                data = resp.json()
+                if not data.get("empty"):
+                    b64 = data.get("tarball_b64")
+        except Exception as exc:
+            logger.info("live workspace unavailable for download (job %s): %s", job_id, exc)
+    if not b64:
+        from services import snapshots
+        snap = snapshots.load_snapshot(job_id)
+        if snap:
+            b64 = snap.get("tarball_b64")
+    if not b64:
+        raise HTTPException(status_code=404,
+                            detail="No data files yet — this job hasn't written a database.")
+    try:
+        raw = _b64.b64decode(b64)
+    except Exception:
+        raise HTTPException(status_code=500, detail="Stored backup is corrupt.")
+    return _Response(
+        content=raw,
+        media_type="application/gzip",
+        headers={"Content-Disposition": f'attachment; filename="{safe}-data.tar.gz"'},
+    )
+
+
 @router.post("/api/jobs/{job_id}/stop")
 def stop_job(job_id: int, authorization: Optional[str] = Header(None)):
     user, _ = get_current_user_and_session(authorization)
     row = _get_own_job(job_id, user)
     rid = row.get("runner_job_id")
     if rid:
+        # Snapshot while the files are still there. A stopped job is the most
+        # likely one to be sitting idle when the next deploy wipes the disk.
+        try:
+            from services import snapshots
+            snapshots.save_snapshot(job_id, rid)
+        except Exception as exc:
+            logger.warning("pre-stop snapshot failed for job %s: %s", job_id, exc)
         resp = runner_client._runner_http("POST", f"/internal/jobs/{rid}/stop")
         if resp.status_code not in (200, 404):
             raise HTTPException(status_code=502, detail="Runner refused to stop the job.")
@@ -597,10 +737,11 @@ def restart_job(job_id: int, request: Request, authorization: Optional[str] = He
             info = resp.json()
 
     if info is None:
-        # Cold-start fallback: runner was restarted and lost its in-memory
-        # job record. Create fresh; the workspace dir is keyed by the
-        # *runner's new* job id, so a newly-created bot db starts empty
-        # ( unavoidable without a persistent disk mapping).
+        # Cold-start fallback: the runner was rebuilt (a deploy) and lost both
+        # its in-memory record AND — on the free tier — the workspace itself.
+        # This is THE moment a referral bot used to lose its database.db, so we
+        # create the job, restore the last snapshot into the fresh empty dir,
+        # and only then let it run.
         resp = runner_client._runner_http("POST", "/internal/jobs", {
             "language": row["language"], "code": row["code"],
             "name": f"u{user['id']}-{row['name']}",
@@ -625,6 +766,7 @@ def restart_job(job_id: int, request: Request, authorization: Optional[str] = He
             conn.commit()
         finally:
             conn.close()
+        _restore_then_restart(job_id, info)
 
     info["job_db_id"] = job_id
     info.update(runner_client._job_web_fields(info))
@@ -680,6 +822,16 @@ def update_job(job_id: int, payload: JobUpdateRequest, request: Request, authori
     finally:
         conn.close()
 
+    # Back the workspace up BEFORE touching the running job. An edit is the
+    # most common moment to lose data (the runner may 404 below and force a
+    # cold start into an empty dir), so this is the cheapest place to make the
+    # data recoverable. Best-effort — a failed backup must not block the edit.
+    try:
+        from services import snapshots
+        snapshots.save_snapshot(job_id, rid)
+    except Exception as exc:
+        logger.warning("pre-update snapshot failed for job %s: %s", job_id, exc)
+
     # Forward to runner for in-place update (same dir, same slug, same port).
     patch_body = {"name": new_name, "language": new_lang, "code": new_code, "env": new_env}
     if new_repo:
@@ -710,6 +862,9 @@ def update_job(job_id: int, payload: JobUpdateRequest, request: Request, authori
             conn.commit()
         finally:
             conn.close()
+        # Same cold-start recovery as restart_job(): the new workspace is
+        # empty, so replay the snapshot we just took (or an older one).
+        info = _restore_then_restart(job_id, info)
     else:
         try:
             detail = resp.json().get("detail", "Runner rejected the update.")

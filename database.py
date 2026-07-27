@@ -573,6 +573,28 @@ _SCHEMA_TABLES = [
         FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
     )
     """,
+    """
+    -- RunSpace job workspace snapshots: tar+gzip+base64 of the DATA files a
+    -- bot writes into its own directory (database.db, session.json, data/…).
+    --
+    -- Why this exists: the runner keeps each job in JOBS_DATA_DIR/<runner_id>,
+    -- which survives Stop/Restart and code edits, but on Render's free tier
+    -- the container filesystem is REBUILT on every deploy. A referral bot's
+    -- points/history therefore vanished on redeploy unless a paid Persistent
+    -- Disk was mounted. Snapshotting to Postgres (which IS durable) closes
+    -- that gap on the free plan and doubles as the download source.
+    --
+    -- Keyed by the SITE job id (jobs.id), not the runner id: the runner id
+    -- changes whenever a job is recreated, the site id does not.
+    CREATE TABLE IF NOT EXISTS job_data_snapshots (
+        job_id INTEGER PRIMARY KEY,
+        tarball_b64 TEXT NOT NULL,
+        file_count INTEGER NOT NULL DEFAULT 0,
+        byte_size INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (job_id) REFERENCES jobs (id) ON DELETE CASCADE
+    )
+    """,
 ]
 
 

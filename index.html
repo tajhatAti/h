@@ -848,9 +848,20 @@
                   <div class="jd-acts">
                     <button class="jd-btn" id="jdDlSource" type="button" data-type="source"><span>Source code</span></button>
                     <button class="jd-btn" id="jdDlLogs" type="button" data-type="logs"><span>Logs</span></button>
-                    <button class="jd-btn" id="jdDlDb" type="button" data-type="db"><span>Database</span></button>
+                    <button class="jd-btn" id="jdDlDb" type="button" data-type="db"><span>Data files</span></button>
                   </div>
-                  <p class="jd-sub">Files are taken from the job's live workspace.</p>
+                  <p class="jd-sub">Data files download as one .tar.gz (database, sessions, everything the bot wrote).</p>
+                </section>
+
+                <!-- 6b · DATA BACKUP -->
+                <section class="jd-card">
+                  <h3 class="jd-h">Data backup</h3>
+                  <div class="jd-row"><span class="jd-k">Last backup</span><span class="jd-v" id="jdBackup">—</span></div>
+                  <div class="jd-acts">
+                    <button class="jd-btn" id="jdBackupNow" type="button"><span>Back up now</span></button>
+                    <button class="jd-btn" id="jdRestoreBackup" type="button"><span>Restore backup</span></button>
+                  </div>
+                  <p class="jd-sub">Your bot's database is copied to permanent storage automatically, so it survives a redeploy. Restore overwrites current data.</p>
                 </section>
 
                 <!-- 7 · RUN HISTORY -->

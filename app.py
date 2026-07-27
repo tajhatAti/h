@@ -71,6 +71,14 @@ async def startup_event():
         _start_pingbot()
     except Exception as e:  # noqa: BLE001
         logger.warning("Ping bot failed to start: %s", e)
+    # Periodically copy each job's data files (database.db, session.json, …)
+    # into Postgres. On Render's free tier the runner's filesystem is rebuilt
+    # on every deploy, so this is what makes a referral bot's points survive.
+    try:
+        from services.snapshots import start_sweeper as _start_sweeper
+        _start_sweeper()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Snapshot sweeper failed to start: %s", e)
 
 
 def _enable_embedded_runner() -> bool:

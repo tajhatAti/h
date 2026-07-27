@@ -20,13 +20,16 @@ The shared secret (RUNNER_SERVICE_SECRET) authenticates every request.
 """
 import os
 import re
+import io
 import json
+import base64
 import secrets
 import shutil
 import signal
 import socket
 import subprocess
 import sys
+import tarfile
 import tempfile
 import threading
 import time
@@ -967,6 +970,165 @@ def _save_manifest(j: dict) -> None:
         logger.warning("manifest save failed for %s: %s", j.get("id"), exc)
 
 
+# ---------------------------------------------------------------------------
+# WORKSPACE SNAPSHOTS  —  surviving a full redeploy
+# ---------------------------------------------------------------------------
+# A job's cwd (JOBS_DATA_DIR/<id>) already survives Stop / Restart / code edits,
+# because we only ever overwrite main.* and never delete the directory. What it
+# does NOT survive on Render's FREE tier is a deploy: the container filesystem
+# is rebuilt from the image, so a referral bot's database.db — its points and
+# history — disappeared. The documented answer was "mount a Persistent Disk",
+# which needs a paid plan.
+#
+# So the durable store we already have (Postgres, via the main site) becomes the
+# backup target. The runner only knows how to pack/unpack a workspace; the main
+# site owns the DB and drives the schedule. That split keeps the runner
+# stateless and lets this work in both embedded and two-service layouts.
+#
+# Only DATA is snapshotted. Code (main.*) comes from the jobs table, and
+# installed packages (pylibs/, node_modules/) are re-installable and huge, so
+# including them would blow the size cap for no benefit.
+SNAPSHOT_MAX_BYTES = int(os.getenv("SNAPSHOT_MAX_BYTES", str(24 * 1024 * 1024)))
+SNAPSHOT_SKIP_DIRS = {
+    "pylibs", "node_modules", "__pycache__", ".git", ".venv", "venv",
+    ".cache", ".npm", ".pip", ".local", "vendor", ".pytest_cache",
+}
+# main.* is rewritten from the jobs table on every deploy; job.json is rebuilt
+# by _spawn(). Restoring either would fight the code the user just saved.
+SNAPSHOT_SKIP_FILES = {_MANIFEST}
+SNAPSHOT_SKIP_EXT = {".pyc", ".pyo", ".log", ".sock", ".pid"}
+
+
+def _is_code_file(rel: str, j: Optional[dict] = None) -> bool:
+    """True for the entrypoint the site re-writes on every deploy."""
+    base = os.path.basename(rel)
+    if base.startswith("main.") and "/" not in rel.strip("/"):
+        return True
+    if j:
+        for key in ("file", "bin"):
+            p = j.get(key)
+            if p and os.path.basename(p) == base:
+                return True
+    return False
+
+
+def _snapshot_files(jdir: str, j: Optional[dict] = None) -> list:
+    """Relative paths of the DATA files worth preserving, smallest first."""
+    out = []
+    root = Path(jdir)
+    if not root.is_dir():
+        return out
+    for p in root.rglob("*"):
+        try:
+            if not p.is_file() or p.is_symlink():
+                continue
+            rel = str(p.relative_to(root)).replace(os.sep, "/")
+            parts = rel.split("/")
+            if any(part in SNAPSHOT_SKIP_DIRS for part in parts[:-1]):
+                continue
+            if parts[-1] in SNAPSHOT_SKIP_FILES:
+                continue
+            if os.path.splitext(rel)[1].lower() in SNAPSHOT_SKIP_EXT:
+                continue
+            if _is_code_file(rel, j):
+                continue
+            out.append((p.stat().st_size, rel))
+        except Exception:
+            continue
+    # Smallest first: if we hit the cap, a 20 MB cache never starves the 40 KB
+    # database.db that actually matters.
+    out.sort()
+    return [rel for _size, rel in out]
+
+
+def _pack_workspace(job_id: str) -> dict:
+    """tar.gz the job's data files -> base64. Returns {} when there's nothing."""
+    jdir = os.path.join(JOBS_DATA_DIR, job_id)
+    if not os.path.isdir(jdir):
+        return {}
+    j = _jobs.get(job_id)
+    rels = _snapshot_files(jdir, j)
+    if not rels:
+        return {}
+    buf = io.BytesIO()
+    packed = 0
+    with tarfile.open(fileobj=buf, mode="w:gz", compresslevel=6) as tf:
+        for rel in rels:
+            full = os.path.join(jdir, rel)
+            try:
+                if buf.tell() > SNAPSHOT_MAX_BYTES:
+                    logger.info("snapshot %s: hit %d byte cap after %d files",
+                                job_id, SNAPSHOT_MAX_BYTES, packed)
+                    break
+                tf.add(full, arcname=rel, recursive=False)
+                packed += 1
+            except Exception:
+                continue
+    raw = buf.getvalue()
+    if not packed or len(raw) > SNAPSHOT_MAX_BYTES:
+        return {}
+    return {
+        "tarball_b64": base64.b64encode(raw).decode("ascii"),
+        "file_count": packed,
+        "byte_size": len(raw),
+    }
+
+
+def _unpack_workspace(job_id: str, tarball_b64: str, overwrite: bool = False) -> dict:
+    """Restore a snapshot into the job dir.
+
+    overwrite=False (the default) is deliberate: a live workspace's file is
+    always fresher than the last snapshot, so restoring over it would ROLL BACK
+    a running bot. After a redeploy the directory is empty, so every file gets
+    written — which is exactly the case this feature exists for.
+    """
+    jdir = _job_dir(job_id)
+    written, skipped = 0, 0
+    try:
+        raw = base64.b64decode(tarball_b64)
+    except Exception:
+        raise HTTPException(400, detail="Snapshot is not valid base64.")
+    root = os.path.realpath(jdir)
+    with tarfile.open(fileobj=io.BytesIO(raw), mode="r:gz") as tf:
+        for m in tf.getmembers():
+            if not m.isfile():
+                continue
+            # Path traversal. NOTE: str.lstrip("./") strips every leading "."
+            # AND "/" character, so it silently turns "../../etc/pwned" into
+            # "etc/pwned" — a sanitiser that manufactures a valid-looking path
+            # out of a hostile one. Strip only the "./" prefix tar writes, then
+            # reject anything still absolute or containing a "..".
+            name = m.name
+            while name.startswith("./"):
+                name = name[2:]
+            if (not name or name.startswith("/") or name.startswith("../")
+                    or ".." in name.split("/")):
+                skipped += 1
+                continue
+            dest = os.path.realpath(os.path.join(root, name))
+            if not (dest == root or dest.startswith(root + os.sep)):
+                skipped += 1
+                continue
+            if _is_code_file(name) or os.path.basename(name) in SNAPSHOT_SKIP_FILES:
+                skipped += 1
+                continue
+            if os.path.exists(dest) and not overwrite:
+                skipped += 1
+                continue
+            try:
+                os.makedirs(os.path.dirname(dest), exist_ok=True)
+                src = tf.extractfile(m)
+                if src is None:
+                    continue
+                with open(dest, "wb") as fh:
+                    shutil.copyfileobj(src, fh)
+                written += 1
+            except Exception:
+                skipped += 1
+    logger.info("Restored snapshot into %s: %d written, %d skipped", jdir, written, skipped)
+    return {"restored": written, "skipped": skipped}
+
+
 def _pid_alive(pid: int, started_at: float) -> bool:
     """True if `pid` is running AND is plausibly our original child.
 
@@ -1523,6 +1685,44 @@ def job_update(job_id: str, req: JobUpdateRequest, authorization: Optional[str] 
     return _job_public(j)
 
 
+
+
+class SnapshotRestoreRequest(BaseModel):
+    tarball_b64: str
+    overwrite: bool = False
+
+
+@app.get("/internal/jobs/{job_id}/snapshot")
+def job_snapshot(job_id: str, authorization: Optional[str] = Header(None)):
+    """Pack this job's DATA files so the main site can store them in Postgres.
+
+    Works even when the job is stopped or was never adopted after a restart —
+    it reads the directory, not the in-memory record, because the whole point
+    is to save state that outlived the process.
+    """
+    _check_secret(authorization)
+    if not re.fullmatch(r"[0-9a-f]{6,32}", job_id or ""):
+        raise HTTPException(400, detail="Bad job id.")
+    jdir = os.path.join(JOBS_DATA_DIR, job_id)
+    if not os.path.isdir(jdir):
+        return {"empty": True, "reason": "no workspace"}
+    snap = _pack_workspace(job_id)
+    if not snap:
+        return {"empty": True, "reason": "no data files"}
+    snap["empty"] = False
+    return snap
+
+
+@app.post("/internal/jobs/{job_id}/snapshot/restore")
+def job_snapshot_restore(job_id: str, req: SnapshotRestoreRequest,
+                         authorization: Optional[str] = Header(None)):
+    """Unpack a snapshot into the job's workspace (used right after a deploy)."""
+    _check_secret(authorization)
+    if not re.fullmatch(r"[0-9a-f]{6,32}", job_id or ""):
+        raise HTTPException(400, detail="Bad job id.")
+    if not req.tarball_b64:
+        raise HTTPException(400, detail="Empty snapshot.")
+    return _unpack_workspace(job_id, req.tarball_b64, overwrite=req.overwrite)
 
 
 @app.post("/internal/jobs/{job_id}/restart")
