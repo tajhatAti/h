@@ -74,15 +74,26 @@ body {
 .eyebrow.center { display: block; text-align: center; margin-bottom: 16px; }
 
 /* ---------- Buttons ---------- */
+/* Buttons share ONE size system.
+   Previously .btn-primary had `border: none` while .btn-ghost added a 1px
+   border, and sizing came from padding alone — so a ghost button next to a
+   primary button rendered 2px taller and the pairs looked mismatched
+   everywhere (hero, nav, auth screens). Now every variant carries a
+   transparent 1px border, box-sizing:border-box and a fixed height, so they
+   line up exactly regardless of variant. */
 .btn-primary, .btn-secondary, .btn-ghost, .btn-danger {
   font-family: inherit;
   font-weight: 600;
-  border: none;
+  border: 1px solid transparent;
+  box-sizing: border-box;
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: transform .15s ease, box-shadow .2s, background .2s, opacity .2s;
-  padding: 11px 18px;
+  height: var(--btn-h, 42px);
+  padding: 0 18px;
   font-size: 14px;
+  line-height: 1;
+  white-space: nowrap;
   color: #fff;
   display: inline-flex;
   align-items: center;
@@ -97,8 +108,8 @@ body {
 .btn-ghost:hover { background: var(--surface-2); }
 .btn-danger { background: rgba(248,113,113,.12); border: 1px solid var(--error); color: var(--error); }
 .btn-danger:hover { background: var(--error); color: #fff; }
-.btn-primary.lg, .btn-ghost.lg { padding: 14px 24px; font-size: 15px; }
-.btn-primary.sm, .btn-ghost.sm, .btn-secondary.sm { padding: 9px 14px; font-size: 13px; }
+.btn-primary.lg, .btn-ghost.lg, .btn-secondary.lg { --btn-h: 50px; padding: 0 26px; font-size: 15px; }
+.btn-primary.sm, .btn-ghost.sm, .btn-secondary.sm { --btn-h: 34px; padding: 0 14px; font-size: 13px; }
 .btn-primary.block, .btn-secondary.block, .btn-ghost.block, .btn-danger.block { width: 100%; }
 .btn-primary.block { margin-top: 6px; }
 .btn-secondary.left, .btn-ghost.left { justify-content: flex-start; text-align: left; margin-bottom: 10px; }
@@ -1019,4 +1030,116 @@ html[data-theme="light"] .otp-boxes input { background: rgba(0,0,0,.04); }
   margin: 0; padding: 12px 14px; max-height: 320px; overflow: auto;
   font-family: var(--mono); font-size: 12px; line-height: 1.65;
   color: #e6edf3; white-space: pre-wrap; word-break: break-word;
+}
+
+/* ============================================================
+   SIGN-OUT TRANSITION
+   Sign-out used to be an instant jump-cut from the dashboard to the
+   landing page. Fade the app out, then fade the landing page in.
+   Only opacity/transform animate, so it stays GPU-composited.
+   ============================================================ */
+body.signing-out .dashboard {
+  opacity: 0;
+  transform: scale(.995);
+  transition: opacity .18s ease, transform .18s ease;
+  pointer-events: none;
+}
+@keyframes cnFadeUp {
+  from { opacity: 0; transform: translate3d(0, 8px, 0); }
+  to   { opacity: 1; transform: none; }
+}
+body.signed-out-in .nav,
+body.signed-out-in .hero { animation: cnFadeUp .4s cubic-bezier(.2,.7,.2,1) both; }
+body.signed-out-in .hero { animation-delay: .05s; }
+
+@media (prefers-reduced-motion: reduce) {
+  body.signing-out .dashboard { transition: none; }
+  body.signed-out-in .nav,
+  body.signed-out-in .hero { animation: none; }
+}
+
+/* ============================================================
+   LANDING PAGE — consistent control sizing
+   Paired buttons (Sign in / Get started, and the two hero CTAs) must
+   match exactly. Heights come from the shared --btn-h token above; the
+   rules here only align the groups themselves.
+   ============================================================ */
+.nav-cta { display: flex; align-items: center; gap: 10px; }
+.nav-cta .btn-primary,
+.nav-cta .btn-ghost { --btn-h: 38px; padding: 0 16px; font-size: 13.5px; }
+
+.hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.hero-actions .btn-primary,
+.hero-actions .btn-ghost { --btn-h: 50px; }
+
+.nav-sheet button { --btn-h: 42px; width: 100%; }
+
+@media (max-width: 560px) {
+  /* Stack the hero CTAs at equal width instead of leaving one stretched. */
+  .hero-actions { flex-direction: column; align-items: stretch; }
+  .hero-actions .btn-primary,
+  .hero-actions .btn-ghost { width: 100%; --btn-h: 48px; }
+}
+
+/* ============================================================
+   LANDING PAGE — minimal pass
+   Goal: fewer competing accents, one consistent rhythm, calmer
+   surfaces. Type scale is fluid so the 58px hero does not overwhelm
+   small screens (it previously only stepped down at one breakpoint).
+   ============================================================ */
+.hero-title {
+  font-size: clamp(34px, 6.2vw, 56px);
+  letter-spacing: -.02em;
+  line-height: 1.07;
+}
+.hero-sub {
+  font-size: clamp(15px, 1.6vw, 17.5px);
+  line-height: 1.65;
+  max-width: 34em;
+  margin: 18px 0 32px;
+}
+.section-head h2 {
+  font-size: clamp(26px, 3.6vw, 38px);
+  letter-spacing: -.018em;
+  line-height: 1.15;
+}
+.section-head p {
+  font-size: clamp(14px, 1.4vw, 16px);
+  line-height: 1.6;
+  max-width: 46em;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Cards: one flat surface, one hairline, a single quiet hover. No
+   competing shadows or gradients. */
+.sec-card {
+  padding: 20px;
+  border-radius: 12px;
+  transition: border-color .18s ease, background-color .18s ease;
+}
+.sec-card:hover { border-color: var(--border-strong); background: var(--surface-2); }
+.sec-card h4 {
+  display: flex; align-items: center; gap: 9px;
+  font-size: 14.5px; font-weight: 650; letter-spacing: -.01em;
+}
+.sec-card h4 .ic { width: 17px; height: 17px; opacity: .75; flex: 0 0 auto; }
+.sec-card p { font-size: 13.5px; line-height: 1.6; }
+
+/* The eyebrow is a label, not a headline — keep it understated. */
+.eyebrow { font-size: 11.5px; letter-spacing: .09em; opacity: .85; }
+
+/* Trust row reads as quiet supporting text. */
+.hero-trust { display: flex; flex-wrap: wrap; gap: 10px 20px; }
+.trust-item { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; }
+.trust-item .ic { width: 15px; height: 15px; opacity: .7; }
+
+/* Consistent vertical rhythm between sections. */
+.section { padding-block: clamp(56px, 8vw, 96px); }
+.section-head { margin-bottom: clamp(28px, 4vw, 44px); }
+
+@media (max-width: 560px) {
+  .hero-trust { gap: 8px 14px; }
+  .trust-item { font-size: 12.5px; }
+  .sec-card { padding: 16px; }
 }

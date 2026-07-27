@@ -2223,13 +2223,34 @@ document.addEventListener("DOMContentLoaded", () => {
   // Logout
   const btnLogoutEl = document.getElementById("btnLogout");
   if (btnLogoutEl) btnLogoutEl.addEventListener("click", async () => {
+    // Tear the dashboard down BEFORE leaving it. Without this, RunSpace body
+    // classes, the jobs poller and the log stream survived sign-out and the
+    // landing page rendered with leftover layout/scroll-lock state.
+    try { stopLogStream(); } catch (e) {}
+    try { stopJobPolling(); } catch (e) {}
+    try { if (typeof _jdOpen !== "undefined" && _jdOpen) closeJobDetails({ noUrl: true }); } catch (e) {}
+    document.body.classList.remove(
+      "rs-active", "rs-detail-open", "rs-drawer-open",
+      "rs-side-open", "rs-logs-open", "code-active", "term-kbd-up"
+    );
+
+    // Fade out, then swap screens on the next frame so the transition is seen.
+    document.body.classList.add("signing-out");
     try { await api("/logout", "POST", null, true); } catch (e) {}
     logEvent("info", "Signed out", "Session ended");
     authToken = null;
     localStorage.removeItem("ahad_token");
+    localStorage.removeItem("ahad_user");
     resetLocalActivity();   // next account on this device starts with a clean feed
-    toast("Logged out", "success");
-    showScreen("screen-landing");
+
+    setTimeout(() => {
+      showScreen("screen-landing");
+      try { history.replaceState({}, "", "/"); } catch (e) {}
+      document.body.classList.remove("signing-out");
+      document.body.classList.add("signed-out-in");
+      setTimeout(() => document.body.classList.remove("signed-out-in"), 420);
+      toast("Signed out", "success");
+    }, 180);
   });
 
   // Code IDE wiring
