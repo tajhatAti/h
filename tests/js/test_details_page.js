@@ -39,7 +39,8 @@ check("panel becomes visible when body has rs-detail-open",
 
 // ---- structure: one card per concern ---------------------------------
 const cards = [...panel.querySelectorAll(".jd-card h3")].map(h => h.textContent.trim().split("\n")[0].trim());
-check("has 7 separated sections", panel.querySelectorAll(".jd-card").length === 7,
+// 8 since the Data backup card was added alongside Download.
+check("has one card per concern", panel.querySelectorAll(".jd-card").length === 8,
   String(panel.querySelectorAll(".jd-card").length));
 for (const want of ["Status", "Controls", "Public URL", "Live logs",
                     "Environment variables", "Download", "Run history"]) {
@@ -133,8 +134,13 @@ check("z-index stays below toasts (9990) and modals (10000)",
   zm && Number(zm[1]) < 9990, zm && zm[1]);
 check("CodeNest dashboard bar hidden while open",
   /body\.rs-detail-open \.dash-bar[\s\S]{0,260}?display:\s*none/.test(css));
-check("RunSpace toolbar hidden while open",
-  /body\.rs-detail-open #tab-jobs \.rs-bar[\s\S]{0,200}?display:\s*none/.test(css));
+// The shell rebuild replaced .rs-bar + .rs-ed-bar with one .rs-head and a
+// .rs-meta strip. The BEHAVIOUR under test is unchanged: no RunSpace chrome
+// may remain visible behind the full-screen Details page.
+check("RunSpace header hidden while open",
+  /body\.rs-detail-open #tab-jobs \.rs-head[\s\S]{0,240}?display:\s*none/.test(css));
+check("RunSpace meta strip hidden while open",
+  /body\.rs-detail-open #tab-jobs \.rs-meta[\s\S]{0,240}?display:\s*none/.test(css));
 check("mobile bottom nav hidden while open",
   /body\.rs-detail-open \.bottom-nav[\s\S]{0,240}?display:\s*none/.test(css));
 check("job sidebar hidden while open",

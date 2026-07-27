@@ -3105,18 +3105,53 @@ function _reflectJobStatus(jobOrId) {
   // available for all saved jobs (stopped too — user may want to download/
   // inspect env/timeline even after stop).
   const detailsPrimary = isSelected && isLive && !_jobDirty;
+  // The rebuilt header hides controls with the `hidden` attribute (so they
+  // leave the segmented group cleanly) — but older call sites still set
+  // style.display. Drive BOTH, or a button set one way is un-hidden the other.
+  const _show = (el, on) => {
+    if (!el) return;
+    el.hidden = !on;
+    el.style.display = on ? "" : "none";
+  };
   if (btnRun) {
-    btnRun.style.display = detailsPrimary ? "none" : "";
+    _show(btnRun, !detailsPrimary);
     // Visual "dirty" marker when code has been edited since last Run
     btnRun.classList.toggle("dirty", !!_jobDirty && !!isSelected);
-    const lbl = btnRun.querySelector(".rs-btn-label");
+    const lbl = btnRun.querySelector(".rs-seg-label") || btnRun.querySelector(".rs-btn-label");
     if (lbl && !btnRun.classList.contains("loading")) {
       lbl.textContent = _jobDirty ? "Save & run" : "Run";
     }
   }
-  if (btnDet)  btnDet.style.display  = isSelected ? "" : "none";
-  if (btnStop) btnStop.style.display = isLive ? "" : "none";
-  if (btnRest) btnRest.style.display = isLive ? "" : "none";
+  _show(btnDet,  !!isSelected);
+  _show(btnStop, isLive);
+  _show(btnRest, isLive);
+  // The action group itself disappears when nothing is open, instead of
+  // leaving an empty bordered shell in the header.
+  const seg = document.getElementById("rsJobActions");
+  if (seg) seg.hidden = !(isSelected || !detailsPrimary);
+  const closeBtn = document.getElementById("btnDeselect");
+  _show(closeBtn, !!isSelected || !!_composingNew);
+
+  // Breadcrumb: "RunSpace / <job>" plus a readable state chip. The old header
+  // showed the literal string "RunSpace" forever — #rsTitle was never once
+  // written to by any code path, so the header never told you what was open.
+  const crumbSep = document.getElementById("rsCrumbSep");
+  const crumbCur = document.getElementById("rsTitle");
+  const headChip = document.getElementById("rsHeadState");
+  const openName = (job && job.name) || (_composingNew ? "new job" : "");
+  if (crumbCur && crumbSep) {
+    crumbCur.textContent = openName;
+    crumbCur.hidden = !openName;
+    crumbSep.hidden  = !openName;
+  }
+  if (headChip) {
+    const showChip = !!job && !!openName && !_composingNew;
+    headChip.hidden = !showChip;
+    if (showChip) {
+      headChip.textContent = st.label || stKey;
+      headChip.className = "rs-chip is-" + String(stKey || "").replace(/[^a-z]/g, "");
+    }
+  }
 
   const rs = document.getElementById("wbRunnerStat");
   if (rs) {
@@ -3550,13 +3585,46 @@ function _initWbWiring() {
     deselectBtn.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); deselectJob(); });
     deselectBtn.type = "button";
   }
-  if (menuBtn && backdrop) {
+  if (menuBtn) {
+    // The toggle used to only ever flip "rs-side-open", which does nothing on
+    // desktop because the rail is statically 250px there — a dead control in
+    // the primary toolbar. Now it means the right thing per breakpoint:
+    // desktop collapses the rail, mobile slides the drawer over.
+    const _isPhone = () => window.matchMedia("(max-width: 760px)").matches;
+    const _syncMenuBtn = () => {
+      const open = _isPhone()
+        ? document.body.classList.contains("rs-side-open")
+        : !document.body.classList.contains("rs-side-collapsed");
+      menuBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    };
     menuBtn.addEventListener("click", (e) => {
       e.stopPropagation(); e.preventDefault();
-      document.body.classList.toggle("rs-side-open");
+      document.body.classList.toggle(_isPhone() ? "rs-side-open" : "rs-side-collapsed");
+      _syncMenuBtn();
     });
-    backdrop.addEventListener("click", () => {
-      document.body.classList.remove("rs-side-open");
+    if (backdrop) {
+      backdrop.addEventListener("click", () => {
+        document.body.classList.remove("rs-side-open");
+        _syncMenuBtn();
+      });
+    }
+    // Crossing the breakpoint must not strand the drawer state.
+    window.addEventListener("resize", () => {
+      if (!_isPhone()) document.body.classList.remove("rs-side-open");
+      _syncMenuBtn();
+    });
+    _syncMenuBtn();
+  }
+  // Breadcrumb root returns to the job list (and, on a phone, opens it).
+  const crumbRoot = document.getElementById("rsCrumbRoot");
+  if (crumbRoot) {
+    crumbRoot.addEventListener("click", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      if (window.matchMedia("(max-width: 760px)").matches) {
+        document.body.classList.add("rs-side-open");
+      } else {
+        document.body.classList.remove("rs-side-collapsed");
+      }
     });
   }
 

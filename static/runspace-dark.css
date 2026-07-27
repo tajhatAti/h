@@ -76,7 +76,7 @@
 /* Sidebar slide-in when switching TO RunSpace */
 #tab-jobs.active .rs-side { animation: rsSlideIn .28s cubic-bezier(.2,.7,.2,1) both; animation-delay: 40ms; }
 #tab-jobs.active .rs-main { animation: rsFadeIn .28s cubic-bezier(.2,.7,.2,1) both; animation-delay: 80ms; }
-#tab-jobs.active .rs-bar  { animation: rsFadeIn .22s ease both; }
+#tab-jobs.active .rs-head { animation: rsFadeIn .22s ease both; }
 /* Jobs list staggers */
 #tab-jobs.active .job-item { animation: rsSlideIn .24s cubic-bezier(.2,.7,.2,1) both; }
 #tab-jobs.active .job-item:nth-child(1)  { animation-delay: 120ms; }
@@ -130,39 +130,74 @@ body.rs-active #tab-jobs { display: flex !important; flex: 1 1 auto !important; 
    focus rings, toast badges and disables compositor layers (causing scroll
    jank). Reset only the legacy elements that needed the old scoping. */
 
-/* ───────── Top bar ───────── */
-#tab-jobs .rs-bar {
-  flex: 0 0 42px !important;
-  height: 42px !important;
-  padding: 0 8px!important;
+/* ============================================================
+   APP HEADER  —  the single chrome bar
+   Before: .rs-bar (42px) stacked on .rs-ed-bar (44px, wrapping) =
+   86px+ of toolbar before a line of code. Now one 48px header owns
+   navigation + job actions; the editor keeps a quiet metadata strip.
+   ============================================================ */
+#tab-jobs .rs-head {
+  flex: 0 0 var(--rs-head-h) !important;
+  height: var(--rs-head-h) !important;
+  padding: 0 var(--s-2) !important;
   background: var(--bg-2) !important;
-  border-bottom: 1px solid var(--bg-3) !important;
+  border-bottom: 1px solid var(--line) !important;
   display: flex !important;
   align-items: center !important;
-  gap: 12px !important;
+  gap: var(--s-2) !important;
+  min-width: 0;
 }
-#tab-jobs .rs-title {
-  flex: 1;
-  font-size: var(--t-md) !important;
-  font-weight: 600 !important;
-  color: var(--fg-2) !important;
-  letter-spacing: .01em !important;
+
+/* Breadcrumb — GitHub's "where am I" pattern, replacing a static title. */
+#tab-jobs .rs-crumb {
+  display: flex; align-items: center; gap: 6px;
+  min-width: 0; flex: 1 1 auto;
+  font-size: var(--t-md);
 }
-#tab-jobs .rs-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
-#tab-jobs .rs-text-btn {
-  background: transparent; border: 1px solid var(--line-2);
-  color: var(--fg-2); font-size: var(--t-sm); padding: 4px 12px;
-  border-radius: var(--r-sm) !important; cursor: pointer; height: 28px;
-  display: inline-flex; align-items: center; justify-content: center;
-  gap: 6px; font-weight: 500; line-height: 1; white-space: nowrap;
-  flex-shrink: 0;
+#tab-jobs .rs-crumb-root {
+  background: none; border: 0; padding: 4px; margin-left: -4px;
+  color: var(--fg-3); font: inherit; cursor: pointer;
+  border-radius: var(--r-sm) !important; flex-shrink: 0;
 }
-#tab-jobs .rs-text-btn:hover { background: var(--bg-3); border-color: var(--fg-3); color: var(--fg); }
-#tab-jobs .rs-text-btn svg,
-#tab-jobs .rs-text-btn .rs-ic-sm {
-  display: inline-block !important; width: 13px !important; height: 13px !important;
-  flex-shrink: 0; overflow: visible; vertical-align: middle;
-  margin: 0; position: relative; top: 0;
+#tab-jobs .rs-crumb-root:hover { color: var(--fg); background: var(--bg-3); }
+#tab-jobs .rs-crumb-sep { color: var(--fg-3); flex-shrink: 0; }
+#tab-jobs .rs-crumb-cur {
+  color: var(--fg); font-weight: 600;
+  font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  min-width: 0;
+}
+#tab-jobs .rs-crumb-cur[hidden], #tab-jobs .rs-crumb-sep[hidden] { display: none; }
+
+/* Status chip next to the breadcrumb — state is text, not a mystery dot. */
+#tab-jobs .rs-chip {
+  flex-shrink: 0; margin-left: 2px;
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 20px; padding: 0 8px;
+  border-radius: var(--r-pill) !important;
+  border: 1px solid var(--line-2);
+  background: var(--bg);
+  color: var(--fg-3);
+  font-size: var(--t-xs); font-weight: 500; line-height: 1;
+  text-transform: capitalize;
+}
+#tab-jobs .rs-chip[hidden] { display: none; }
+#tab-jobs .rs-chip::before {
+  content: ""; width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor; flex-shrink: 0;
+}
+#tab-jobs .rs-chip.is-running  { color: var(--ok);     border-color: rgba(63,185,80,.4); }
+#tab-jobs .rs-chip.is-starting,
+#tab-jobs .rs-chip.is-installing { color: var(--warn); border-color: rgba(210,153,34,.4); }
+#tab-jobs .rs-chip.is-crashed  { color: var(--danger); border-color: rgba(248,81,73,.4); }
+
+#tab-jobs .rs-head-right {
+  display: flex; align-items: center; gap: 6px;
+  margin-left: auto; flex-shrink: 0;
+}
+#tab-jobs .rs-sep-v {
+  width: 1px; height: 18px; background: var(--line-2);
+  flex-shrink: 0; margin: 0 4px;
 }
 #tab-jobs .rs-status-dot {
   width: 8px; height: 8px; border-radius: 50% !important;
@@ -171,15 +206,66 @@ body.rs-active #tab-jobs { display: flex !important; flex: 1 1 auto !important; 
 #tab-jobs .rs-status-dot.ok { background: var(--ok); box-shadow: 0 0 0 2px rgba(63,185,80,.15) !important; }
 #tab-jobs .rs-status-dot.bad { background: var(--danger); }
 
-/* ───────── Shared button/input styles ───────── */
+/* ============================================================
+   BUTTON SYSTEM  —  three roles, no ambiguity
+   Before, five different jobs (import, details, stop, restart,
+   close) were five identical 28px squares distinguished only by a
+   title= tooltip, which does not exist on touch. Now:
+     .rs-ghost-btn  low-emphasis chrome (toggle, close, details)
+     .rs-seg        the job action group (Run / Restart / Stop)
+   ============================================================ */
+#tab-jobs .rs-ghost-btn {
+  background: transparent; border: 1px solid transparent;
+  color: var(--fg-3);
+  height: var(--rs-ctl-h); min-height: var(--rs-ctl-h);
+  padding: 0 var(--s-2);
+  border-radius: var(--r-sm) !important;
+  cursor: pointer; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  font: inherit; font-size: var(--t-sm); line-height: 1;
+}
+#tab-jobs .rs-ghost-btn.rs-sq { width: var(--rs-ctl-h); padding: 0; }
+#tab-jobs .rs-ghost-btn:hover { background: var(--bg-3); color: var(--fg); }
+#tab-jobs .rs-ghost-btn:active { background: var(--line-2); }
+#tab-jobs .rs-ghost-btn[hidden] { display: none; }
+
+/* Segmented action group: one bordered container, hairline dividers.
+   Related actions LOOK related — the core of the GitHub toolbar feel. */
+#tab-jobs .rs-seg {
+  display: inline-flex; align-items: stretch;
+  height: var(--rs-ctl-h);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm) !important;
+  background: var(--bg);
+  overflow: hidden; flex-shrink: 0;
+}
+#tab-jobs .rs-seg[hidden] { display: none; }
+#tab-jobs .rs-seg-btn {
+  background: transparent; border: 0; color: var(--fg-2);
+  padding: 0 12px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+  font: inherit; font-size: var(--t-sm); font-weight: 500; line-height: 1;
+  white-space: nowrap; position: relative;
+}
+#tab-jobs .rs-seg-btn + .rs-seg-btn { border-left: 1px solid var(--line-2); }
+#tab-jobs .rs-seg-btn:hover { background: var(--bg-3); color: var(--fg); }
+#tab-jobs .rs-seg-btn[hidden] { display: none; }
+#tab-jobs .rs-seg-btn:disabled { opacity: .5; cursor: not-allowed; }
+/* Run is the primary act of this screen, so it carries the only fill. */
+#tab-jobs #btnStartJob { color: var(--ok); font-weight: 600; }
+#tab-jobs #btnStartJob:hover { background: rgba(63,185,80,.12); color: var(--ok); }
+#tab-jobs .rs-seg-danger { color: var(--fg-3); }
+#tab-jobs .rs-seg-danger:hover { background: rgba(248,81,73,.12); color: var(--danger); }
+
+/* Legacy alias — older markup/JS still references .rs-icon-btn. */
 #tab-jobs .rs-icon-btn {
   background: transparent; border: none; color: var(--fg-3);
-  width: 28px; height: 28px; padding: 0;
+  width: var(--rs-ctl-h); height: var(--rs-ctl-h); padding: 0;
   border-radius: var(--r-sm) !important; cursor: pointer;
   display: grid; place-items: center; flex-shrink: 0;
 }
 #tab-jobs .rs-icon-btn:hover { background: var(--bg-3); color: var(--fg); }
-#tab-jobs .rs-icon-btn.rs-tb { width: 28px; height: 28px; }
+#tab-jobs .rs-icon-btn.rs-tb { width: var(--rs-ctl-h); height: var(--rs-ctl-h); }
 #tab-jobs .rs-ic, #tab-jobs .rs-ic-sm {
   display: block;
   flex-shrink: 0;
@@ -210,31 +296,25 @@ body.rs-active #tab-jobs { display: flex !important; flex: 1 1 auto !important; 
   transition: width .2s ease, flex-basis .2s ease;
 }
 #tab-jobs .rs-side-head {
-  flex: 0 0 30px; height: 30px;
-  padding: 0 12px;
-  display: flex; align-items: center; gap: 8px;
-  background: var(--bg-2);
-  border-bottom: 1px solid var(--bg-3);
+  flex: 0 0 var(--rs-head-h); height: var(--rs-head-h);
+  padding: 0 var(--s-2) 0 var(--s-3);
+  display: flex; align-items: center; gap: var(--s-2);
+  border-bottom: 1px solid var(--line);
 }
 #tab-jobs .rs-side-title {
-  font-size: var(--t-xs); font-weight: 700;
-  color: var(--fg-3); letter-spacing: .05em; text-transform: uppercase;
+  font-size: var(--t-sm); font-weight: 600;
+  color: var(--fg-2); letter-spacing: 0; text-transform: none;
 }
 #tab-jobs .rs-count {
   background: var(--bg-3); color: var(--fg-3);
-  font-size: var(--t-xs); padding: 1px 8px;
-  border-radius: var(--r-md) !important; font-weight: 600; margin-left: auto;
+  font-size: var(--t-xs); padding: 1px 8px; line-height: 16px;
+  border-radius: var(--r-pill) !important; font-weight: 500;
 }
-#tab-jobs .rs-new-btn {
-  flex: 0 0 30px; height: 30px;
-  padding: 0 12px;
-  background: transparent; border: none;
-  border-bottom: 1px solid var(--bg-3);
-  color: var(--ok); font-size: var(--t-sm); font-weight: 500;
-  cursor: pointer; display: flex; align-items: center; gap: 6px;
-  text-align: left;
-}
-#tab-jobs .rs-new-btn:hover { background: var(--bg-2); color: var(--ok); }
+/* "New job" is now a single + affordance in the panel header, not a
+   full-width bar. There used to be THREE ways to create a job (top bar
+   "+ New", sidebar "New job", empty-state "Create new job"); the
+   duplicate in the top bar is gone. */
+#tab-jobs .rs-side-new { margin-left: auto; }
 #tab-jobs .rs-list {
   flex: 1 1 auto; overflow-y: auto; padding: 4px 0;
 }
@@ -341,16 +421,6 @@ body.rs-active #tab-jobs { display: flex !important; flex: 1 1 auto !important; 
 
 /* ───────── Workspace ───────── */
 #tab-jobs .rs-ws { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
-/* Editor sub-toolbar */
-#tab-jobs .rs-ed-bar {
-  flex: 0 0 34px; height: 34px;
-  padding: 0 8px;
-  background: var(--bg-2);
-  border-bottom: 1px solid var(--bg-3);
-  display: flex; align-items: center; gap: 6px;
-}
-#tab-jobs .rs-ed-group { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
-#tab-jobs .rs-ed-actions { display: flex; gap: 2px; flex-shrink: 0; }
 #tab-jobs .rs-inp {
   height: 24px;
   background: var(--bg); border: 1px solid var(--line-2);
@@ -373,42 +443,30 @@ body.rs-active #tab-jobs { display: flex !important; flex: 1 1 auto !important; 
 #tab-jobs .rs-gh {
   flex: 1; min-width: 0; font-size: var(--t-sm) !important; color: var(--fg-3);
 }
-/* Primary Run button — green filled play icon + label */
-#tab-jobs .rs-run-btn {
-  position: relative;
-  display: inline-flex; align-items: center; gap: 6px;
-  height: 24px; padding: 0 8px;
-  background: var(--ok); color: #fff; border: 1px solid var(--ok);
-  border-radius: var(--r-sm) !important; cursor: pointer;
-  font-size: var(--t-sm); font-weight: 600; letter-spacing: .01em;
-  transition: background .12s ease;
-}
-#tab-jobs .rs-run-btn:hover { background: var(--ok); border-color: var(--ok); }
-#tab-jobs .rs-run-btn.loading,
-#tab-jobs .rs-run-btn:disabled { opacity: .75; pointer-events: none; }
-#tab-jobs .rs-run-btn .rs-btn-label { line-height: 1; }
-#tab-jobs .rs-run-btn .rs-run-ic { display: inline-flex; }
-#tab-jobs .rs-run-btn .rs-run-ic .rs-ic-sm { width: 9px; height: 9px; color: #fff; flex-shrink: 0; }
-#tab-jobs .rs-run-btn .rs-spin {
+/* ── Run button states ──────────────────────────────────────
+   The button itself now lives in the header's segmented group, so it
+   inherits its box from .rs-seg-btn. What stays here is BEHAVIOUR that
+   the rebuild must not silently drop: the loading spinner and the
+   "code edited since last deploy" marker. */
+#tab-jobs #btnStartJob { position: relative; }
+#tab-jobs #btnStartJob.loading,
+#tab-jobs #btnStartJob:disabled { opacity: .7; pointer-events: none; }
+#tab-jobs #btnStartJob .rs-spin {
   width: 12px; height: 12px; border-radius: 50% !important;
-  border: 2px solid rgba(255,255,255,.35);
-  border-top-color: #fff;
+  border: 2px solid rgba(63,185,80,.3);
+  border-top-color: var(--ok);
   animation: rsSpin .7s linear infinite;
-  flex-shrink: 0;
+  flex-shrink: 0; display: none;
 }
-#tab-jobs .rs-run-btn.loading .rs-run-ic { display: none; }
-#tab-jobs .rs-run-btn .rs-spin { display: none; }
-#tab-jobs .rs-run-btn.loading .rs-spin { display: block; }
-/* Dirty state: code changed since last deploy — Run gets a soft accent.
-   No bounce/glow, just a slightly thicker border + label text change via JS. */
-#tab-jobs .rs-run-btn.dirty {
-  background: var(--ok);
-  border-color: var(--ok);
+#tab-jobs #btnStartJob.loading .rs-ic-sm { display: none; }
+#tab-jobs #btnStartJob.loading .rs-spin { display: block; }
+/* Dirty: unsaved code. A left accent rule, not a colour swap — the label
+   also changes to "Save & run" in JS, so the state is stated in words. */
+#tab-jobs #btnStartJob.dirty {
+  background: rgba(63,185,80,.1);
+  box-shadow: inset 2px 0 0 var(--ok);
 }
-#tab-jobs .rs-run-btn.dirty:hover { background: var(--ok); }
-#tab-jobs #btnStopJob { color: var(--danger); }
-#tab-jobs #btnStopJob:hover { background: rgba(248,81,73,.12); color: var(--danger); }
-#tab-jobs #btnRestartJob { color: var(--warn); }
+#tab-jobs #btnRestartJob { color: var(--fg-3); }
 #tab-jobs #btnRestartJob:hover { background: rgba(210,153,34,.12); color: var(--warn); }
 #tab-jobs [data-rocket] .i-flame { opacity: 0; transition: opacity .18s ease; }
 #tab-jobs [data-rocket]:hover .i-flame,
@@ -497,29 +555,46 @@ body.rs-active #tab-jobs { display: flex !important; flex: 1 1 auto !important; 
 #tab-jobs .rs-log-body .log-warn { color: var(--warn); }
 #tab-jobs .rs-log-body .log-url { color: var(--accent); text-decoration: underline; }
 
-/* Mobile backdrop */
+/* Mobile backdrop — only ever visible when the drawer is open on a phone. */
 #tab-jobs .rs-menu-backdrop {
-  position: absolute; inset: 0; background: rgba(0,0,0,.5);
+  position: absolute; inset: 0; background: rgba(1,4,9,.6);
   z-index: 20; display: none;
 }
 body.rs-side-open #tab-jobs .rs-menu-backdrop { display: block; }
 
+/* ============================================================
+   DESKTOP: the toggle COLLAPSES the rail, it does not overlay.
+   Previously the hamburger was always rendered but on desktop the
+   sidebar was statically 250px, so the button toggled a class with
+   no visible effect — a dead control in the primary toolbar.
+   ============================================================ */
+@media (min-width: 761px) {
+  #tab-jobs .rs-menu-backdrop { display: none !important; }
+  body.rs-side-collapsed #tab-jobs .rs-side {
+    flex-basis: 0; width: 0; border-right-color: transparent;
+  }
+}
+
 /* ───────── MOBILE ───────── */
 @media (max-width: 760px) {
+  /* The drawer used to be 78vw — on a 412px phone that is 321px, burying
+     the editor under it. A 280px cap keeps the code visible behind it, so
+     you can see what you are switching away from. */
   #tab-jobs .rs-side {
-    position: absolute; top: 42px; bottom: 0; left: 0;
-    width: 0; flex-basis: 0; z-index: 30;
-    transition: width .2s ease, flex-basis .2s ease;
-    border-right: none;
+    position: absolute; top: var(--rs-head-h); bottom: 0; left: 0;
+    width: min(280px, 82vw); flex-basis: auto; z-index: 30;
+    transform: translateX(-100%);
+    transition: transform .18s cubic-bezier(.2,.7,.2,1);
+    border-right: 1px solid var(--line);
+    box-shadow: 8px 0 24px rgba(1,4,9,.5);
+    will-change: transform;
   }
-  body.rs-side-open #tab-jobs .rs-side {
-    width: 78vw; flex-basis: 78vw;
-    border-right: 1px solid var(--bg-3);
-  }
+  body.rs-side-open #tab-jobs .rs-side { transform: translateX(0); }
   #tab-jobs .rs-inp { min-width: 0; }
-  #tab-jobs .rs-gh { display: none; }
-  #tab-jobs .rs-bar { padding: 0 8px!important; gap: 6px !important; }
-  #tab-jobs .rs-ed-bar { padding: 0 4px; gap: 3px; }
+  #tab-jobs .rs-head { padding: 0 var(--s-1) 0 var(--s-2) !important; gap: 4px !important; }
+  /* Labels drop out of the action group; the icons stay. */
+  #tab-jobs .rs-seg-label { display: none; }
+  #tab-jobs .rs-seg-btn { padding: 0 12px; }
   /* Mobile: editor and logs share the split vertically; logs collapsed by default */
   #tab-jobs .rs-split { position: relative; }
   #tab-jobs .rs-divider { display: none; }
@@ -535,14 +610,9 @@ body.rs-side-open #tab-jobs .rs-menu-backdrop { display: block; }
   body.rs-logs-open #tab-jobs .rs-logs   { flex: 0 0 50% !important; height: 50% !important; }
   #tab-jobs .rs-log-body { font-size: var(--t-sm); padding: 8px 8px; }
   /* Tighten top bar for mobile */
-  #tab-jobs .rs-title { font-size: var(--t-sm); }
-  #tab-jobs .rs-text-btn { padding: 4px 8px; height: 24px; font-size: var(--t-sm); }
   #tab-jobs .job-item { padding: 4px 8px!important; padding-right: 26px !important; }
   /* Mobile: Run button icon-only to save space */
-  #tab-jobs .rs-run-btn { padding: 0 8px; }
-  #tab-jobs .rs-run-btn .rs-btn-label { display: none; }
-  #tab-jobs .rs-run-btn .rs-ic-sm { width: 10px; height: 10px; margin: 0; }
-}
+      }
 
 /* Small spin animation for buttons */
 @keyframes rsSpin { to { transform: rotate(360deg); } }
@@ -715,7 +785,8 @@ body.rs-drawer-open #tab-jobs .rs-side { touch-action: none; pointer-events: non
 #tab-jobs button,
 #tab-jobs a,
 #tab-jobs .rs-icon-btn,
-#tab-jobs .rs-text-btn,
+#tab-jobs .rs-ghost-btn,
+#tab-jobs .rs-seg-btn,
 #tab-jobs .rs-dl-item,
 #tab-jobs .job-item {
   touch-action: manipulation;
@@ -726,14 +797,12 @@ body.rs-drawer-open #tab-jobs .rs-side { touch-action: none; pointer-events: non
   /* Mobile: drawer takes the FULL viewport (covers top bar too) for a
      native-sheet feel. */
   /* iOS min 44px tap targets */
-  #tab-jobs .rs-icon-btn { width: 38px; height: 38px; }
+  #tab-jobs .rs-list .rs-icon-btn { width: 34px; height: 34px; }
   #tab-jobs .rs-card-acts .rs-icon-btn { width: 36px; height: 36px; }
-  #tab-jobs .rs-text-btn { height: 34px; min-height: 34px; padding: 0 12px; }
   #tab-jobs .rs-dl-wrap { height: 36px; }
   #tab-jobs .rs-dl-caret { width: 36px; }
   #tab-jobs .rs-env-row input { height: 34px; font-size: var(--t-lg); /* prevents iOS zoom */ }
   #tab-jobs .rs-inp { height: 30px; font-size: var(--t-lg); }
-  #tab-jobs .rs-run-btn { height: 30px; }
 }
 
 /* ───────── Skeleton shimmer (Vercel/Linear-style) ───────── */
@@ -934,7 +1003,8 @@ body.rs-detail-open #tab-jobs .jd {
    sidebar. This is what the page is "full screen" relative to. */
 body.rs-detail-open .dash-bar,
 body.rs-detail-open .bottom-nav,
-body.rs-detail-open #tab-jobs .rs-bar,
+body.rs-detail-open #tab-jobs .rs-head,
+body.rs-detail-open #tab-jobs .rs-meta,
 body.rs-detail-open #tab-jobs .rs-side {
   display: none !important;
 }
@@ -1093,102 +1163,122 @@ body.rs-detail-open #tab-jobs .rs-side {
 }
 
 /* ============================================================
-   RUNSPACE TOOLBAR — unified control sizing
-   The fields had drifted apart: inputs 24px tall, icon buttons 28px,
-   the language select in a different font/size, and the GitHub field
-   shrunk to 11.5px. Everything below is driven by ONE height token so
-   the row reads as a single, deliberate set of controls.
+   CONTROL SIZING + EDITOR META STRIP
+   One height token drives every control, so the header and the strip
+   below it share a rhythm instead of drifting apart.
    ============================================================ */
 #tab-jobs {
-  --rs-ctl-h: 30px;          /* single source of truth for control height */
-  --rs-ctl-r: 7px;           /* consistent corner radius */
+  --rs-head-h: 44px;         /* the single chrome bar            */
+  --rs-meta-h: 36px;         /* editor metadata strip            */
+  --rs-ctl-h:  28px;         /* every button / input / select    */
+  --rs-ctl-r:  6px;
   --rs-ctl-fs: 12.5px;
 }
 
-#tab-jobs .rs-ed-bar {
-  flex: 0 0 auto !important;
-  height: auto !important;
-  min-height: 44px;
-  padding: 8px 8px!important;
-  gap: 8px !important;
-  flex-wrap: wrap;
+/* ── Metadata strip ──────────────────────────────────────────
+   NEVER wraps. The old .rs-ed-bar had flex-wrap on both itself and
+   its inner group with height:auto, so once the fields outgrew the
+   width they jumped to a second and third row and the bar changed
+   height between renders. That reflow IS the "অগোছালো" feeling.
+   Fixed height + horizontal scroll: the row can get tight, but it
+   can never rearrange itself. */
+#tab-jobs .rs-meta {
+  flex: 0 0 var(--rs-meta-h) !important;
+  height: var(--rs-meta-h) !important;
+  display: flex; align-items: center;
+  gap: var(--s-2);
+  padding: 0 var(--s-2) !important;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+  flex-wrap: nowrap !important;
+  overflow-x: auto; overflow-y: hidden;
+  scrollbar-width: none;
 }
-#tab-jobs .rs-ed-group { gap: 8px !important; flex-wrap: wrap; }
-#tab-jobs .rs-ed-actions { gap: 6px !important; }
+#tab-jobs .rs-meta::-webkit-scrollbar { display: none; }
 
-/* Text inputs, select and buttons all share height, radius and font. */
 #tab-jobs .rs-inp,
-#tab-jobs .rs-sel,
-#tab-jobs .rs-run-btn,
-#tab-jobs .rs-ed-actions .rs-icon-btn,
-#tab-jobs .rs-ed-group .rs-icon-btn {
+#tab-jobs .rs-sel {
   height: var(--rs-ctl-h) !important;
   min-height: var(--rs-ctl-h);
   border-radius: var(--rs-ctl-r) !important;
   font-size: var(--rs-ctl-fs) !important;
   box-sizing: border-box;
+  flex-shrink: 0;
 }
 
-/* Job name: the primary field, so it gets the most room. */
+/* Job name reads as the file name it is: monospace, borderless until
+   you touch it. Chrome should be quiet; the code is the content. */
 #tab-jobs .rs-inp#jobName {
-  flex: 2 1 190px;
-  min-width: 150px;
-  padding: 0 12px!important;
-  font-weight: 550;
+  flex: 0 1 220px; min-width: 120px;
+  padding: 0 var(--s-2) !important;
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  color: var(--fg) !important;
+  font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace) !important;
+  font-weight: 600;
+}
+#tab-jobs .rs-inp#jobName:hover { background: var(--bg-2) !important; }
+#tab-jobs .rs-inp#jobName:focus {
+  background: var(--bg) !important;
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px rgba(56,139,253,.25) !important;
 }
 
-/* Language select: now visibly a control, matching the inputs. */
 #tab-jobs .rs-sel {
-  flex: 0 0 auto;
-  min-width: 106px;
-  padding: 0 8px!important;
-  background: var(--bg) !important;
+  min-width: 104px;
+  padding: 0 var(--s-2) !important;
+  background: var(--bg-2) !important;
   border: 1px solid var(--line-2) !important;
   color: var(--fg-2) !important;
-  font-family: inherit !important;
-  font-weight: 550;
-  text-transform: none !important;
-  letter-spacing: 0 !important;
+  font-family: inherit !important; font-weight: 500;
+  text-transform: none !important; letter-spacing: 0 !important;
 }
-#tab-jobs .rs-sel:hover { border-color: var(--fg-3) !important; background: var(--bg-2) !important; }
-#tab-jobs .rs-sel:focus { border-color: var(--accent) !important; box-shadow: 0 0 0 2px rgba(56,139,253,.2) !important; }
+#tab-jobs .rs-sel:hover { border-color: var(--fg-3) !important; }
+#tab-jobs .rs-sel:focus { border-color: var(--accent) !important; box-shadow: 0 0 0 2px rgba(56,139,253,.25) !important; }
 
-/* GitHub URL: same treatment as the other text field. */
-#tab-jobs .rs-gh {
-  flex: 2 1 210px;
-  min-width: 160px;
-  padding: 0 12px!important;
-  font-size: var(--rs-ctl-fs) !important;
+/* GitHub import: icon + field + action read as ONE composed control
+   rather than a loose input next to an unexplained square button. */
+#tab-jobs .rs-gh-wrap {
+  display: flex; align-items: center;
+  height: var(--rs-ctl-h);
+  flex: 1 1 240px; min-width: 150px;
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--rs-ctl-r) !important;
+  overflow: hidden;
+}
+#tab-jobs .rs-gh-wrap:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(56,139,253,.25);
+}
+#tab-jobs .rs-gh-ic {
+  display: grid; place-items: center;
+  width: 28px; height: 100%; flex-shrink: 0;
+  color: var(--fg-3);
+}
+#tab-jobs .rs-inp.rs-gh {
+  flex: 1 1 auto; min-width: 0;
+  height: 100% !important;
+  padding: 0 !important;
+  background: transparent !important;
+  border: 0 !important; border-radius: 0 !important;
+  box-shadow: none !important;
   color: var(--fg-2) !important;
   font-family: inherit !important;
+}
+#tab-jobs .rs-gh-wrap .rs-ghost-btn {
+  height: 100%; width: 30px; border-radius: 0 !important;
+  border-left: 1px solid var(--line-2);
 }
 #tab-jobs .rs-inp::placeholder { font-style: normal !important; color: var(--fg-3); }
 
-/* Square icon buttons that line up with the inputs. */
-#tab-jobs .rs-ed-actions .rs-icon-btn,
-#tab-jobs .rs-ed-group .rs-icon-btn,
-#tab-jobs .rs-ed-actions .rs-icon-btn.rs-tb,
-#tab-jobs .rs-ed-group .rs-icon-btn.rs-tb {
-  width: var(--rs-ctl-h) !important;
-  border: 1px solid var(--line-2);
-  background: var(--bg);
-}
-#tab-jobs .rs-ed-actions .rs-icon-btn:hover,
-#tab-jobs .rs-ed-group .rs-icon-btn:hover { background: var(--bg-3); border-color: var(--fg-3); }
-
-/* Run button: same height, a little more horizontal presence. */
-#tab-jobs .rs-run-btn {
-  padding: 0 16px!important;
-  font-weight: 600;
-  gap: 7px !important;
-}
-#tab-jobs .rs-run-btn .rs-run-ic .rs-ic-sm { width: 11px; height: 11px; }
-
 @media (max-width: 760px) {
-  #tab-jobs { --rs-ctl-h: 34px; }        /* comfortable tap targets */
-  #tab-jobs .rs-inp#jobName { flex: 1 1 100%; }
-  #tab-jobs .rs-gh { flex: 1 1 100%; }
-  #tab-jobs .rs-sel { flex: 1 1 auto; }
+  /* Taller controls for thumbs, but still ONE row each: 44 + 36 = 80px,
+     versus ~156px when the old bar wrapped to three rows at 412px. */
+  #tab-jobs { --rs-head-h: 44px; --rs-meta-h: 36px; --rs-ctl-h: 30px; }
+  /* Repo import is a desktop-scale task; the strip keeps name + runtime. */
+  #tab-jobs .rs-gh-wrap { display: none; }
+  #tab-jobs .rs-inp#jobName { flex: 1 1 auto; }
 }
 
 /* ============================================================

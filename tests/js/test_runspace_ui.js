@@ -37,22 +37,33 @@ check("no hardcoded ?v= is served", !/FileResponse\(INDEX_FILE\)/.test(appPy));
 check("HTML itself is sent no-cache", /Cache-Control": "no-cache, must-revalidate/.test(appPy));
 
 // ---- 3. one consistent control size ------------------------------------
-check("a single height token drives the toolbar", /--rs-ctl-h:\s*\d+px/.test(css));
-const shared = css.match(/#tab-jobs \.rs-inp,\s*\n#tab-jobs \.rs-sel,\s*\n#tab-jobs \.rs-run-btn[\s\S]{0,400}?\}/);
-check("inputs, select and buttons share one rule", !!shared);
+// The shell was rebuilt: Run/Stop/Restart/Details/Close moved out of a second
+// wrapping toolbar into the header's segmented group, and what remains beside
+// the editor is a fixed-height metadata strip. The INTENT of this section is
+// unchanged — every control derives from one height token — so the assertions
+// now target the surviving elements instead of the deleted .rs-ed-bar.
+check("a single height token drives the controls", /--rs-ctl-h:\s*\d+px/.test(css));
+const shared = css.match(/#tab-jobs \.rs-inp,\s*\n#tab-jobs \.rs-sel \{[\s\S]{0,400}?\}/);
+check("inputs and select share one rule", !!shared);
 check("shared rule sets height from the token",
   shared && /height:\s*var\(--rs-ctl-h\)/.test(shared[0]));
 check("shared rule sets one radius", shared && /border-radius:\s*var\(--rs-ctl-r\)/.test(shared[0]));
 check("shared rule sets one font-size", shared && /font-size:\s*var\(--rs-ctl-fs\)/.test(shared[0]));
 check("language select no longer uses a different font",
   /#tab-jobs \.rs-sel \{[^}]*font-family:\s*inherit/.test(css));
-check("GitHub field matches the other inputs",
-  /#tab-jobs \.rs-gh \{[^}]*font-size:\s*var\(--rs-ctl-fs\)/.test(css));
-check("icon buttons are square to the same token",
-  /width:\s*var\(--rs-ctl-h\)\s*!important/.test(css));
+check("ghost buttons use the same height token",
+  /#tab-jobs \.rs-ghost-btn \{[^}]*height:\s*var\(--rs-ctl-h\)/.test(css));
+check("segmented group uses the same height token",
+  /#tab-jobs \.rs-seg \{[^}]*height:\s*var\(--rs-ctl-h\)/.test(css));
 check("bigger tap targets on mobile",
-  /@media \(max-width: 760px\) \{\s*\n\s*#tab-jobs \{ --rs-ctl-h: 34px/.test(css));
-check("toolbar wraps instead of overflowing", /#tab-jobs \.rs-ed-bar \{[^}]*flex-wrap:\s*wrap/.test(css));
+  /@media \(max-width: 760px\) \{[\s\S]{0,400}?--rs-ctl-h:\s*(3[0-9])px/.test(css));
+// The old bar WRAPPED, which is exactly why it looked disorganised: at 412px
+// it broke into ~3 rows and changed height between renders. The replacement
+// must scroll, never rearrange.
+check("meta strip never wraps",
+  /#tab-jobs \.rs-meta \{[^}]*flex-wrap:\s*nowrap/.test(css));
+check("meta strip scrolls when tight",
+  /#tab-jobs \.rs-meta \{[^}]*overflow-x:\s*auto/.test(css));
 
 // ---- 4. clean full-screen ----------------------------------------------
 check("bottom nav hidden on RunSpace",

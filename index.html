@@ -596,29 +596,68 @@
 
       <div class="rs-menu-backdrop" id="wbBackdrop"></div>
 
-      <!-- TOP THIN TOOLBAR -->
-      <div class="rs-bar">
-        <button type="button" class="rs-icon-btn" id="wbMenuBtn" aria-label="Toggle file panel">
-          <svg viewBox="0 0 24" class="rs-ic" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      <!-- ============================================================
+           SINGLE APP HEADER  (GitHub/Codespaces model)
+           There used to be TWO stacked bars: a 42px chrome bar and a
+           44px+ editor bar that wrapped onto extra rows. 86px+ of a
+           phone screen was toolbar. Now there is ONE header: sidebar
+           toggle, breadcrumb identity, and the action group.
+           ============================================================ -->
+      <header class="rs-head">
+        <button type="button" class="rs-ghost-btn rs-sq" id="wbMenuBtn"
+                aria-label="Toggle file panel" aria-expanded="true" aria-controls="wbSide">
+          <svg viewBox="0 0 16 16" class="rs-ic" fill="currentColor" aria-hidden="true"><path d="M2 3.75A.75.75 0 0 1 2.75 3h10.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 3.75Zm0 4A.75.75 0 0 1 2.75 7h10.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 7.75Zm0 4a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1-.75-.75Z"/></svg>
         </button>
-        <div class="rs-title" id="rsTitle">RunSpace</div>
-        <div class="rs-actions">
-          <button class="rs-text-btn" id="btnNew2">+ New</button>
-          <span class="rs-status-dot" id="wbRunnerStat" title="runner status"></span>
+
+        <!-- Breadcrumb: RunSpace / <job>  — tells you where you are -->
+        <nav class="rs-crumb" aria-label="Breadcrumb">
+          <button type="button" class="rs-crumb-root" id="rsCrumbRoot">RunSpace</button>
+          <span class="rs-crumb-sep" id="rsCrumbSep" hidden>/</span>
+          <span class="rs-crumb-cur" id="rsTitle" hidden></span>
+          <span class="rs-chip" id="rsHeadState" hidden></span>
+        </nav>
+
+        <div class="rs-head-right">
+          <!-- Job actions live in ONE segmented group so related controls
+               read as related, instead of five identical loose squares. -->
+          <div class="rs-seg" id="rsJobActions" hidden>
+            <button class="rs-seg-btn" id="btnStartJob" title="Run &amp; deploy (Ctrl+Enter)">
+              <svg viewBox="0 0 16 16" class="rs-ic-sm" fill="currentColor" aria-hidden="true"><path d="M4.5 3.3v9.4c0 .3.3.5.6.3l7.4-4.7a.4.4 0 0 0 0-.6L5.1 3a.4.4 0 0 0-.6.3Z"/></svg>
+              <span class="rs-seg-label">Run</span>
+              <span class="rs-spin" aria-hidden="true"></span>
+            </button>
+            <button class="rs-seg-btn" id="btnRestartJob" title="Restart" hidden>
+              <svg viewBox="0 0 16 16" class="rs-ic-sm" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 8a6 6 0 0 1 10-4.4L14 5"/><path d="M14 2v3.5h-3.5"/><path d="M14 8a6 6 0 0 1-10 4.4L2 11"/><path d="M2 14v-3.5h3.5"/></svg>
+              <span class="rs-seg-label">Restart</span>
+            </button>
+            <button class="rs-seg-btn rs-seg-danger" id="btnStopJob" title="Stop" hidden>
+              <svg viewBox="0 0 16 16" class="rs-ic-sm" fill="currentColor" aria-hidden="true"><rect x="4" y="4" width="8" height="8" rx="1.2"/></svg>
+              <span class="rs-seg-label">Stop</span>
+            </button>
+          </div>
+
+          <button class="rs-ghost-btn rs-sq" id="btnJobDetails" title="Job details" hidden>
+            <svg viewBox="0 0 16 16" class="rs-ic-sm" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="6.2"/><path d="M8 5.2v3.4l2 1.3"/></svg>
+          </button>
+          <button class="rs-ghost-btn rs-sq" id="btnDeselect" title="Close job" hidden>
+            <svg viewBox="0 0 16 16" class="rs-ic-sm" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 4 4 12"/><path d="m4 4 8 8"/></svg>
+          </button>
+
+          <span class="rs-sep-v" aria-hidden="true"></span>
+          <span class="rs-status-dot" id="wbRunnerStat" title="Runner status"></span>
         </div>
-      </div>
+      </header>
 
       <div class="rs-body">
-        <!-- LEFT SIDEBAR: file list -->
+        <!-- LEFT SIDEBAR: job list -->
         <aside class="rs-side" id="wbSide">
           <div class="rs-side-head">
-            <span class="rs-side-title">FILES</span>
+            <span class="rs-side-title">Jobs</span>
             <span class="rs-count" id="txJobCount">0</span>
+            <button type="button" class="rs-ghost-btn rs-sq rs-side-new" id="btnNew" title="New job (Ctrl+N)" aria-label="New job">
+              <svg viewBox="0 0 16 16" class="rs-ic-sm" fill="currentColor" aria-hidden="true"><path d="M7.25 2.75a.75.75 0 0 1 1.5 0v4.5h4.5a.75.75 0 0 1 0 1.5h-4.5v4.5a.75.75 0 0 1-1.5 0v-4.5h-4.5a.75.75 0 0 1 0-1.5h4.5v-4.5Z"/></svg>
+            </button>
           </div>
-          <button type="button" class="rs-new-btn" id="btnNew" title="New job (Ctrl+N)">
-            <svg viewBox="0 0 24" class="rs-ic-sm" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-            New job
-          </button>
           <div class="rs-list" id="jobsList"></div>
         </aside>
 
@@ -657,41 +696,33 @@
 
           <!-- Active workspace -->
           <div class="rs-ws" id="wbWorkspace" style="display:none">
-            <!-- Editor sub-toolbar: name/lang/import + run/save/stop -->
-            <div class="rs-ed-bar">
-              <div class="rs-ed-group">
-                <input class="rs-inp" id="jobName" type="text" placeholder="job name" maxlength="60" spellcheck="false" autocomplete="off">
-                <select class="rs-sel" id="jobLang" title="Runtime">
-                  <option value="python">Python</option>
-                  <option value="javascript">Node.js</option>
-                  <option value="bash">Bash</option>
-                  <option value="ruby">Ruby</option>
-                  <option value="php">PHP</option>
-                </select>
-                <input class="rs-inp rs-gh" id="jobRepoUrl" type="url" placeholder="GitHub repo URL (optional)" spellcheck="false" autocomplete="off">
-                <button class="rs-icon-btn rs-tb" id="btnImportGh" title="Import from GitHub">
-                  <svg viewBox="0 0 24 24" class="rs-ic-sm" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.73.5.5 5.73.5 12a11.5 11.5 0 0 0 7.86 10.92c.58.11.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.7-3.88-1.54-3.88-1.54-.52-1.33-1.28-1.68-1.28-1.68-1.05-.72.08-.71.08-.71 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.7 0-1.26.45-2.29 1.18-3.1-.12-.29-.51-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.78 0c2.21-1.49 3.18-1.18 3.18-1.18.63 1.59.24 2.76.12 3.05.74.81 1.18 1.84 1.18 3.1 0 4.42-2.69 5.41-5.25 5.69.41.35.78 1.05.78 2.12 0 1.53-.01 2.76-.01 3.14 0 .31.21.68.8.56A11.5 11.5 0 0 0 23.5 12C23.5 5.73 18.27.5 12 .5z"/></svg>
-                </button>
-              </div>
-              <div class="rs-ed-actions">
-                <button class="rs-run-btn" id="btnStartJob" title="Run & deploy (Ctrl+Enter)">
-                  <span class="rs-run-ic">
-                    <svg viewBox="0 0 24 24" class="rs-ic-sm" fill="currentColor" stroke="none" aria-hidden="true"><polygon points="7,5 19,12 7,19"/></svg>
-                  </span>
-                  <span class="rs-spin" aria-hidden="true"></span>
-                  <span class="rs-btn-label">Run</span>
-                </button>
-                <button class="rs-icon-btn rs-tb" id="btnJobDetails" title="View job details" style="display:none">
-                  <svg viewBox="0 0 24 24" class="rs-ic-sm" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>
-                </button>
-                <button class="rs-icon-btn rs-tb" id="btnStopJob" title="Stop job" style="display:none">
-                  <svg viewBox="0 0 24 24" class="rs-ic-sm" fill="currentColor" stroke="none" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>
-                </button>
-                <button class="rs-icon-btn rs-tb" id="btnRestartJob" title="Restart job" style="display:none">
-                  <svg viewBox="0 0 24 24" class="rs-ic-sm" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>
-                </button>
-                <button class="rs-icon-btn rs-tb" id="btnDeselect" title="Close job">
-                  <svg viewBox="0 0 24 24" class="rs-ic-sm" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            <!-- ========================================================
+                 EDITOR META STRIP
+                 This used to be a second toolbar that competed with the
+                 header AND wrapped onto extra rows (flex-wrap on both the
+                 bar and its group), so controls physically moved between
+                 renders. Run/Stop/Restart/Details/Close moved up into the
+                 header's segmented group. What is left is job METADATA —
+                 one row, never wrapping, horizontally scrollable if narrow.
+                 ======================================================== -->
+            <div class="rs-meta">
+              <input class="rs-inp" id="jobName" type="text" placeholder="Untitled job" maxlength="60" spellcheck="false" autocomplete="off" aria-label="Job name">
+              <span class="rs-sep-v" aria-hidden="true"></span>
+              <select class="rs-sel" id="jobLang" aria-label="Runtime">
+                <option value="python">Python</option>
+                <option value="javascript">Node.js</option>
+                <option value="bash">Bash</option>
+                <option value="ruby">Ruby</option>
+                <option value="php">PHP</option>
+              </select>
+              <span class="rs-sep-v" aria-hidden="true"></span>
+              <div class="rs-gh-wrap">
+                <span class="rs-gh-ic" aria-hidden="true">
+                  <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+                </span>
+                <input class="rs-inp rs-gh" id="jobRepoUrl" type="url" placeholder="Import from a GitHub repo…" spellcheck="false" autocomplete="off" aria-label="GitHub repository URL">
+                <button class="rs-ghost-btn rs-sq" id="btnImportGh" title="Import repository" aria-label="Import repository">
+                  <svg viewBox="0 0 16 16" class="rs-ic-sm" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v8"/><path d="m4.5 7 3.5 3.5L11.5 7"/><path d="M2.5 13.5h11"/></svg>
                 </button>
               </div>
             </div>
