@@ -349,9 +349,10 @@ function _serverDown() {
     b.id = "netBanner";
     b.className = "net-banner";
     document.body.appendChild(b);
-    b.addEventListener("click", () => window.location.reload());
+    // NO click-to-reload. A reload throws away unsaved editor state, which is
+    // never an acceptable response to a connection blip.
   }
-  b.innerHTML = `${ic("refresh")}<span>Waking up your RunSpace... this can take up to a minute on the free tier. Please wait...</span>`;
+  b.innerHTML = `${ic("refresh")}<span>Reconnecting…</span>`;
   requestAnimationFrame(() => b.classList.add("show"));
 }
 function _serverUp() {
@@ -2203,10 +2204,10 @@ function _fatalOverlay(message) {
     '<div class="fatal-card">' +
       '<div class="fatal-ic">' + ic("alert") + '</div>' +
       '<h1>Something went wrong</h1>' +
-      '<p>The app hit an unexpected error while starting up. Reloading usually fixes it.</p>' +
+      '<p>The app hit an unexpected error while starting up.</p>' +
       (message ? '<code>' + escapeHtml(String(message).slice(0, 200)) + '</code>' : '') +
-      '<div class="fatal-btns"><button class="btn-primary" onclick="window.location.reload()">Reload</button>' +
-      '<button class="btn-ghost" onclick="document.getElementById(\'fatalOverlay\').remove()">Keep trying</button></div>' +
+      '<div class="fatal-btns">' +
+      '<button class="btn-primary" onclick="document.getElementById(\'fatalOverlay\').remove()">Dismiss</button></div>' +
     '</div>';
   document.body.appendChild(div);
 }
@@ -2700,7 +2701,14 @@ function _setJobsStatus(status) {
     if (s) s.textContent = "Create your first 24/7 bot or service — it goes live in seconds.";
     if (list) list.innerHTML = '<div class="rs-empty-sm" style="padding:16px 12px;text-align:center">No saved jobs yet.</div>';
   } else if (status === "error") {
-    ws.style.display = "none";
+    // NEVER hide the workspace here. A failed background refresh used to set
+    // ws.style.display="none", which tore the open editor (and everything
+    // typed into it) off the screen. Connectivity problems must not touch
+    // editor state at all — only the sidebar may show the failure.
+    if (ws && ws.style.display !== "none") {
+      if (boot) boot.style.display = "none";
+      return;
+    }
     if (boot) boot.style.display = "none";
     emp.style.display = "";
     if (btnNewEmpty) btnNewEmpty.style.display = "";
@@ -2782,6 +2790,10 @@ async function loadJobs() {
       if (!hasPrior && list) list.innerHTML = _skel(3);
       return;
     }
+    // A background refresh failing must not disturb open work. Polling
+    // already retries on its own; showing an error box here would replace the
+    // sidebar and (previously) hide the editor with it.
+    if (_composingNew || _jobDirty || _selectedJobId) return;
     const sig = "ERR:" + e.message;
     if (sig === _lastJobsSig) return;
     _lastJobsSig = sig;
