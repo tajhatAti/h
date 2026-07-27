@@ -55,7 +55,7 @@ check("running dot pulses on a ~1.8s cycle",
 check("pulse animates opacity/transform only",
   /@keyframes rsStatusPulse \{[^}]*opacity[\s\S]{0,120}transform: scale/.test(css));
 check("'checking' is visually distinct from stopped",
-  /\.jstatus-dot\.checking,[\s\S]{0,140}background: #d29922/.test(css));
+  /\.jstatus-dot\.checking,[\s\S]{0,160}background: var\(--warn\)/.test(css));
 check("label cross-fades when the status changes",
   /_reflectJobStatus\._last !== st\.label/.test(js) &&
   /classList\.add\("status-changed"\)/.test(js));

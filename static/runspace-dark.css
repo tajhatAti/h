@@ -4,6 +4,64 @@
    Scoped under #tab-jobs.
    ============================================================ */
 
+/* ============================================================
+   DESIGN TOKENS
+   ------------------------------------------------------------
+   Minimal does not mean "fewer elements" — it means fewer KINDS
+   of thing. GitHub looks calm despite dense information because
+   every surface, size and radius comes from one small scale, so
+   the eye learns the pattern instantly.
+
+   This file previously used 12 font sizes (9.5 / 10 / 10.5 / 11 /
+   11.5 / 12 / 12.5 / 13 / 13.5 / 14 / 15 / 16), 7 radii and 25
+   colours — near-identical values that never quite line up, which
+   is what reads as "messy". Everything below now derives from
+   these tokens.
+   ============================================================ */
+#tab-jobs {
+  /* Surfaces — 3 depths, nothing in between */
+  --bg:        #0d1117;   /* canvas              */
+  --bg-2:      #161b22;   /* raised: bars, cards */
+  --bg-3:      #21262d;   /* hover / pressed     */
+  --bg-sunken: #010409;   /* log console         */
+
+  /* Borders — one hairline, one emphasis */
+  --line:      #21262d;
+  --line-2:    #30363d;
+
+  /* Text — 3 levels only */
+  --fg:        #e6edf3;   /* primary */
+  --fg-2:      #c9d1d9;   /* body    */
+  --fg-3:      #7d8590;   /* muted   */
+
+  /* Accents — ONE brand accent; the rest are pure status signals */
+  --accent:    #58a6ff;   /* interactive / focus   */
+  --ok:        #3fb950;   /* running               */
+  --warn:      #d29922;   /* starting / checking   */
+  --danger:    #f85149;   /* crashed / destructive */
+
+  /* Type scale — 4 steps */
+  --t-xs:  11px;   /* labels, meta      */
+  --t-sm:  12px;   /* secondary UI      */
+  --t-md:  13px;   /* body / default    */
+  --t-lg:  15px;   /* headings          */
+
+  /* Radius — 2 steps + pill */
+  --r-sm:  6px;
+  --r-md:  10px;
+  --r-pill: 999px;
+
+  /* Spacing — 4px grid */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+
+  /* Motion — one duration, one curve */
+  --dur: .15s;
+  --ease: cubic-bezier(.2, .7, .2, 1);
+}
+
 /* Tab switch animation for RunSpace specifically — dash-tab-content.active
    sets display:block but we need flex; so opt into the same keyframes. */
 @keyframes rsTabIn {
@@ -31,7 +89,7 @@
 #tab-jobs.active .rs-empty { animation: rsFadeIn .32s ease both; animation-delay: 100ms; }
 
 body.rs-active .dash-main {
-  padding: 0 !important;
+  padding: 0!important;
   overflow: hidden !important;
   display: flex !important;
   flex-direction: column !important;
@@ -39,19 +97,19 @@ body.rs-active .dash-main {
 body.rs-active .dash-tab-content:not(#tab-jobs):not(.term-page) { display: none !important; }
 
 #tab-jobs {
-  background: #0d1117 !important;
-  color: #c9d1d9 !important;
+  background: var(--bg) !important;
+  color: var(--fg-2) !important;
   display: none !important;
   flex-direction: column !important;
   height: 100% !important;
   overflow: hidden !important;
-  padding: 0 !important;
-  margin: 0 !important;
+  padding: 0!important;
+  margin: 0!important;
   max-width: none !important;
   width: 100% !important;
   border-radius: 0 !important;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif !important;
-  font-size: 13px !important;
+  font-size: var(--t-md) !important;
   line-height: 1.4 !important;
   box-sizing: border-box !important;
   /* Smooth scrolling — GPU-composited, no jank */
@@ -76,30 +134,30 @@ body.rs-active #tab-jobs { display: flex !important; flex: 1 1 auto !important; 
 #tab-jobs .rs-bar {
   flex: 0 0 42px !important;
   height: 42px !important;
-  padding: 0 10px !important;
-  background: #161b22 !important;
-  border-bottom: 1px solid #21262d !important;
+  padding: 0 8px!important;
+  background: var(--bg-2) !important;
+  border-bottom: 1px solid var(--bg-3) !important;
   display: flex !important;
   align-items: center !important;
   gap: 12px !important;
 }
 #tab-jobs .rs-title {
   flex: 1;
-  font-size: 13px !important;
+  font-size: var(--t-md) !important;
   font-weight: 600 !important;
-  color: #c9d1d9 !important;
+  color: var(--fg-2) !important;
   letter-spacing: .01em !important;
 }
 #tab-jobs .rs-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 #tab-jobs .rs-text-btn {
-  background: transparent; border: 1px solid #30363d;
-  color: #c9d1d9; font-size: 12px; padding: 5px 11px;
-  border-radius: 6px !important; cursor: pointer; height: 28px;
+  background: transparent; border: 1px solid var(--line-2);
+  color: var(--fg-2); font-size: var(--t-sm); padding: 4px 12px;
+  border-radius: var(--r-sm) !important; cursor: pointer; height: 28px;
   display: inline-flex; align-items: center; justify-content: center;
   gap: 6px; font-weight: 500; line-height: 1; white-space: nowrap;
   flex-shrink: 0;
 }
-#tab-jobs .rs-text-btn:hover { background: #21262d; border-color: #484f58; color: #e6edf3; }
+#tab-jobs .rs-text-btn:hover { background: var(--bg-3); border-color: var(--fg-3); color: var(--fg); }
 #tab-jobs .rs-text-btn svg,
 #tab-jobs .rs-text-btn .rs-ic-sm {
   display: inline-block !important; width: 13px !important; height: 13px !important;
@@ -108,19 +166,19 @@ body.rs-active #tab-jobs { display: flex !important; flex: 1 1 auto !important; 
 }
 #tab-jobs .rs-status-dot {
   width: 8px; height: 8px; border-radius: 50% !important;
-  background: #30363d; flex-shrink: 0;
+  background: var(--line-2); flex-shrink: 0;
 }
-#tab-jobs .rs-status-dot.ok { background: #3fb950; box-shadow: 0 0 0 2px rgba(63,185,80,.15) !important; }
-#tab-jobs .rs-status-dot.bad { background: #f85149; }
+#tab-jobs .rs-status-dot.ok { background: var(--ok); box-shadow: 0 0 0 2px rgba(63,185,80,.15) !important; }
+#tab-jobs .rs-status-dot.bad { background: var(--danger); }
 
 /* ───────── Shared button/input styles ───────── */
 #tab-jobs .rs-icon-btn {
-  background: transparent; border: none; color: #7d8590;
+  background: transparent; border: none; color: var(--fg-3);
   width: 28px; height: 28px; padding: 0;
-  border-radius: 4px !important; cursor: pointer;
+  border-radius: var(--r-sm) !important; cursor: pointer;
   display: grid; place-items: center; flex-shrink: 0;
 }
-#tab-jobs .rs-icon-btn:hover { background: #21262d; color: #e6edf3; }
+#tab-jobs .rs-icon-btn:hover { background: var(--bg-3); color: var(--fg); }
 #tab-jobs .rs-icon-btn.rs-tb { width: 28px; height: 28px; }
 #tab-jobs .rs-ic, #tab-jobs .rs-ic-sm {
   display: block;
@@ -136,15 +194,15 @@ body.rs-active #tab-jobs { display: flex !important; flex: 1 1 auto !important; 
   min-height: 0;
   display: flex;
   flex-direction: row;
-  background: #0d1117;
+  background: var(--bg);
   position: relative;
 }
 /* Sidebar */
 #tab-jobs .rs-side {
   flex: 0 0 250px;
   width: 250px;
-  background: #0d1117;
-  border-right: 1px solid #21262d;
+  background: var(--bg);
+  border-right: 1px solid var(--bg-3);
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -155,38 +213,38 @@ body.rs-active #tab-jobs { display: flex !important; flex: 1 1 auto !important; 
   flex: 0 0 30px; height: 30px;
   padding: 0 12px;
   display: flex; align-items: center; gap: 8px;
-  background: #161b22;
-  border-bottom: 1px solid #21262d;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--bg-3);
 }
 #tab-jobs .rs-side-title {
-  font-size: 10.5px; font-weight: 700;
-  color: #7d8590; letter-spacing: .05em; text-transform: uppercase;
+  font-size: var(--t-xs); font-weight: 700;
+  color: var(--fg-3); letter-spacing: .05em; text-transform: uppercase;
 }
 #tab-jobs .rs-count {
-  background: #21262d; color: #7d8590;
-  font-size: 10px; padding: 1px 6px;
-  border-radius: 10px !important; font-weight: 600; margin-left: auto;
+  background: var(--bg-3); color: var(--fg-3);
+  font-size: var(--t-xs); padding: 1px 8px;
+  border-radius: var(--r-md) !important; font-weight: 600; margin-left: auto;
 }
 #tab-jobs .rs-new-btn {
   flex: 0 0 30px; height: 30px;
   padding: 0 12px;
   background: transparent; border: none;
-  border-bottom: 1px solid #21262d;
-  color: #3fb950; font-size: 12px; font-weight: 500;
+  border-bottom: 1px solid var(--bg-3);
+  color: var(--ok); font-size: var(--t-sm); font-weight: 500;
   cursor: pointer; display: flex; align-items: center; gap: 6px;
   text-align: left;
 }
-#tab-jobs .rs-new-btn:hover { background: #161b22; color: #56d364; }
+#tab-jobs .rs-new-btn:hover { background: var(--bg-2); color: var(--ok); }
 #tab-jobs .rs-list {
   flex: 1 1 auto; overflow-y: auto; padding: 4px 0;
 }
 #tab-jobs .rs-list::-webkit-scrollbar { width: 10px; }
-#tab-jobs .rs-list::-webkit-scrollbar-thumb { background: transparent; border: 3px solid transparent; border-radius: 10px; background-clip: padding-box; }
-#tab-jobs .rs-list:hover::-webkit-scrollbar-thumb { background: #30363d; background-clip: padding-box; }
+#tab-jobs .rs-list::-webkit-scrollbar-thumb { background: transparent; border: 3px solid transparent; border-radius: var(--r-md); background-clip: padding-box; }
+#tab-jobs .rs-list:hover::-webkit-scrollbar-thumb { background: var(--line-2); background-clip: padding-box; }
 @media (hover: none) {
   /* Touch devices: always show a faint scrollbar (users can't hover to reveal) */
-  #tab-jobs .rs-list::-webkit-scrollbar-thumb { background: #21262d; background-clip: padding-box; }
-  #tab-jobs .rs-log-body::-webkit-scrollbar-thumb { background: #21262d; background-clip: padding-box; }
+  #tab-jobs .rs-list::-webkit-scrollbar-thumb { background: var(--bg-3); background-clip: padding-box; }
+  #tab-jobs .rs-log-body::-webkit-scrollbar-thumb { background: var(--bg-3); background-clip: padding-box; }
 }
 
 /* Job row */
@@ -194,57 +252,57 @@ body.rs-active #tab-jobs { display: flex !important; flex: 1 1 auto !important; 
   display: flex !important;
   align-items: center !important;
   gap: 8px !important;
-  padding: 4px 10px !important;
+  padding: 4px 8px!important;
   padding-right: 28px !important;
   min-height: 28px !important;
   cursor: pointer !important;
-  color: #c9d1d9 !important;
-  font-size: 13px !important;
+  color: var(--fg-2) !important;
+  font-size: var(--t-md) !important;
   position: relative !important;
   background: transparent !important;
   border: none !important;
   border-radius: 0 !important;
-  margin: 0 !important;
+  margin: 0!important;
   box-shadow: none !important;
   transition: background .1s ease !important;
 }
-#tab-jobs .job-item:hover { background: #161b22 !important; }
+#tab-jobs .job-item:hover { background: var(--bg-2) !important; }
 #tab-jobs .job-item.active { background: rgba(56,139,253,.12) !important; }
-#tab-jobs .job-item.active .jname { color: #58a6ff; font-weight: 500; }
+#tab-jobs .job-item.active .jname { color: var(--accent); font-weight: 500; }
 #tab-jobs .job-item .jlang-icon {
   width: 18px; height: 18px; flex-shrink: 0;
   display: grid; place-items: center;
-  font-family: ui-monospace, monospace; font-size: 9.5px;
-  font-weight: 700; color: #7d8590;
+  font-family: ui-monospace, monospace; font-size: var(--t-xs);
+  font-weight: 700; color: var(--fg-3);
   text-transform: lowercase;
 }
-#tab-jobs .job-item.running .jlang-icon { color: #3fb950; }
-#tab-jobs .job-item.crashed .jlang-icon { color: #f85149; }
+#tab-jobs .job-item.running .jlang-icon { color: var(--ok); }
+#tab-jobs .job-item.crashed .jlang-icon { color: var(--danger); }
 #tab-jobs .job-item .jname {
   flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   font-family: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
-  font-size: 12.5px;
+  font-size: var(--t-sm);
 }
 #tab-jobs .job-item .jstatus-dot {
   width: 6px; height: 6px; border-radius: 50% !important;
-  background: #484f58; flex-shrink: 0;
+  background: var(--fg-3); flex-shrink: 0;
   transition: background .15s ease;
 }
-#tab-jobs .job-item.running .jstatus-dot { background: #3fb950; animation: rsPulse 1.8s ease-in-out infinite; }
-#tab-jobs .job-item.crashed .jstatus-dot { background: #f85149; }
+#tab-jobs .job-item.running .jstatus-dot { background: var(--ok); animation: rsPulse 1.8s ease-in-out infinite; }
+#tab-jobs .job-item.crashed .jstatus-dot { background: var(--danger); }
 #tab-jobs .job-item.starting .jstatus-dot,
-#tab-jobs .job-item.installing .jstatus-dot { background: #d29922; animation: rsPulse 1.2s ease-in-out infinite; }
+#tab-jobs .job-item.installing .jstatus-dot { background: var(--warn); animation: rsPulse 1.2s ease-in-out infinite; }
 #tab-jobs .job-item .jdel {
   position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
-  background: transparent; border: none; color: #7d8590;
+  background: transparent; border: none; color: var(--fg-3);
   width: 22px; height: 22px; padding: 0;
-  border-radius: 3px !important; cursor: pointer;
-  font-size: 14px; line-height: 1; display: none;
+  border-radius: var(--r-sm) !important; cursor: pointer;
+  font-size: var(--t-md); line-height: 1; display: none;
   place-items: center;
 }
 #tab-jobs .job-item .jdel .rs-ic-sm { width: 13px; height: 13px; }
 #tab-jobs .job-item:hover .jdel { display: grid; }
-#tab-jobs .job-item .jdel:hover { background: rgba(248,81,73,.15); color: #f85149; }
+#tab-jobs .job-item .jdel:hover { background: rgba(248,81,73,.15); color: var(--danger); }
 @keyframes rsPulse { 0%,100% { opacity: 1 } 50% { opacity: .45 } }
 /* Delete row animation */
 #tab-jobs .job-item.row-leave { opacity: 0; transform: translateX(-6px); transition: opacity .18s ease, transform .18s ease; pointer-events: none; }
@@ -254,7 +312,7 @@ body.rs-active #tab-jobs { display: flex !important; flex: 1 1 auto !important; 
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
-  background: #0d1117;
+  background: var(--bg);
   display: flex;
   flex-direction: column;
   position: relative;
@@ -266,20 +324,20 @@ body.rs-active #tab-jobs { display: flex !important; flex: 1 1 auto !important; 
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
   gap: 10px; padding: 40px 24px;
-  color: #7d8590;
+  color: var(--fg-3);
   text-align: center;
 }
 #tab-jobs .rs-empty-ic { margin-bottom: 6px; opacity: .8; }
-#tab-jobs .rs-empty-title { font-size: 14px; font-weight: 600; color: #c9d1d9; }
-#tab-jobs .rs-empty-sub { font-size: 12.5px; color: #7d8590; max-width: 280px; line-height: 1.5; }
+#tab-jobs .rs-empty-title { font-size: var(--t-md); font-weight: 600; color: var(--fg-2); }
+#tab-jobs .rs-empty-sub { font-size: var(--t-sm); color: var(--fg-3); max-width: 280px; line-height: 1.5; }
 #tab-jobs .rs-empty-btn {
   margin-top: 12px;
-  background: #238636; border: 1px solid #238636;
-  color: #fff; font-size: 12.5px; font-weight: 600;
-  padding: 6px 14px; border-radius: 6px !important;
+  background: var(--ok); border: 1px solid var(--ok);
+  color: #fff; font-size: var(--t-sm); font-weight: 600;
+  padding: 8px 16px; border-radius: var(--r-sm) !important;
   cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
 }
-#tab-jobs .rs-empty-btn:hover { background: #2ea043; border-color: #2ea043; }
+#tab-jobs .rs-empty-btn:hover { background: var(--ok); border-color: var(--ok); }
 
 /* ───────── Workspace ───────── */
 #tab-jobs .rs-ws { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
@@ -287,45 +345,45 @@ body.rs-active #tab-jobs { display: flex !important; flex: 1 1 auto !important; 
 #tab-jobs .rs-ed-bar {
   flex: 0 0 34px; height: 34px;
   padding: 0 8px;
-  background: #161b22;
-  border-bottom: 1px solid #21262d;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--bg-3);
   display: flex; align-items: center; gap: 6px;
 }
 #tab-jobs .rs-ed-group { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
 #tab-jobs .rs-ed-actions { display: flex; gap: 2px; flex-shrink: 0; }
 #tab-jobs .rs-inp {
   height: 24px;
-  background: #0d1117; border: 1px solid #30363d;
-  color: #e6edf3; font-family: ui-monospace, monospace;
-  font-size: 12.5px; padding: 0 8px;
-  border-radius: 4px !important; outline: none;
+  background: var(--bg); border: 1px solid var(--line-2);
+  color: var(--fg); font-family: ui-monospace, monospace;
+  font-size: var(--t-sm); padding: 0 8px;
+  border-radius: var(--r-sm) !important; outline: none;
 }
-#tab-jobs .rs-inp:hover { border-color: #484f58; }
-#tab-jobs .rs-inp:focus { border-color: #388bfd; box-shadow: 0 0 0 2px rgba(56,139,253,.2) !important; }
-#tab-jobs .rs-inp::placeholder { color: #6e7681; font-style: italic; }
+#tab-jobs .rs-inp:hover { border-color: var(--fg-3); }
+#tab-jobs .rs-inp:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(56,139,253,.2) !important; }
+#tab-jobs .rs-inp::placeholder { color: var(--fg-3); font-style: italic; }
 #tab-jobs .rs-sel {
   height: 24px;
   background: transparent; border: 1px solid transparent;
-  color: #7d8590; font-family: ui-monospace, monospace;
-  font-size: 11px; padding: 0 6px;
-  border-radius: 4px !important; outline: none; cursor: pointer;
+  color: var(--fg-3); font-family: ui-monospace, monospace;
+  font-size: var(--t-xs); padding: 0 8px;
+  border-radius: var(--r-sm) !important; outline: none; cursor: pointer;
   font-weight: 500; text-transform: uppercase !important; letter-spacing: .03em !important;
 }
-#tab-jobs .rs-sel:hover { background: #21262d; color: #e6edf3; border-color: #30363d; }
+#tab-jobs .rs-sel:hover { background: var(--bg-3); color: var(--fg); border-color: var(--line-2); }
 #tab-jobs .rs-gh {
-  flex: 1; min-width: 0; font-size: 11.5px !important; color: #6e7681;
+  flex: 1; min-width: 0; font-size: var(--t-sm) !important; color: var(--fg-3);
 }
 /* Primary Run button — green filled play icon + label */
 #tab-jobs .rs-run-btn {
   position: relative;
   display: inline-flex; align-items: center; gap: 6px;
-  height: 24px; padding: 0 10px;
-  background: #238636; color: #fff; border: 1px solid #238636;
-  border-radius: 4px !important; cursor: pointer;
-  font-size: 12px; font-weight: 600; letter-spacing: .01em;
+  height: 24px; padding: 0 8px;
+  background: var(--ok); color: #fff; border: 1px solid var(--ok);
+  border-radius: var(--r-sm) !important; cursor: pointer;
+  font-size: var(--t-sm); font-weight: 600; letter-spacing: .01em;
   transition: background .12s ease;
 }
-#tab-jobs .rs-run-btn:hover { background: #2ea043; border-color: #2ea043; }
+#tab-jobs .rs-run-btn:hover { background: var(--ok); border-color: var(--ok); }
 #tab-jobs .rs-run-btn.loading,
 #tab-jobs .rs-run-btn:disabled { opacity: .75; pointer-events: none; }
 #tab-jobs .rs-run-btn .rs-btn-label { line-height: 1; }
@@ -344,14 +402,14 @@ body.rs-active #tab-jobs { display: flex !important; flex: 1 1 auto !important; 
 /* Dirty state: code changed since last deploy — Run gets a soft accent.
    No bounce/glow, just a slightly thicker border + label text change via JS. */
 #tab-jobs .rs-run-btn.dirty {
-  background: #2ea043;
-  border-color: #3fb950;
+  background: var(--ok);
+  border-color: var(--ok);
 }
-#tab-jobs .rs-run-btn.dirty:hover { background: #3fb950; }
-#tab-jobs #btnStopJob { color: #f85149; }
-#tab-jobs #btnStopJob:hover { background: rgba(248,81,73,.12); color: #ff7b72; }
-#tab-jobs #btnRestartJob { color: #d29922; }
-#tab-jobs #btnRestartJob:hover { background: rgba(210,153,34,.12); color: #e3b341; }
+#tab-jobs .rs-run-btn.dirty:hover { background: var(--ok); }
+#tab-jobs #btnStopJob { color: var(--danger); }
+#tab-jobs #btnStopJob:hover { background: rgba(248,81,73,.12); color: var(--danger); }
+#tab-jobs #btnRestartJob { color: var(--warn); }
+#tab-jobs #btnRestartJob:hover { background: rgba(210,153,34,.12); color: var(--warn); }
 #tab-jobs [data-rocket] .i-flame { opacity: 0; transition: opacity .18s ease; }
 #tab-jobs [data-rocket]:hover .i-flame,
 #tab-jobs [data-rocket].loading .i-flame,
@@ -366,7 +424,7 @@ body.rs-active #tab-jobs { display: flex !important; flex: 1 1 auto !important; 
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: #0d1117;
+  background: var(--bg);
 }
 #tab-jobs .rs-pane {
   display: flex; flex-direction: column;
@@ -376,14 +434,14 @@ body.rs-active #tab-jobs { display: flex !important; flex: 1 1 auto !important; 
 #tab-jobs .rs-divider {
   flex: 0 0 4px;
   height: 4px;
-  background: #161b22;
-  border-top: 1px solid #21262d;
-  border-bottom: 1px solid #21262d;
+  background: var(--bg-2);
+  border-top: 1px solid var(--bg-3);
+  border-bottom: 1px solid var(--bg-3);
   cursor: ns-resize;
   position: relative;
 }
-#tab-jobs .rs-divider:hover { background: #30363d; }
-#tab-jobs .rs-logs { flex: 0 0 180px; height: 180px; background: #010409; }
+#tab-jobs .rs-divider:hover { background: var(--line-2); }
+#tab-jobs .rs-logs { flex: 0 0 180px; height: 180px; background: var(--bg-sunken); }
 
 /* Editor */
 #tab-jobs .rs-cm-host {
@@ -405,18 +463,18 @@ body.rs-active #tab-jobs { display: flex !important; flex: 1 1 auto !important; 
 #tab-jobs .rs-log-head {
   flex: 0 0 28px; height: 28px;
   padding: 0 8px;
-  background: #161b22;
-  border-bottom: 1px solid #21262d;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--bg-3);
   display: flex; align-items: center; gap: 8px;
 }
 #tab-jobs .rs-log-dot {
   width: 8px; height: 8px; border-radius: 50% !important;
-  background: #30363d; flex-shrink: 0;
+  background: var(--line-2); flex-shrink: 0;
 }
-#tab-jobs .rs-log-dot.running { background: #3fb950; animation: rsPulse 1.8s ease-in-out infinite; box-shadow: 0 0 0 2px rgba(63,185,80,.15) !important; }
-#tab-jobs .rs-log-dot.crashed { background: #f85149; }
+#tab-jobs .rs-log-dot.running { background: var(--ok); animation: rsPulse 1.8s ease-in-out infinite; box-shadow: 0 0 0 2px rgba(63,185,80,.15) !important; }
+#tab-jobs .rs-log-dot.crashed { background: var(--danger); }
 #tab-jobs .rs-log-label {
-  font-size: 11px; color: #7d8590;
+  font-size: var(--t-xs); color: var(--fg-3);
   font-family: ui-monospace, monospace; font-weight: 500;
 }
 #tab-jobs .rs-log-acts { margin-left: auto; display: flex; gap: 2px; }
@@ -424,20 +482,20 @@ body.rs-active #tab-jobs { display: flex !important; flex: 1 1 auto !important; 
   flex: 1 1 auto; overflow-y: auto;
   padding: 8px 12px;
   margin: 0;
-  background: #010409;
-  color: #c9d1d9;
+  background: var(--bg-sunken);
+  color: var(--fg-2);
   font-family: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
-  font-size: 12px; line-height: 1.55;
+  font-size: var(--t-sm); line-height: 1.55;
   white-space: pre-wrap; word-break: break-word; tab-size: 2;
 }
 #tab-jobs .rs-log-body::-webkit-scrollbar { width: 10px; }
-#tab-jobs .rs-log-body::-webkit-scrollbar-thumb { background: transparent; border: 3px solid transparent; border-radius: 10px; background-clip: padding-box; }
-#tab-jobs .rs-log-body:hover::-webkit-scrollbar-thumb { background: #30363d; background-clip: padding-box; }
-#tab-jobs .rs-log-empty { color: #484f58; font-style: italic; }
-#tab-jobs .rs-log-body .log-err { color: #ff7b72; }
-#tab-jobs .rs-log-body .log-ok { color: #3fb950; }
-#tab-jobs .rs-log-body .log-warn { color: #d29922; }
-#tab-jobs .rs-log-body .log-url { color: #58a6ff; text-decoration: underline; }
+#tab-jobs .rs-log-body::-webkit-scrollbar-thumb { background: transparent; border: 3px solid transparent; border-radius: var(--r-md); background-clip: padding-box; }
+#tab-jobs .rs-log-body:hover::-webkit-scrollbar-thumb { background: var(--line-2); background-clip: padding-box; }
+#tab-jobs .rs-log-empty { color: var(--fg-3); font-style: italic; }
+#tab-jobs .rs-log-body .log-err { color: var(--danger); }
+#tab-jobs .rs-log-body .log-ok { color: var(--ok); }
+#tab-jobs .rs-log-body .log-warn { color: var(--warn); }
+#tab-jobs .rs-log-body .log-url { color: var(--accent); text-decoration: underline; }
 
 /* Mobile backdrop */
 #tab-jobs .rs-menu-backdrop {
@@ -456,11 +514,11 @@ body.rs-side-open #tab-jobs .rs-menu-backdrop { display: block; }
   }
   body.rs-side-open #tab-jobs .rs-side {
     width: 78vw; flex-basis: 78vw;
-    border-right: 1px solid #21262d;
+    border-right: 1px solid var(--bg-3);
   }
   #tab-jobs .rs-inp { min-width: 0; }
   #tab-jobs .rs-gh { display: none; }
-  #tab-jobs .rs-bar { padding: 0 6px !important; gap: 6px !important; }
+  #tab-jobs .rs-bar { padding: 0 8px!important; gap: 6px !important; }
   #tab-jobs .rs-ed-bar { padding: 0 4px; gap: 3px; }
   /* Mobile: editor and logs share the split vertically; logs collapsed by default */
   #tab-jobs .rs-split { position: relative; }
@@ -468,20 +526,20 @@ body.rs-side-open #tab-jobs .rs-menu-backdrop { display: block; }
   #tab-jobs .rs-logs {
     flex: 0 0 0 !important;
     height: 0 !important;
-    border-top: 1px solid #21262d;
+    border-top: 1px solid var(--bg-3);
     transition: flex .2s ease, height .2s ease;
     overflow: hidden;
   }
   #tab-jobs .rs-editor { flex: 1 1 auto !important; min-height: 0; }
   body.rs-logs-open #tab-jobs .rs-editor { flex: 0 0 50% !important; }
   body.rs-logs-open #tab-jobs .rs-logs   { flex: 0 0 50% !important; height: 50% !important; }
-  #tab-jobs .rs-log-body { font-size: 11.5px; padding: 6px 8px; }
+  #tab-jobs .rs-log-body { font-size: var(--t-sm); padding: 8px 8px; }
   /* Tighten top bar for mobile */
-  #tab-jobs .rs-title { font-size: 12.5px; }
-  #tab-jobs .rs-text-btn { padding: 3px 8px; height: 24px; font-size: 11.5px; }
-  #tab-jobs .job-item { padding: 5px 8px !important; padding-right: 26px !important; }
+  #tab-jobs .rs-title { font-size: var(--t-sm); }
+  #tab-jobs .rs-text-btn { padding: 4px 8px; height: 24px; font-size: var(--t-sm); }
+  #tab-jobs .job-item { padding: 4px 8px!important; padding-right: 26px !important; }
   /* Mobile: Run button icon-only to save space */
-  #tab-jobs .rs-run-btn { padding: 0 7px; }
+  #tab-jobs .rs-run-btn { padding: 0 8px; }
   #tab-jobs .rs-run-btn .rs-btn-label { display: none; }
   #tab-jobs .rs-run-btn .rs-ic-sm { width: 10px; height: 10px; margin: 0; }
 }
@@ -490,7 +548,7 @@ body.rs-side-open #tab-jobs .rs-menu-backdrop { display: block; }
 @keyframes rsSpin { to { transform: rotate(360deg); } }
 #tab-jobs .spin-target.loading .rs-ic-sm,
 #tab-jobs .rs-icon-btn .rs-ic-sm[style*="animation"] { animation: rsSpin .7s linear infinite; }
-#tab-jobs #jobLogCopy.is-ok { color: #3fb950; }
+#tab-jobs #jobLogCopy.is-ok { color: var(--ok); }
 #tab-jobs .rs-icon-btn.loading { opacity: .7; pointer-events: none; }
 
 /* ───────── Job details drawer ───────── */
@@ -506,25 +564,25 @@ body.rs-drawer-open #tab-jobs .rs-side { touch-action: none; pointer-events: non
   overscroll-behavior: contain;
   scroll-behavior: smooth;
 }
-#tab-jobs .rs-dot-sep { color: #30363d; }
+#tab-jobs .rs-dot-sep { color: var(--line-2); }
 #tab-jobs .rs-badge {
-  display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px;
-  padding: 1px 7px; border-radius: 10px !important; font-weight: 600; letter-spacing: .02em;
-  background: #21262d; color: #8b949e; text-transform: uppercase;
+  display: inline-flex; align-items: center; gap: 5px; font-size: var(--t-xs);
+  padding: 1px 8px; border-radius: var(--r-md) !important; font-weight: 600; letter-spacing: .02em;
+  background: var(--bg-3); color: var(--fg-3); text-transform: uppercase;
 }
-#tab-jobs .rs-badge.running { background: rgba(63,185,80,.15); color: #3fb950; }
-#tab-jobs .rs-badge.crashed { background: rgba(248,81,73,.15); color: #f85149; }
+#tab-jobs .rs-badge.running { background: rgba(63,185,80,.15); color: var(--ok); }
+#tab-jobs .rs-badge.crashed { background: rgba(248,81,73,.15); color: var(--danger); }
 #tab-jobs .rs-badge.starting,
-#tab-jobs .rs-badge.installing { background: rgba(210,153,34,.15); color: #d29922; }
+#tab-jobs .rs-badge.installing { background: rgba(210,153,34,.15); color: var(--warn); }
 #tab-jobs .rs-card-head { min-height: 34px; }
 #tab-jobs .rs-card-acts { align-items: center; }
 #tab-jobs .rs-card-acts .rs-icon-btn { width: 26px; height: 26px; }
 #tab-jobs .rs-url-row { min-height: 36px; }
-#tab-jobs .rs-health { font-size: 11px; }
+#tab-jobs .rs-health { font-size: var(--t-xs); }
 #tab-jobs .rs-card {
-  background: #161b22;
-  border: 1px solid #21262d;
-  border-radius: 6px !important;
+  background: var(--bg-2);
+  border: 1px solid var(--bg-3);
+  border-radius: var(--r-sm) !important;
   padding: 0;
   /* overflow: hidden would clip sticky heads inside the card and break the
      iOS-style "stacked sticky" effect, causing text to paint through on scroll.
@@ -540,10 +598,10 @@ body.rs-drawer-open #tab-jobs .rs-side { touch-action: none; pointer-events: non
 }
 #tab-jobs .rs-card-head {
   display: flex; align-items: center; gap: 8px;
-  padding: 8px 10px; border-bottom: 1px solid #21262d;
-  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
-  color: #7d8590;
-  background: #161b22;
+  padding: 8px 8px; border-bottom: 1px solid var(--bg-3);
+  font-size: var(--t-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--fg-3);
+  background: var(--bg-2);
   position: sticky; top: 0; z-index: 2;
   /* Re-clip top corners since card itself is overflow:visible (required for sticky) */
   border-top-left-radius: 6px;
@@ -561,64 +619,64 @@ body.rs-drawer-open #tab-jobs .rs-side { touch-action: none; pointer-events: non
 }
 #tab-jobs .rs-card-title { flex: 1; }
 #tab-jobs .rs-card-acts { display: flex; gap: 2px; margin-left: auto; }
-#tab-jobs .rs-card .rs-log-body { padding: 10px; max-height: 280px; font-size: 11.5px; }
-#tab-jobs .rs-url-row { display: flex; align-items: center; gap: 6px; padding: 8px 10px; }
+#tab-jobs .rs-card .rs-log-body { padding: 8px; max-height: 280px; font-size: var(--t-sm); }
+#tab-jobs .rs-url-row { display: flex; align-items: center; gap: 6px; padding: 8px 8px; }
 #tab-jobs .rs-url {
   flex: 1; min-width: 0;
-  font-family: ui-monospace, monospace; font-size: 12px; color: #58a6ff;
+  font-family: ui-monospace, monospace; font-size: var(--t-sm); color: var(--accent);
   text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 #tab-jobs .rs-url:hover { text-decoration: underline; }
-#tab-jobs .rs-sub { padding: 0 10px 8px; font-size: 11px; color: #6e7681; }
-#tab-jobs .rs-health { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; text-transform: none; letter-spacing: 0; font-weight: 500; }
-#tab-jobs .rs-h-dot { width: 7px; height: 7px; border-radius: 50% !important; background: #6e7681; }
-#tab-jobs .rs-health.ok .rs-h-dot { background: #3fb950; box-shadow: 0 0 0 2px rgba(63,185,80,.18); }
-#tab-jobs .rs-health.bad .rs-h-dot { background: #f85149; box-shadow: 0 0 0 2px rgba(248,81,73,.18); }
+#tab-jobs .rs-sub { padding: 0 8px 8px; font-size: var(--t-xs); color: var(--fg-3); }
+#tab-jobs .rs-health { display: inline-flex; align-items: center; gap: 5px; font-size: var(--t-xs); text-transform: none; letter-spacing: 0; font-weight: 500; }
+#tab-jobs .rs-h-dot { width: 7px; height: 7px; border-radius: 50% !important; background: var(--fg-3); }
+#tab-jobs .rs-health.ok .rs-h-dot { background: var(--ok); box-shadow: 0 0 0 2px rgba(63,185,80,.18); }
+#tab-jobs .rs-health.bad .rs-h-dot { background: var(--danger); box-shadow: 0 0 0 2px rgba(248,81,73,.18); }
 #tab-jobs .rs-meta-grid {
   display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px;
-  padding: 10px 12px;
+  padding: 8px 12px;
 }
-#tab-jobs .rs-meta-grid > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; }
-#tab-jobs .rs-k { color: #6e7681; font-family: ui-monospace, monospace; text-transform: uppercase; letter-spacing: .04em; font-size: 10.5px; flex-shrink: 0; }
-#tab-jobs .rs-v { font-family: ui-monospace, monospace; color: #c9d1d9; text-align: right; }
+#tab-jobs .rs-meta-grid > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: var(--t-sm); }
+#tab-jobs .rs-k { color: var(--fg-3); font-family: ui-monospace, monospace; text-transform: uppercase; letter-spacing: .04em; font-size: var(--t-xs); flex-shrink: 0; }
+#tab-jobs .rs-v { font-family: ui-monospace, monospace; color: var(--fg-2); text-align: right; }
 #tab-jobs .rs-env-list { padding: 8px 12px; display: flex; flex-direction: column; gap: 6px; }
 #tab-jobs .rs-env-row { display: flex; gap: 6px; align-items: center; }
 #tab-jobs .rs-env-row input {
-  flex: 1; min-width: 0; height: 28px; background: #0d1117; border: 1px solid #30363d; color: #e6edf3;
-  font-family: ui-monospace, monospace; font-size: 12px; padding: 0 8px; border-radius: 4px !important;
+  flex: 1; min-width: 0; height: 28px; background: var(--bg); border: 1px solid var(--line-2); color: var(--fg);
+  font-family: ui-monospace, monospace; font-size: var(--t-sm); padding: 0 8px; border-radius: var(--r-sm) !important;
 }
-#tab-jobs .rs-env-row input:focus { border-color: #58a6ff; outline: none; }
+#tab-jobs .rs-env-row input:focus { border-color: var(--accent); outline: none; }
 #tab-jobs .rs-env-row .rs-env-v { -webkit-text-security: disc; }
 #tab-jobs .rs-env-row .rs-icon-btn { width: 26px; height: 26px; }
-#tab-jobs .rs-actions-row { display: flex; gap: 8px; padding: 10px 12px; flex-wrap: wrap; align-items: center; }
+#tab-jobs .rs-actions-row { display: flex; gap: 8px; padding: 8px 12px; flex-wrap: wrap; align-items: center; }
 
 /* ───────── Download split-button (GitHub/Vercel style) ───────── */
 #tab-jobs .rs-dl-wrap {
   position: relative; display: inline-flex; align-items: stretch;
-  background: transparent; border: 1px solid #30363d;
-  border-radius: 6px !important; overflow: visible; height: 30px;
+  background: transparent; border: 1px solid var(--line-2);
+  border-radius: var(--r-sm) !important; overflow: visible; height: 30px;
 }
-#tab-jobs .rs-dl-wrap:hover, #tab-jobs .rs-dl-wrap.open { border-color: #484f58; background: #0d1117; }
+#tab-jobs .rs-dl-wrap:hover, #tab-jobs .rs-dl-wrap.open { border-color: var(--fg-3); background: var(--bg); }
 #tab-jobs .rs-dl-main {
   border: none !important; border-radius: 0 !important;
-  height: 100%; padding: 0 14px; background: transparent; color: #c9d1d9;
-  display: inline-flex; align-items: center; gap: 6px; font-size: 12px;
+  height: 100%; padding: 0 16px; background: transparent; color: var(--fg-2);
+  display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-sm);
   font-weight: 600; cursor: pointer;
 }
-#tab-jobs .rs-dl-main:hover { background: #21262d; }
+#tab-jobs .rs-dl-main:hover { background: var(--bg-3); }
 #tab-jobs .rs-dl-caret {
-  border: none !important; border-left: 1px solid #30363d !important;
+  border: none !important; border-left: 1px solid var(--line-2) !important;
   border-radius: 0 !important; height: 100%; width: 28px;
-  background: transparent; color: #7d8590; display: grid; place-items: center;
+  background: transparent; color: var(--fg-3); display: grid; place-items: center;
   cursor: pointer; padding: 0;
 }
-#tab-jobs .rs-dl-caret:hover { background: #21262d; color: #e6edf3; }
+#tab-jobs .rs-dl-caret:hover { background: var(--bg-3); color: var(--fg); }
 #tab-jobs .rs-dl-wrap.open .rs-dl-caret svg { transform: rotate(180deg); }
 #tab-jobs .rs-dl-caret svg { transition: transform .15s ease; display: block; }
 #tab-jobs .rs-dl-menu {
   position: absolute; right: 0; top: calc(100% + 6px);
-  background: #161b22; border: 1px solid #30363d; border-radius: 8px !important;
-  padding: 6px; min-width: 220px; z-index: 60;
+  background: var(--bg-2); border: 1px solid var(--line-2); border-radius: var(--r-md) !important;
+  padding: 8px; min-width: 220px; z-index: 60;
   box-shadow: 0 8px 24px rgba(0,0,0,.4);
   display: none;
   animation: rsFadeIn .15s ease both;
@@ -626,32 +684,32 @@ body.rs-drawer-open #tab-jobs .rs-side { touch-action: none; pointer-events: non
 #tab-jobs .rs-dl-wrap.open .rs-dl-menu { display: block; }
 #tab-jobs .rs-dl-item {
   width: 100%; display: flex; align-items: center; gap: 10px;
-  background: transparent; border: 0; color: #c9d1d9; padding: 8px 10px;
-  border-radius: 6px !important; cursor: pointer; text-align: left;
-  font-size: 13px; line-height: 1.2;
+  background: transparent; border: 0; color: var(--fg-2); padding: 8px 8px;
+  border-radius: var(--r-sm) !important; cursor: pointer; text-align: left;
+  font-size: var(--t-md); line-height: 1.2;
 }
-#tab-jobs .rs-dl-item:hover { background: #21262d; }
+#tab-jobs .rs-dl-item:hover { background: var(--bg-3); }
 #tab-jobs .rs-dl-ic {
   width: 28px; height: 28px; flex-shrink: 0;
-  background: #21262d; border-radius: 6px !important;
-  display: grid; place-items: center; color: #58a6ff;
+  background: var(--bg-3); border-radius: var(--r-sm) !important;
+  display: grid; place-items: center; color: var(--accent);
 }
 #tab-jobs .rs-dl-ic svg { width: 14px; height: 14px; display: block; }
 #tab-jobs .rs-dl-tx { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-#tab-jobs .rs-dl-tx b { font-weight: 600; font-size: 12.5px; color: #e6edf3; }
-#tab-jobs .rs-dl-tx small { font-size: 10.5px; color: #6e7681; font-family: ui-monospace,monospace; }
-#tab-jobs .rs-timeline { list-style: none; margin: 0; padding: 6px 10px 10px; display: flex; flex-direction: column; gap: 4px; }
-#tab-jobs .rs-timeline li { font-size: 11.5px; color: #8b949e; font-family: ui-monospace, monospace; display: flex; gap: 8px; }
-#tab-jobs .rs-timeline .rs-ts { color: #484f58; }
-#tab-jobs .rs-timeline .rs-te.ok { color: #3fb950; }
-#tab-jobs .rs-timeline .rs-te.err { color: #f85149; }
-#tab-jobs .rs-timeline .rs-te.warn { color: #d29922; }
+#tab-jobs .rs-dl-tx b { font-weight: 600; font-size: var(--t-sm); color: var(--fg); }
+#tab-jobs .rs-dl-tx small { font-size: var(--t-xs); color: var(--fg-3); font-family: ui-monospace,monospace; }
+#tab-jobs .rs-timeline { list-style: none; margin: 0; padding: 8px 8px 8px; display: flex; flex-direction: column; gap: 4px; }
+#tab-jobs .rs-timeline li { font-size: var(--t-sm); color: var(--fg-3); font-family: ui-monospace, monospace; display: flex; gap: 8px; }
+#tab-jobs .rs-timeline .rs-ts { color: var(--fg-3); }
+#tab-jobs .rs-timeline .rs-te.ok { color: var(--ok); }
+#tab-jobs .rs-timeline .rs-te.err { color: var(--danger); }
+#tab-jobs .rs-timeline .rs-te.warn { color: var(--warn); }
 
 /* When the drawer is open, block pointer events on the covered workspace
    so taps don't reach CM or log controls through the drawer. Do NOT hide
-   the workspace visually — the drawer is fully opaque (#0d1117 background
+   the workspace visually — the drawer is fully opaque (var(--bg) background
    + ::before barrier) and covers it entirely. */
-#tab-jobs .rs-empty-sm { padding: 8px 0; color: #484f58; font-size: 11.5px; font-style: italic; }
+#tab-jobs .rs-empty-sm { padding: 8px 0; color: var(--fg-3); font-size: var(--t-sm); font-style: italic; }
 
 /* Prevent iOS double-tap zoom on tappable controls (fast-tap) */
 #tab-jobs button,
@@ -673,8 +731,8 @@ body.rs-drawer-open #tab-jobs .rs-side { touch-action: none; pointer-events: non
   #tab-jobs .rs-text-btn { height: 34px; min-height: 34px; padding: 0 12px; }
   #tab-jobs .rs-dl-wrap { height: 36px; }
   #tab-jobs .rs-dl-caret { width: 36px; }
-  #tab-jobs .rs-env-row input { height: 34px; font-size: 16px; /* prevents iOS zoom */ }
-  #tab-jobs .rs-inp { height: 30px; font-size: 16px; }
+  #tab-jobs .rs-env-row input { height: 34px; font-size: var(--t-lg); /* prevents iOS zoom */ }
+  #tab-jobs .rs-inp { height: 30px; font-size: var(--t-lg); }
   #tab-jobs .rs-run-btn { height: 30px; }
 }
 
@@ -693,28 +751,28 @@ body.rs-drawer-open #tab-jobs .rs-side { touch-action: none; pointer-events: non
 }
 .rs-skel {
   background: linear-gradient(90deg,
-    #161b22 0%, #1c232d 40%, #252d38 60%, #161b22 100%);
+    var(--bg-2) 0%, var(--bg-2) 40%, var(--bg-3) 60%, var(--bg-2) 100%);
   background-size: 800px 100%;
   animation: rsShimmer 1.2s linear infinite;
-  border-radius: 4px !important;
+  border-radius: var(--r-sm) !important;
   height: 12px;
 }
 .rs-skel-wrap { padding: 4px 0; animation: rsFadeIn .18s ease both; }
 .rs-skel-job {
-  display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px;
   height: 40px;
 }
 .rs-skel-job .rs-skel { height: 10px; }
 
 /* Main editor-pane skeleton while first job loads */
 .rs-main-skel {
-  flex: 1 1 auto; padding: 14px; display: flex; flex-direction: column; gap: 10px;
+  flex: 1 1 auto; padding: 16px; display: flex; flex-direction: column; gap: 10px;
   animation: rsFadeIn .2s ease both;
 }
 .rs-main-skel .rs-skel { height: 14px; }
 .rs-main-skel .rs-skel.w60 { width: 60%; }
 .rs-main-skel .rs-skel.w40 { width: 40%; }
-.rs-main-skel .rs-skel.code { height: calc(100% - 60px); min-height: 180px; border-radius: 6px !important; }
+.rs-main-skel .rs-skel.code { height: calc(100% - 60px); min-height: 180px; border-radius: var(--r-sm) !important; }
 
 /* Boot skeleton that fills the main pane while the FIRST jobs fetch is in
    flight — replaces the "No job selected" empty card so users never see the
@@ -724,7 +782,7 @@ body.rs-drawer-open #tab-jobs .rs-side { touch-action: none; pointer-events: non
   display: flex;
   flex-direction: column;
   min-height: 0;
-  padding: 10px;
+  padding: 8px;
   gap: 10px;
   animation: rsFadeIn .18s ease both;
 }
@@ -740,33 +798,33 @@ body.rs-drawer-open #tab-jobs .rs-side { touch-action: none; pointer-events: non
 #tab-jobs .rs-boot-loader .rs-bl-bar {
   display: flex; align-items: center; gap: 10px;
   flex: 0 0 34px; height: 34px;
-  background: #161b22;
-  border: 1px solid #21262d;
-  border-radius: 6px !important;
-  padding: 0 10px;
+  background: var(--bg-2);
+  border: 1px solid var(--bg-3);
+  border-radius: var(--r-sm) !important;
+  padding: 0 8px;
 }
 #tab-jobs .rs-boot-loader .rs-bl-editor {
   flex: 1 1 auto; min-height: 140px;
-  background: #0d1117;
-  border: 1px solid #21262d;
-  border-radius: 6px !important;
-  padding: 10px;
+  background: var(--bg);
+  border: 1px solid var(--bg-3);
+  border-radius: var(--r-sm) !important;
+  padding: 8px;
   display: flex;
 }
 #tab-jobs .rs-boot-loader .rs-bl-editor .rs-skel.code {
-  flex: 1; height: 100%; min-height: 120px; border-radius: 4px !important;
+  flex: 1; height: 100%; min-height: 120px; border-radius: var(--r-sm) !important;
 }
 #tab-jobs .rs-boot-loader .rs-bl-logs {
   flex: 0 0 80px; height: 80px;
-  background: #010409;
-  border: 1px solid #21262d;
-  border-radius: 6px !important;
-  padding: 10px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--bg-3);
+  border-radius: var(--r-sm) !important;
+  padding: 8px;
   display: flex; flex-direction: column; justify-content: flex-start;
 }
 .rs-skel-dot {
   width: 8px; height: 8px; border-radius: 50% !important; flex-shrink: 0;
-  background: #21262d; animation: rsShimmer 1.2s linear infinite;
+  background: var(--bg-3); animation: rsShimmer 1.2s linear infinite;
 }
 .rs-fade-in { animation: rsFadeIn .22s ease both; }
 .rs-slide-in { animation: rsSlideIn .22s ease both; }
@@ -861,7 +919,7 @@ body.rs-detail-open #tab-jobs .rs-ws {
   z-index: 2400;
   display: flex;
   flex-direction: column;
-  background: #0d1117;
+  background: var(--bg);
   transform: translateX(100%);
   transition: transform .2s cubic-bezier(.2,.7,.2,1);
   visibility: hidden;
@@ -889,34 +947,34 @@ body.rs-detail-open #tab-jobs .rs-side {
 #tab-jobs .jd-top {
   flex: 0 0 auto;
   display: flex; align-items: center; gap: 12px;
-  padding: 10px 14px;
+  padding: 8px 16px;
   padding-top: calc(10px + env(safe-area-inset-top, 0px));
-  background: #161b22;
-  border-bottom: 1px solid #21262d;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--bg-3);
 }
 #tab-jobs .jd-back {
   display: inline-flex; align-items: center; gap: 5px;
-  background: #21262d; color: #c9d1d9;
-  border: 1px solid #30363d; border-radius: 7px;
-  padding: 6px 11px 6px 8px; font-size: 12.5px; font-weight: 600;
+  background: var(--bg-3); color: var(--fg-2);
+  border: 1px solid var(--line-2); border-radius: var(--r-sm);
+  padding: 8px 12px 8px 8px; font-size: var(--t-sm); font-weight: 600;
   cursor: pointer; flex: 0 0 auto;
 }
-#tab-jobs .jd-back:hover { background: #30363d; color: #f0f6fc; }
+#tab-jobs .jd-back:hover { background: var(--line-2); color: var(--fg); }
 #tab-jobs .jd-i { width: 15px; height: 15px; flex: 0 0 auto; }
 #tab-jobs .jd-id { min-width: 0; flex: 1 1 auto; }
 #tab-jobs .jd-name {
-  margin: 0; font-size: 15px; font-weight: 650; color: #f0f6fc;
+  margin: 0; font-size: var(--t-lg); font-weight: 650; color: var(--fg);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 #tab-jobs .jd-meta { display: flex; align-items: center; gap: 7px; margin-top: 2px; }
 #tab-jobs .jd-badge {
-  font-size: 10.5px; font-weight: 700; letter-spacing: .02em;
-  padding: 2px 8px; border-radius: 20px; text-transform: uppercase;
-  background: #21262d; color: #8b949e; border: 1px solid #30363d;
+  font-size: var(--t-xs); font-weight: 700; letter-spacing: .02em;
+  padding: 4px 8px; border-radius: var(--r-pill); text-transform: uppercase;
+  background: var(--bg-3); color: var(--fg-3); border: 1px solid var(--line-2);
 }
-#tab-jobs .jd-badge.running  { background: rgba(63,185,80,.14); color: #3fb950; border-color: rgba(63,185,80,.35); }
-#tab-jobs .jd-badge.starting { background: rgba(210,153,34,.14); color: #d29922; border-color: rgba(210,153,34,.35); }
-#tab-jobs .jd-badge.crashed  { background: rgba(248,81,73,.14);  color: #f85149; border-color: rgba(248,81,73,.35); }
+#tab-jobs .jd-badge.running  { background: rgba(63,185,80,.14); color: var(--ok); border-color: rgba(63,185,80,.35); }
+#tab-jobs .jd-badge.starting { background: rgba(210,153,34,.14); color: var(--warn); border-color: rgba(210,153,34,.35); }
+#tab-jobs .jd-badge.crashed  { background: rgba(248,81,73,.14);  color: var(--danger); border-color: rgba(248,81,73,.35); }
 
 /* Scroll container — owns scrolling, never chains to the page */
 #tab-jobs .jd-scroll {
@@ -929,12 +987,12 @@ body.rs-detail-open #tab-jobs .rs-side {
 
 /* Cards: one concern per card */
 #tab-jobs .jd-card {
-  background: #161b22; border: 1px solid #21262d;
-  border-radius: 10px; padding: 13px 14px;
+  background: var(--bg-2); border: 1px solid var(--bg-3);
+  border-radius: var(--r-md); padding: 12px 16px;
 }
 #tab-jobs .jd-h {
-  margin: 0 0 11px; font-size: 11px; font-weight: 700;
-  letter-spacing: .07em; text-transform: uppercase; color: #8b949e;
+  margin: 0 0 12px; font-size: var(--t-xs); font-weight: 700;
+  letter-spacing: .07em; text-transform: uppercase; color: var(--fg-3);
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
 }
 #tab-jobs .jd-h-acts { display: flex; align-items: center; gap: 6px; text-transform: none; letter-spacing: 0; }
@@ -944,93 +1002,93 @@ body.rs-detail-open #tab-jobs .rs-side {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(126px, 1fr)); gap: 9px;
 }
 #tab-jobs .jd-stat {
-  background: #0d1117; border: 1px solid #21262d;
-  border-radius: 7px; padding: 8px 10px;
+  background: var(--bg); border: 1px solid var(--bg-3);
+  border-radius: var(--r-sm); padding: 8px 8px;
   display: flex; flex-direction: column; gap: 3px; min-width: 0;
 }
-#tab-jobs .jd-k { font-size: 10.5px; color: #6e7681; text-transform: uppercase; letter-spacing: .05em; }
-#tab-jobs .jd-v { font-size: 13.5px; color: #e6edf3; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#tab-jobs .jd-v.mono, #tab-jobs .mono { font-family: ui-monospace, "JetBrains Mono", Menlo, monospace; font-size: 12px; }
+#tab-jobs .jd-k { font-size: var(--t-xs); color: var(--fg-3); text-transform: uppercase; letter-spacing: .05em; }
+#tab-jobs .jd-v { font-size: var(--t-md); color: var(--fg); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#tab-jobs .jd-v.mono, #tab-jobs .mono { font-family: ui-monospace, "JetBrains Mono", Menlo, monospace; font-size: var(--t-sm); }
 
 /* Action buttons — separated, labelled, wrap freely */
 #tab-jobs .jd-acts { display: flex; flex-wrap: wrap; gap: 8px; }
 #tab-jobs .jd-btn {
   display: inline-flex; align-items: center; gap: 7px;
-  background: #21262d; color: #c9d1d9;
-  border: 1px solid #30363d; border-radius: 7px;
-  padding: 8px 13px; font-size: 12.5px; font-weight: 600;
+  background: var(--bg-3); color: var(--fg-2);
+  border: 1px solid var(--line-2); border-radius: var(--r-sm);
+  padding: 8px 12px; font-size: var(--t-sm); font-weight: 600;
   cursor: pointer; transition: background-color .13s ease, color .13s ease, border-color .13s ease;
 }
-#tab-jobs .jd-btn:hover:not(:disabled) { background: #30363d; color: #f0f6fc; }
+#tab-jobs .jd-btn:hover:not(:disabled) { background: var(--line-2); color: var(--fg); }
 #tab-jobs .jd-btn:disabled { opacity: .45; cursor: not-allowed; }
-#tab-jobs .jd-btn.start        { background: rgba(63,185,80,.13); color: #3fb950; border-color: rgba(63,185,80,.32); }
+#tab-jobs .jd-btn.start        { background: rgba(63,185,80,.13); color: var(--ok); border-color: rgba(63,185,80,.32); }
 #tab-jobs .jd-btn.start:hover:not(:disabled)  { background: rgba(63,185,80,.22); }
-#tab-jobs .jd-btn.danger       { background: rgba(248,81,73,.10); color: #f85149; border-color: rgba(248,81,73,.28); }
+#tab-jobs .jd-btn.danger       { background: rgba(248,81,73,.10); color: var(--danger); border-color: rgba(248,81,73,.28); }
 #tab-jobs .jd-btn.danger:hover:not(:disabled) { background: rgba(248,81,73,.2); }
 #tab-jobs .jd-mini {
-  background: #21262d; color: #8b949e; border: 1px solid #30363d;
-  border-radius: 6px; padding: 4px 10px; font-size: 11.5px; font-weight: 600;
+  background: var(--bg-3); color: var(--fg-3); border: 1px solid var(--line-2);
+  border-radius: var(--r-sm); padding: 4px 8px; font-size: var(--t-sm); font-weight: 600;
   cursor: pointer; text-decoration: none; display: inline-flex; align-items: center;
 }
-#tab-jobs .jd-mini:hover { background: #30363d; color: #e6edf3; }
+#tab-jobs .jd-mini:hover { background: var(--line-2); color: var(--fg); }
 
 /* URL + health */
 #tab-jobs .jd-url-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 #tab-jobs .jd-url {
-  flex: 1 1 220px; min-width: 0; color: #58a6ff; font-size: 12px;
+  flex: 1 1 220px; min-width: 0; color: var(--accent); font-size: var(--t-sm);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: none;
 }
 #tab-jobs .jd-url:hover { text-decoration: underline; }
 #tab-jobs .jd-health-row { display: flex; align-items: center; gap: 9px; margin-top: 10px; flex-wrap: wrap; }
-#tab-jobs .jd-health { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #8b949e; }
-#tab-jobs .jd-dot { width: 7px; height: 7px; border-radius: 50%; background: #6e7681; flex: 0 0 auto; }
-#tab-jobs .jd-health.ok  .jd-dot { background: #3fb950; box-shadow: 0 0 0 3px rgba(63,185,80,.16); }
-#tab-jobs .jd-health.ok  { color: #3fb950; }
-#tab-jobs .jd-health.bad .jd-dot { background: #f85149; box-shadow: 0 0 0 3px rgba(248,81,73,.16); }
-#tab-jobs .jd-health.bad { color: #f85149; }
+#tab-jobs .jd-health { display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-sm); color: var(--fg-3); }
+#tab-jobs .jd-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--fg-3); flex: 0 0 auto; }
+#tab-jobs .jd-health.ok  .jd-dot { background: var(--ok); box-shadow: 0 0 0 3px rgba(63,185,80,.16); }
+#tab-jobs .jd-health.ok  { color: var(--ok); }
+#tab-jobs .jd-health.bad .jd-dot { background: var(--danger); box-shadow: 0 0 0 3px rgba(248,81,73,.16); }
+#tab-jobs .jd-health.bad { color: var(--danger); }
 #tab-jobs .jd-h-tx { font-weight: 600; }
-#tab-jobs .jd-sub { font-size: 11.5px; color: #6e7681; margin: 6px 0 0; }
+#tab-jobs .jd-sub { font-size: var(--t-sm); color: var(--fg-3); margin: 8px 0 0; }
 
 /* Logs — contained so its reflows never touch the rest of the page */
 #tab-jobs .jd-logs {
-  margin: 0; padding: 10px 12px;
-  background: #010409; border: 1px solid #21262d; border-radius: 8px;
+  margin: 0; padding: 8px 12px;
+  background: var(--bg-sunken); border: 1px solid var(--bg-3); border-radius: var(--r-md);
   font-family: ui-monospace, "JetBrains Mono", Menlo, monospace;
-  font-size: 11.5px; line-height: 1.55; color: #c9d1d9;
+  font-size: var(--t-sm); line-height: 1.55; color: var(--fg-2);
   max-height: 42vh; min-height: 130px;
   overflow: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
   contain: content;
   white-space: pre-wrap; word-break: break-word;
 }
-#tab-jobs .jd-follow { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: #8b949e; cursor: pointer; }
+#tab-jobs .jd-follow { display: inline-flex; align-items: center; gap: 5px; font-size: var(--t-sm); color: var(--fg-3); cursor: pointer; }
 
 /* Env vars */
 #tab-jobs .jd-env { display: flex; flex-direction: column; gap: 7px; }
 #tab-jobs .jd-env-row { display: flex; gap: 7px; align-items: center; }
 #tab-jobs .jd-env-row input {
-  flex: 1 1 0; min-width: 0; background: #0d1117; color: #e6edf3;
-  border: 1px solid #30363d; border-radius: 6px; padding: 7px 9px;
-  font-family: ui-monospace, Menlo, monospace; font-size: 12px; outline: none;
+  flex: 1 1 0; min-width: 0; background: var(--bg); color: var(--fg);
+  border: 1px solid var(--line-2); border-radius: var(--r-sm); padding: 8px 8px;
+  font-family: ui-monospace, Menlo, monospace; font-size: var(--t-sm); outline: none;
 }
-#tab-jobs .jd-env-row input:focus { border-color: #58a6ff; }
+#tab-jobs .jd-env-row input:focus { border-color: var(--accent); }
 #tab-jobs .jd-env-del {
-  background: transparent; border: 1px solid #30363d; color: #8b949e;
-  border-radius: 6px; padding: 6px 9px; cursor: pointer; font-size: 12px; line-height: 1;
+  background: transparent; border: 1px solid var(--line-2); color: var(--fg-3);
+  border-radius: var(--r-sm); padding: 8px 8px; cursor: pointer; font-size: var(--t-sm); line-height: 1;
 }
-#tab-jobs .jd-env-del:hover { color: #f85149; border-color: rgba(248,81,73,.4); }
+#tab-jobs .jd-env-del:hover { color: var(--danger); border-color: rgba(248,81,73,.4); }
 
 /* Run history */
 #tab-jobs .jd-timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
-#tab-jobs .jd-timeline li { display: flex; align-items: center; gap: 9px; font-size: 12px; }
-#tab-jobs .jd-ts { color: #6e7681; font-family: ui-monospace, Menlo, monospace; font-size: 11px; flex: 0 0 auto; }
-#tab-jobs .jd-ev { color: #c9d1d9; }
-#tab-jobs .jd-ev.ok { color: #3fb950; } #tab-jobs .jd-ev.err { color: #f85149; } #tab-jobs .jd-ev.warn { color: #d29922; }
-#tab-jobs .jd-empty { color: #484f58; font-style: italic; font-size: 11.5px; }
+#tab-jobs .jd-timeline li { display: flex; align-items: center; gap: 9px; font-size: var(--t-sm); }
+#tab-jobs .jd-ts { color: var(--fg-3); font-family: ui-monospace, Menlo, monospace; font-size: var(--t-xs); flex: 0 0 auto; }
+#tab-jobs .jd-ev { color: var(--fg-2); }
+#tab-jobs .jd-ev.ok { color: var(--ok); } #tab-jobs .jd-ev.err { color: var(--danger); } #tab-jobs .jd-ev.warn { color: var(--warn); }
+#tab-jobs .jd-empty { color: var(--fg-3); font-style: italic; font-size: var(--t-sm); }
 
 @media (max-width: 760px) {
   /* position/z-index now come from the base rule (fixed, 2400). Re-declaring
      z-index:300 here pushed the page BELOW .bottom-nav (1500) on phones. */
-  #tab-jobs .jd-scroll { padding: 10px; gap: 10px; }
+  #tab-jobs .jd-scroll { padding: 8px; gap: 10px; }
   #tab-jobs .jd-logs { max-height: 38vh; }
 }
 
@@ -1051,7 +1109,7 @@ body.rs-detail-open #tab-jobs .rs-side {
   flex: 0 0 auto !important;
   height: auto !important;
   min-height: 44px;
-  padding: 7px 10px !important;
+  padding: 8px 8px!important;
   gap: 8px !important;
   flex-wrap: wrap;
 }
@@ -1075,7 +1133,7 @@ body.rs-detail-open #tab-jobs .rs-side {
 #tab-jobs .rs-inp#jobName {
   flex: 2 1 190px;
   min-width: 150px;
-  padding: 0 11px !important;
+  padding: 0 12px!important;
   font-weight: 550;
 }
 
@@ -1083,28 +1141,28 @@ body.rs-detail-open #tab-jobs .rs-side {
 #tab-jobs .rs-sel {
   flex: 0 0 auto;
   min-width: 106px;
-  padding: 0 9px !important;
-  background: #0d1117 !important;
-  border: 1px solid #30363d !important;
-  color: #c9d1d9 !important;
+  padding: 0 8px!important;
+  background: var(--bg) !important;
+  border: 1px solid var(--line-2) !important;
+  color: var(--fg-2) !important;
   font-family: inherit !important;
   font-weight: 550;
   text-transform: none !important;
   letter-spacing: 0 !important;
 }
-#tab-jobs .rs-sel:hover { border-color: #484f58 !important; background: #161b22 !important; }
-#tab-jobs .rs-sel:focus { border-color: #388bfd !important; box-shadow: 0 0 0 2px rgba(56,139,253,.2) !important; }
+#tab-jobs .rs-sel:hover { border-color: var(--fg-3) !important; background: var(--bg-2) !important; }
+#tab-jobs .rs-sel:focus { border-color: var(--accent) !important; box-shadow: 0 0 0 2px rgba(56,139,253,.2) !important; }
 
 /* GitHub URL: same treatment as the other text field. */
 #tab-jobs .rs-gh {
   flex: 2 1 210px;
   min-width: 160px;
-  padding: 0 11px !important;
+  padding: 0 12px!important;
   font-size: var(--rs-ctl-fs) !important;
-  color: #c9d1d9 !important;
+  color: var(--fg-2) !important;
   font-family: inherit !important;
 }
-#tab-jobs .rs-inp::placeholder { font-style: normal !important; color: #6e7681; }
+#tab-jobs .rs-inp::placeholder { font-style: normal !important; color: var(--fg-3); }
 
 /* Square icon buttons that line up with the inputs. */
 #tab-jobs .rs-ed-actions .rs-icon-btn,
@@ -1112,15 +1170,15 @@ body.rs-detail-open #tab-jobs .rs-side {
 #tab-jobs .rs-ed-actions .rs-icon-btn.rs-tb,
 #tab-jobs .rs-ed-group .rs-icon-btn.rs-tb {
   width: var(--rs-ctl-h) !important;
-  border: 1px solid #30363d;
-  background: #0d1117;
+  border: 1px solid var(--line-2);
+  background: var(--bg);
 }
 #tab-jobs .rs-ed-actions .rs-icon-btn:hover,
-#tab-jobs .rs-ed-group .rs-icon-btn:hover { background: #21262d; border-color: #484f58; }
+#tab-jobs .rs-ed-group .rs-icon-btn:hover { background: var(--bg-3); border-color: var(--fg-3); }
 
 /* Run button: same height, a little more horizontal presence. */
 #tab-jobs .rs-run-btn {
-  padding: 0 15px !important;
+  padding: 0 16px!important;
   font-weight: 600;
   gap: 7px !important;
 }
@@ -1166,8 +1224,9 @@ body.rs-active .dash-main { padding-bottom: 0 !important; }
   transform: scaleX(0);
   transform-origin: 0 50%;
   will-change: transform;
-  background: linear-gradient(90deg, #238636, #3fb950 60%, #56d364);
-  box-shadow: 0 0 8px rgba(63, 185, 80, .55);
+  /* Flat fill, no gradient or glow — the bar should read as a quiet
+     system signal, not a decorative element. */
+  background: var(--accent);
   /* Smooth continuous motion; the crawl ticks every 120ms and the easing
      carries the bar between ticks so it never looks stepped. */
   transition: transform .22s cubic-bezier(.25, .8, .35, 1);
@@ -1207,12 +1266,12 @@ body.rs-active .dash-main { padding-bottom: 0 !important; }
    stopped (grey, static) and running (green, pulsing). */
 #tab-jobs .jstatus-dot.checking,
 #tab-jobs .rs-status-dot.checking {
-  background: #d29922 !important;
+  background: var(--warn) !important;
   animation: rsStatusPulse 1s ease-in-out infinite;
 }
 #tab-jobs .jd-badge.checking {
   background: rgba(210, 153, 34, .14);
-  color: #d29922;
+  color: var(--warn);
   border-color: rgba(210, 153, 34, .35);
 }
 
