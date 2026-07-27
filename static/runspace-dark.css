@@ -187,7 +187,6 @@ body.rs-active #tab-jobs { display: flex !important; flex: 1 1 auto !important; 
   /* Touch devices: always show a faint scrollbar (users can't hover to reveal) */
   #tab-jobs .rs-list::-webkit-scrollbar-thumb { background: #21262d; background-clip: padding-box; }
   #tab-jobs .rs-log-body::-webkit-scrollbar-thumb { background: #21262d; background-clip: padding-box; }
-  #tab-jobs .rs-detail-body::-webkit-scrollbar-thumb { background: #21262d; background-clip: padding-box; }
 }
 
 /* Job row */
@@ -522,80 +521,19 @@ body.rs-side-open #tab-jobs .rs-menu-backdrop { display: block; }
 #tab-jobs .rs-icon-btn.loading { opacity: .7; pointer-events: none; }
 
 /* ───────── Job details drawer ───────── */
-/* Locking body scroll is only needed on mobile, where the drawer is a
-   full-screen sheet. On desktop it froze scrolling for the whole page
-   (including other tabs) once Details had been opened. */
-@media (max-width: 760px) {
-  body.rs-drawer-open { overflow: hidden; }
-  body.rs-drawer-open #tab-jobs .rs-side { touch-action: none; pointer-events: none; }
-}
+/* The Details page is now a full-screen fixed layer, so the document behind
+   it must not scroll at ANY width — otherwise the background creeps while the
+   panel's own scroll container is in use. Scoped to rs-detail-open so it is
+   released the moment the page closes (a stranded lock is what previously
+   made the next tab feel frozen). */
+body.rs-detail-open { overflow: hidden; }
+body.rs-drawer-open #tab-jobs .rs-side { touch-action: none; pointer-events: none; }
 #tab-jobs .rs-list {
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
   scroll-behavior: smooth;
 }
-#tab-jobs .rs-detail {
-  /* Drawer is absolutely positioned to cover .rs-main (the editor+logs area);
-     sidebar stays visible on desktop, mobile media query makes it full-screen. */
-  position: absolute;
-  inset: 0;
-  /* FULLY OPAQUE background + ::before sheet is the ONLY reliable way to
-     prevent CodeMirror's independently-composited gutter/cursor/layer
-     elements from bleeding through the drawer on iOS/Mac Chrome. CM paints
-     its own GPU layer that ignores ancestor z-index unless a stacking
-     context with fully opaque background sits between it and the viewer. */
-  background: #0d1117;
-  z-index: 145;
-  display: flex;
-  flex-direction: column;
-  transform: translateX(100%);
-  transition: transform .22s cubic-bezier(.2,.7,.2,1);
-  border-left: 1px solid #21262d;
-  isolation: isolate;
-  will-change: transform;
-  backface-visibility: hidden;
-  /* Extra paint barrier: a fully-opaque pseudo-layer behind the content
-     that overlays the same size as the drawer body (the head/body/foot
-     paint on top). Guarantees no sub-pixel alpha leak from CM. */
-}
-#tab-jobs .rs-detail::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: #0d1117;
-  z-index: 0;
-  pointer-events: none;
-}
-#tab-jobs .rs-detail > * { position: relative; z-index: 1; }
-body.rs-detail-open #tab-jobs .rs-detail { transform: translateX(0); }
-#tab-jobs .rs-detail-head {
-  flex: 0 0 50px;
-  min-height: 50px;
-  padding: 0 8px;
-  display: flex; align-items: center; gap: 8px;
-  background: #161b22;
-  border-bottom: 1px solid #21262d;
-  /* This head is a sibling of rs-detail-body (the scroll container), not inside
-     it, so it stays pinned naturally as a flex item. Forcing its own GPU layer
-     prevents any CodeMirror bleed-through at the seam. */
-  position: relative;
-  z-index: 5;
-  transform: translateZ(0);
-  -webkit-transform: translateZ(0);
-  /* iOS safe-area so we never draw under the status bar when position:fixed */
-  padding-top: env(safe-area-inset-top, 0);
-}
-#tab-jobs .rs-detail-title { flex: 1; min-width: 0; }
-#tab-jobs .rs-detail-name {
-  font-family: ui-monospace, monospace; font-size: 13px; font-weight: 600;
-  color: #e6edf3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-#tab-jobs .rs-detail-sub {
-  margin-top: 2px; font-size: 11px; color: #7d8590;
-  display: flex; align-items: center; gap: 6px; font-family: ui-monospace, monospace;
-}
 #tab-jobs .rs-dot-sep { color: #30363d; }
-#tab-jobs .rs-detail-sub .jlang-icon { font-size: 10px; color: #58a6ff; font-weight: 700; width:auto; height:auto; display:inline; }
 #tab-jobs .rs-badge {
   display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px;
   padding: 1px 7px; border-radius: 10px !important; font-weight: 600; letter-spacing: .02em;
@@ -605,26 +543,11 @@ body.rs-detail-open #tab-jobs .rs-detail { transform: translateX(0); }
 #tab-jobs .rs-badge.crashed { background: rgba(248,81,73,.15); color: #f85149; }
 #tab-jobs .rs-badge.starting,
 #tab-jobs .rs-badge.installing { background: rgba(210,153,34,.15); color: #d29922; }
-#tab-jobs .rs-detail-head-acts { display: flex; gap: 4px; margin-left: auto; align-items: center; }
-#tab-jobs .rs-detail-head-acts .rs-icon-btn { width: 30px; height: 30px; border-radius: 6px !important; }
-#tab-jobs .rs-detail-head-acts .rs-icon-btn:hover { background: #21262d; }
 #tab-jobs .rs-card-head { min-height: 34px; }
 #tab-jobs .rs-card-acts { align-items: center; }
 #tab-jobs .rs-card-acts .rs-icon-btn { width: 26px; height: 26px; }
 #tab-jobs .rs-url-row { min-height: 36px; }
 #tab-jobs .rs-health { font-size: 11px; }
-#tab-jobs .rs-detail-body {
-  flex: 1 1 auto; overflow-y: auto; padding: 12px;
-  display: flex; flex-direction: column; gap: 10px;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-  scroll-behavior: smooth;
-  /* A separate compositing layer for the scroll container prevents
-     CodeMirror/lower panes from bleeding through during scroll on iOS/Android Chrome */
-  transform: translateZ(0);
-  will-change: scroll-position;
-  contain: layout paint;
-}
 #tab-jobs .rs-card {
   background: #161b22;
   border: 1px solid #21262d;
@@ -666,21 +589,6 @@ body.rs-detail-open #tab-jobs .rs-detail { transform: translateX(0); }
 #tab-jobs .rs-card-title { flex: 1; }
 #tab-jobs .rs-card-acts { display: flex; gap: 2px; margin-left: auto; }
 #tab-jobs .rs-card .rs-log-body { padding: 10px; max-height: 280px; font-size: 11.5px; }
-#tab-jobs .rs-card .rs-detail-logs {
-  flex: 0 0 auto;       /* override flex:1 1 auto from main panel */
-  max-height: 200px;
-  min-height: 80px;
-  overflow-y: auto !important;
-  overflow-x: hidden;
-  white-space: pre-wrap;
-  word-break: break-word;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-}
-#tab-jobs .rs-card .rs-detail-logs::-webkit-scrollbar { width: 8px; }
-#tab-jobs .rs-card .rs-detail-logs::-webkit-scrollbar-thumb {
-  background: #30363d; border-radius: 4px;
-}
 #tab-jobs .rs-url-row { display: flex; align-items: center; gap: 6px; padding: 8px 10px; }
 #tab-jobs .rs-url {
   flex: 1; min-width: 0;
@@ -765,17 +673,11 @@ body.rs-detail-open #tab-jobs .rs-detail { transform: translateX(0); }
 #tab-jobs .rs-timeline .rs-te.ok { color: #3fb950; }
 #tab-jobs .rs-timeline .rs-te.err { color: #f85149; }
 #tab-jobs .rs-timeline .rs-te.warn { color: #d29922; }
-#tab-jobs .rs-detail-foot { padding: 10px 12px 14px; display: flex; gap: 8px; align-items: center; border-top: 1px solid #21262d; background: #161b22; flex-shrink: 0; position: sticky; bottom: 0; z-index: 4; transform: translateZ(0); -webkit-transform: translateZ(0); will-change: transform; border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
-#tab-jobs .rs-detail-foot .rs-text-btn { height: 30px; padding: 0 14px; font-size: 12.5px; }
 
 /* When the drawer is open, block pointer events on the covered workspace
    so taps don't reach CM or log controls through the drawer. Do NOT hide
    the workspace visually — the drawer is fully opaque (#0d1117 background
    + ::before barrier) and covers it entirely. */
-body.rs-detail-open #tab-jobs .rs-ws {
-  pointer-events: none;
-}
-body.rs-detail-open #tab-jobs .rs-detail { z-index: 145; }
 #tab-jobs .rs-empty-sm { padding: 8px 0; color: #484f58; font-size: 11.5px; font-style: italic; }
 
 /* Prevent iOS double-tap zoom on tappable controls (fast-tap) */
@@ -792,20 +694,10 @@ body.rs-detail-open #tab-jobs .rs-detail { z-index: 145; }
 @media (max-width: 760px) {
   /* Mobile: drawer takes the FULL viewport (covers top bar too) for a
      native-sheet feel. */
-  #tab-jobs .rs-detail {
-    position: fixed;
-    top: 0; left: 0; right: 0; bottom: 0;
-    width: 100%;
-    border-left: none;
-    z-index: 200;
-  }
-  #tab-jobs .rs-detail-body { padding: 8px; gap: 8px; }
   /* iOS min 44px tap targets */
   #tab-jobs .rs-icon-btn { width: 38px; height: 38px; }
-  #tab-jobs .rs-detail-head-acts .rs-icon-btn { width: 40px; height: 40px; }
   #tab-jobs .rs-card-acts .rs-icon-btn { width: 36px; height: 36px; }
   #tab-jobs .rs-text-btn { height: 34px; min-height: 34px; padding: 0 12px; }
-  #tab-jobs .rs-detail-foot .rs-text-btn { height: 36px; }
   #tab-jobs .rs-dl-wrap { height: 36px; }
   #tab-jobs .rs-dl-caret { width: 36px; }
   #tab-jobs .rs-env-row input { height: 34px; font-size: 16px; /* prevents iOS zoom */ }
@@ -911,12 +803,9 @@ body.rs-detail-open #tab-jobs .rs-detail { z-index: 145; }
 #tab-jobs .rs-ws { will-change: transform; backface-visibility: hidden; }
 /* Better scrolling on all internal scroll containers */
 #tab-jobs .rs-list,
-#tab-jobs .rs-log-body,
-#tab-jobs .rs-detail-body {
+#tab-jobs .rs-log-body {
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
-  scroll-behavior: smooth;
-  will-change: scroll-position;
 }
 
 /* ============================================================
@@ -966,48 +855,37 @@ body.rs-detail-open #tab-jobs .rs-detail { z-index: 145; }
    stopped working and tab switching stuck.
    ============================================================ */
 
-/* Details is now a SIBLING of .rs-ws (under .rs-main), so the workspace can be
+/* Details is a SIBLING of .rs-ws (under .rs-main), so the workspace can be
    dropped from layout/paint entirely while the page is open without ever
-   affecting the panel itself. */
+   affecting the panel itself. Keeps CodeMirror from compositing underneath. */
 body.rs-detail-open #tab-jobs .rs-ws {
   visibility: hidden;
   content-visibility: hidden;
   pointer-events: none;
 }
 
-/* 2. Scrolling: the drawer body owns the scroll, and it must not chain to the
-      page behind it. Momentum scrolling on iOS needs the -webkit prefix. */
-#tab-jobs .rs-detail-body {
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-}
-
 /* 3. The log pane inside Details scrolls on its own and is the one element
       that can hold a lot of nodes — give it a containment boundary so its
       reflows never invalidate the rest of the page. */
-#tab-jobs .rs-detail-logs {
-  overflow: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-  contain: content;
-  max-height: 46vh;
-}
 
 /* 4. will-change:transform was left on permanently, pinning a GPU layer for
       a panel that is usually closed. Only promote it while it animates. */
-#tab-jobs .rs-detail { will-change: auto; }
-body.rs-detail-open #tab-jobs .rs-detail { will-change: transform; }
 
 /* ============================================================
    JOB DETAILS PAGE — rebuilt from scratch
    Sibling of .rs-ws inside .rs-main. Each action group is its own
    card so buttons are never crowded into a single toolbar.
    ============================================================ */
+/* FULL-SCREEN view. position:absolute kept it inside .rs-main, so the
+   CodeNest top bar (.dash-bar) and the RunSpace bar (.rs-bar) stayed on
+   screen above it and squeezed the page into a small strip. position:fixed
+   + inset:0 makes it own the whole viewport.
+   z-index sits above .dash-bar and .bottom-nav (1500) but below toasts (9990)
+   and modals (10000), so alerts still appear over it. */
 #tab-jobs .jd {
-  position: absolute;
+  position: fixed;
   inset: 0;
-  z-index: 150;
+  z-index: 2400;
   display: flex;
   flex-direction: column;
   background: #0d1117;
@@ -1019,6 +897,17 @@ body.rs-detail-open #tab-jobs .jd {
   transform: translateX(0);
   visibility: visible;
 }
+
+/* Hide the surrounding chrome while the Details page is open: the CodeNest
+   dashboard bar, the RunSpace toolbar, the mobile bottom nav and the job
+   sidebar. This is what the page is "full screen" relative to. */
+body.rs-detail-open .dash-bar,
+body.rs-detail-open .bottom-nav,
+body.rs-detail-open #tab-jobs .rs-bar,
+body.rs-detail-open #tab-jobs .rs-side {
+  display: none !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   #tab-jobs .jd { transition: none; }
 }
@@ -1126,6 +1015,7 @@ body.rs-detail-open #tab-jobs .jd {
 #tab-jobs .jd-health.ok  { color: #3fb950; }
 #tab-jobs .jd-health.bad .jd-dot { background: #f85149; box-shadow: 0 0 0 3px rgba(248,81,73,.16); }
 #tab-jobs .jd-health.bad { color: #f85149; }
+#tab-jobs .jd-h-tx { font-weight: 600; }
 #tab-jobs .jd-sub { font-size: 11.5px; color: #6e7681; margin: 6px 0 0; }
 
 /* Logs — contained so its reflows never touch the rest of the page */
@@ -1165,7 +1055,8 @@ body.rs-detail-open #tab-jobs .jd {
 #tab-jobs .jd-empty { color: #484f58; font-style: italic; font-size: 11.5px; }
 
 @media (max-width: 760px) {
-  #tab-jobs .jd { position: fixed; z-index: 300; }
+  /* position/z-index now come from the base rule (fixed, 2400). Re-declaring
+     z-index:300 here pushed the page BELOW .bottom-nav (1500) on phones. */
   #tab-jobs .jd-scroll { padding: 10px; gap: 10px; }
   #tab-jobs .jd-logs { max-height: 38vh; }
 }

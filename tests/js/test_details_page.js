@@ -122,6 +122,30 @@ check("Start enabled when stopped", d.getElementById("jdStart").disabled === fal
 check("Stop disabled when stopped", d.getElementById("jdStop").disabled === true);
 check("history appended on state change", d.getElementById("jdTimeline").children.length === 2);
 
+// ---- full-screen: the surrounding chrome must be hidden ---------------
+check("Details page is position:fixed (owns the viewport)",
+  /#tab-jobs \.jd \{[^}]*position:\s*fixed/.test(css));
+check("Details page covers the full viewport (inset:0)",
+  /#tab-jobs \.jd \{[^}]*inset:\s*0/.test(css));
+const zm = css.match(/#tab-jobs \.jd \{[^}]*z-index:\s*(\d+)/);
+check("z-index is above .bottom-nav (1500)", zm && Number(zm[1]) > 1500, zm && zm[1]);
+check("z-index stays below toasts (9990) and modals (10000)",
+  zm && Number(zm[1]) < 9990, zm && zm[1]);
+check("CodeNest dashboard bar hidden while open",
+  /body\.rs-detail-open \.dash-bar[\s\S]{0,260}?display:\s*none/.test(css));
+check("RunSpace toolbar hidden while open",
+  /body\.rs-detail-open #tab-jobs \.rs-bar[\s\S]{0,200}?display:\s*none/.test(css));
+check("mobile bottom nav hidden while open",
+  /body\.rs-detail-open \.bottom-nav[\s\S]{0,240}?display:\s*none/.test(css));
+check("job sidebar hidden while open",
+  /body\.rs-detail-open #tab-jobs \.rs-side[\s\S]{0,160}?display:\s*none/.test(css));
+check("page behind is scroll-locked at every width",
+  /^body\.rs-detail-open \{ overflow: hidden; \}/m.test(css));
+check("no mobile override pushing it under the nav",
+  !/#tab-jobs \.jd \{ position: fixed; z-index: 300; \}/.test(css));
+check("header keeps clear of the notch (safe-area)",
+  /#tab-jobs \.jd-top \{[^}]*env\(safe-area-inset-top/.test(css));
+
 const p = results.filter(r => r[1]).length, f = results.length - p;
 console.log(`\n================ ${p} pass, ${f} fail ================`);
 process.exit(f ? 1 : 0);

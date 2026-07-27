@@ -51,14 +51,17 @@ check("switching tabs clears the body scroll-lock classes",
 // ---- CSS -----------------------------------------------------------------
 check("covered workspace is removed from the render tree",
   /body\.rs-detail-open #tab-jobs \.rs-ws \{[^}]*visibility:\s*hidden/.test(css));
-check("body scroll-lock is mobile-only",
-  /@media \(max-width: 760px\) \{\s*\n\s*body\.rs-drawer-open \{ overflow: hidden; \}/.test(css));
-check("details body scrolls without chaining to the page",
-  /#tab-jobs \.rs-detail-body \{[^}]*overscroll-behavior:\s*contain/.test(css));
+// The page is a full-screen fixed layer now, so the document behind it must
+// not scroll at ANY width (the old drawer only needed this on mobile).
+check("page behind is scroll-locked while Details is open",
+  /^body\.rs-detail-open \{ overflow: hidden; \}/m.test(css));
+check("details scroll container does not chain to the page",
+  /#tab-jobs \.jd-scroll \{[^}]*overscroll-behavior:\s*contain/.test(css));
 check("details log pane is contained + bounded",
-  /#tab-jobs \.rs-detail-logs \{[^}]*contain:\s*content/.test(css));
-check("will-change is not pinned while the drawer is closed",
-  /#tab-jobs \.rs-detail \{ will-change: auto; \}/.test(css));
+  /#tab-jobs \.jd-logs \{[^}]*contain:\s*content/.test(css) &&
+  /#tab-jobs \.jd-logs \{[^}]*max-height/.test(css));
+check("closed panel is not painted (visibility:hidden)",
+  /#tab-jobs \.jd \{[^}]*visibility:\s*hidden/.test(css));
 
 // ---- behavioural test in a real DOM --------------------------------------
 const { JSDOM } = require("jsdom");

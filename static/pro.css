@@ -763,7 +763,7 @@ html.booting .auth, html.booting .dashboard { display: none !important; }
 /* ============================================================
    COMMAND PALETTE
    ============================================================ */
-.cmd-overlay { position: fixed; inset: 0; z-index: 7000; background: rgba(0,0,0,.6); backdrop-filter: blur(6px); display: flex; justify-content: center; align-items-start; padding-top: 12vh; opacity: 0; transition: opacity .2s; }
+.cmd-overlay { position: fixed; inset: 0; z-index: 7000; background: rgba(0,0,0,.6); backdrop-filter: blur(6px); display: flex; justify-content: center; align-items: flex-start; padding-top: 12vh; opacity: 0; transition: opacity .2s; }
 .cmd-overlay.hidden { display: none; }
 .cmd-overlay:not(.hidden) { opacity: 1; }
 .cmd-box { width: 560px; max-width: calc(100vw - 32px); background: var(--bg-3); border: 1px solid var(--border-strong); border-radius: 16px; box-shadow: var(--shadow); overflow: hidden; animation: rise .2s ease; }
