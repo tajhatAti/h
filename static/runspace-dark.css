@@ -618,6 +618,14 @@ body.rs-side-open #tab-jobs .rs-menu-backdrop { display: block; }
      and the close affordance is the backdrop. Reclaim the 44px. */
   #tab-jobs .rs-side-head { flex-basis: 40px; height: 40px; }
   body.rs-side-open #tab-jobs .rs-side { transform: translateX(0); }
+  /* BUG: the toggle chose its class from matchMedia("(max-width:760px)").
+     On phones with a dynamic browser toolbar the viewport crosses 760px as
+     the bar hides/shows, so a tap could land on the DESKTOP branch and set
+     rs-side-collapsed — which has no mobile rule, so the panel just stayed
+     put and looked unclosable. Honour BOTH classes at every width: whichever
+     the JS sets, the drawer closes. */
+  body.rs-side-collapsed #tab-jobs .rs-side { transform: translateX(-100%); }
+  body.rs-side-collapsed.rs-side-open #tab-jobs .rs-side { transform: translateX(0); }
   #tab-jobs .rs-inp { min-width: 0; }
   #tab-jobs .rs-head { padding: 0 var(--s-1) 0 var(--s-2) !important; gap: 4px !important; }
   /* Labels drop out of the action group; the icons stay. */

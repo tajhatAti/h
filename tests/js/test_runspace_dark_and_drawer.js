@@ -105,7 +105,9 @@ ok('hidden on desktop', /#tab-jobs \.rs-side-close \{ display: none; \}/.test(CS
 ok('shown on mobile',
    /@media \(max-width: 760px\)[\s\S]{0,900}\.rs-side-close \{[\s\S]{0,120}display: grid/.test(CSS));
 ok('JS wires the close button', /btnSideClose/.test(JS));
-ok('it removes the open class', /btnSideClose[\s\S]{0,300}remove\("rs-side-open"\)/.test(JS));
+// Closing is now centralised in _closeJobsRail() so every path behaves
+// identically; assert the call, not the old inline classList line.
+ok('it closes the rail', /btnSideClose[\s\S]{0,300}_closeJobsRail\(\)/.test(JS));
 ok('Escape also closes the drawer',
    /e\.key !== "Escape"[\s\S]{0,260}rs-side-open/.test(JS));
 ok('Escape yields to the Details page',
@@ -138,9 +140,65 @@ ok('drawer still slides with transform',
    /#tab-jobs \.rs-side \{[^}]*transform: translateX\(-100%\)/.test(CSS));
 ok('open state still shown', /body\.rs-side-open #tab-jobs \.rs-side \{ transform: translateX\(0\)/.test(CSS));
 ok('selecting a job still closes the drawer',
-   /function selectJob[\s\S]{0,900}remove\("rs-side-open"\)/.test(JS));
-ok('backdrop still closes it', /backdrop\.addEventListener\("click"[\s\S]{0,140}rs-side-open/.test(JS));
+   /function selectJob[\s\S]{0,900}_closeJobsRail\(\)/.test(JS));
+ok('backdrop still closes it',
+   /backdrop\.addEventListener\("click"[\s\S]{0,140}_closeJobsRail\(\)/.test(JS));
 ok('New job button survived', !!d.getElementById('btnNew'));
+
+// ── 6. the rail hides at BOTH breakpoints, with the SAME class ──────────
+// REPORTED: "the job list bar will not hide". The toggle chose its class from
+// matchMedia("(max-width:760px)"), but on a phone with a dynamic browser
+// toolbar the viewport crosses 760px as the bar hides/shows — so a tap could
+// evaluate to the DESKTOP branch and set rs-side-collapsed, which had no
+// mobile rule. Nothing happened and the panel looked stuck.
+console.log('[6] hiding works on both sides of the breakpoint');
+function mediaBlocks(src, q) {
+  let out = '', i = 0;
+  while ((i = src.indexOf(q, i)) !== -1) {
+    const o = src.indexOf('{', i);
+    let dep = 0, k = o;
+    for (; k < src.length; k++) {
+      if (src[k] === '{') dep++;
+      else if (src[k] === '}') { dep--; if (!dep) break; }
+    }
+    out += src.slice(o + 1, k) + '\n';
+    i = k;
+  }
+  return out;
+}
+function railHidden(mediaQuery, bodyClass) {
+  const dm = new JSDOM(HTML, { pretendToBeVisual: true });
+  const doc = dm.window.document;
+  doc.querySelectorAll('link[rel=stylesheet]').forEach(l => l.remove());
+  const st2 = doc.createElement('style');
+  st2.textContent = ALLCSS + '\n' + mediaBlocks(ALLCSS, mediaQuery);
+  doc.head.appendChild(st2);
+  doc.body.className = bodyClass;
+  const el = doc.querySelector('#tab-jobs .rs-side');
+  const cs = dm.window.getComputedStyle(el);
+  return cs.transform.includes('-100%') || cs.width === '0px';
+}
+const DESK = '@media (min-width: 761px)', MOB = '@media (max-width: 760px)';
+ok('desktop: rs-side-collapsed hides the rail', railHidden(DESK, 'rs-side-collapsed'));
+ok('mobile:  rs-side-collapsed hides the rail', railHidden(MOB, 'rs-side-collapsed'));
+ok('desktop: rs-side-open shows it', !railHidden(DESK, 'rs-side-open'));
+ok('mobile:  rs-side-open shows it', !railHidden(MOB, 'rs-side-open'));
+ok('mobile: hidden by default', railHidden(MOB, ''));
+ok('open beats collapsed if both are somehow set',
+   !railHidden(MOB, 'rs-side-collapsed rs-side-open'));
+
+// The JS must not decide the class from a media query any more.
+ok('toggle no longer picks its class from _isPhone()',
+   !/classList\.toggle\(_isPhone\(\) \? "rs-side-open"/.test(JS));
+ok('toggle reads what is actually on screen',
+   /getBoundingClientRect\(\)\.width > 4/.test(JS));
+ok('toggle drives BOTH classes together',
+   /toggle\("rs-side-open", show\)[\s\S]{0,120}toggle\("rs-side-collapsed", !show\)/.test(JS));
+ok('one helper owns closing', /function _closeJobsRail\(\)/.test(JS));
+ok('every close path uses it', (JS.match(/_closeJobsRail\(\)/g) || []).length >= 6,
+   String((JS.match(/_closeJobsRail\(\)/g) || []).length));
+ok('the helper clears both classes',
+   /_closeJobsRail[\s\S]{0,220}remove\("rs-side-open"\)[\s\S]{0,120}add\("rs-side-collapsed"\)/.test(JS));
 
 console.log(`\ntest_runspace_dark_and_drawer: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

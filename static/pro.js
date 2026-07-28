@@ -3338,7 +3338,7 @@ function selectJob(id) {
   id = String(id);
   // Already selected → no re-fetch, no SSE reconnect (instant tab switch)
   if (_selectedJobId === id) {
-    document.body.classList.remove("rs-side-open");
+    _closeJobsRail();
     const tab = document.getElementById("tab-jobs");
     if (tab) tab.classList.remove("side-open");
     return;
@@ -3367,7 +3367,7 @@ function selectJob(id) {
   requestAnimationFrame(() => { try { _jobCmRefresh(); } catch(e){} });
   // Update URL once job detail loads (we need the name)
   setTimeout(() => { const j = (window._lastJobs||[]).find(x => String(x.id) === _selectedJobId); if (j) _updateJobUrl(j); }, 120);
-  document.body.classList.remove("rs-side-open");
+  _closeJobsRail();
   const tab = document.getElementById("tab-jobs");
   if (tab) tab.classList.remove("side-open");
 }
@@ -3663,6 +3663,20 @@ function renderJobs(jobs) {
   }
 }
 
+/* Close the jobs rail. Must clear BOTH classes: rs-side-open drives the
+   mobile drawer, rs-side-collapsed drives the desktop rail, and the toggle
+   now sets them together. Leaving one behind is what let the panel reappear
+   or refuse to hide after crossing the breakpoint. */
+function _closeJobsRail() {
+  document.body.classList.remove("rs-side-open");
+  document.body.classList.add("rs-side-collapsed");
+}
+/* Open it again (used when the user asks for the list explicitly). */
+function _openJobsRail() {
+  document.body.classList.add("rs-side-open");
+  document.body.classList.remove("rs-side-collapsed");
+}
+
 function _initWbWiring() {
   // Guard: never wire twice
   const sentinel = document.getElementById("btnNew");
@@ -3750,19 +3764,36 @@ function _initWbWiring() {
     // desktop collapses the rail, mobile slides the drawer over.
     const _isPhone = () => window.matchMedia("(max-width: 760px)").matches;
     const _syncMenuBtn = () => {
-      const open = _isPhone()
-        ? document.body.classList.contains("rs-side-open")
-        : !document.body.classList.contains("rs-side-collapsed");
+      // Same truth the toggle uses: is the rail actually on screen?
+      const el = document.getElementById("wbSide");
+      const open = !!el && el.getBoundingClientRect().width > 4;
       menuBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    };
+    // ROOT CAUSE of "the job list bar will not hide": this used to pick the
+    // class from _isPhone(). On a phone with a dynamic browser toolbar the
+    // viewport crosses the 760px breakpoint as the bar hides/shows, so a tap
+    // could evaluate to the DESKTOP branch and set rs-side-collapsed — which
+    // had no mobile rule, so nothing happened and the panel looked stuck.
+    //
+    // Derive the state from what is ACTUALLY on screen instead of from a
+    // media query, and drive both classes together so the result is the same
+    // whichever side of the breakpoint we are on.
+    const _sideVisible = () => {
+      const el = document.getElementById("wbSide");
+      if (!el) return false;
+      // A drawer parked off-screen has no width in the layout sense.
+      return el.getBoundingClientRect().width > 4;
     };
     menuBtn.addEventListener("click", (e) => {
       e.stopPropagation(); e.preventDefault();
-      document.body.classList.toggle(_isPhone() ? "rs-side-open" : "rs-side-collapsed");
+      const show = !_sideVisible();
+      document.body.classList.toggle("rs-side-open", show);
+      document.body.classList.toggle("rs-side-collapsed", !show);
       _syncMenuBtn();
     });
     if (backdrop) {
       backdrop.addEventListener("click", () => {
-        document.body.classList.remove("rs-side-open");
+        _closeJobsRail();
         _syncMenuBtn();
       });
     }
@@ -3781,7 +3812,7 @@ function _initWbWiring() {
     if (sideClose) {
       sideClose.addEventListener("click", (e) => {
         e.preventDefault(); e.stopPropagation();
-        document.body.classList.remove("rs-side-open");
+        _closeJobsRail();
         _syncMenuBtn();
       });
     }
@@ -3791,7 +3822,7 @@ function _initWbWiring() {
       if (e.key !== "Escape") return;
       if (!document.body.classList.contains("rs-side-open")) return;
       if (document.body.classList.contains("rs-detail-open")) return;
-      document.body.classList.remove("rs-side-open");
+      _closeJobsRail();
       _syncMenuBtn();
     });
 
@@ -3811,7 +3842,7 @@ function _initWbWiring() {
         x0 = null;
         // Horizontal intent only, or scrolling the job list would close it.
         if (dx < -48 && Math.abs(dx) > Math.abs(dy) * 1.5) {
-          document.body.classList.remove("rs-side-open");
+          _closeJobsRail();
           _syncMenuBtn();
         }
       }, { passive: true });
@@ -3855,7 +3886,7 @@ function _initWbWiring() {
     crumbRoot.addEventListener("click", (e) => {
       e.preventDefault(); e.stopPropagation();
       if (window.matchMedia("(max-width: 760px)").matches) {
-        document.body.classList.add("rs-side-open");
+        _openJobsRail();
       } else {
         document.body.classList.remove("rs-side-collapsed");
       }
