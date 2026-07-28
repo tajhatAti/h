@@ -343,6 +343,97 @@ def admin_jobs_route(authorization: Optional[str] = Header(None)):
     return {"jobs": jobs}
 
 
+@router.get("/admin/jobs/{job_id}")
+def admin_job_detail_route(job_id: int, authorization: Optional[str] = Header(None)):
+    """One app, in full — everything that explains why it is behaving that way.
+
+    The list view answers "what exists"; this answers "what is wrong with it".
+    That means the resource picture (now AND peak), the restart history, the
+    reason it last died, its packages, which physical worker holds it, and its
+    recent log.
+
+    LOGS ARE INCLUDED DELIBERATELY. The platform owner has said privacy is not
+    a concern here, and a monitoring console that cannot read the traceback of
+    a crashing job is decoration. The SOURCE CODE is still not returned — the
+    log is the job's own output, the code is the user's work.
+    """
+    require_admin(authorization)
+    conn = get_db_connection()
+    try:
+        row = conn.execute(
+            """
+            SELECT j.id, j.name, j.language, j.created_at, j.updated_at,
+                   j.runner_job_id, j.worker_url, j.user_id,
+                   u.username AS owner, u.email AS owner_email,
+                   u.telegram_id AS owner_telegram, u.is_suspended AS owner_suspended
+            FROM jobs j JOIN users u ON u.id = j.user_id
+            WHERE j.id = ?
+            """,
+            (job_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Not found.")
+        job = dict(row)
+        # How many OTHER apps this owner runs — the context that turns "one
+        # heavy job" into "this account is the load".
+        job["owner_job_count"] = dict(conn.execute(
+            "SELECT COUNT(*) AS c FROM jobs WHERE user_id = ?", (job["user_id"],)
+        ).fetchone())["c"]
+    finally:
+        conn.close()
+
+    job["source"] = "telegram" if job.get("owner_telegram") else "website"
+    job["source_inferred"] = True
+    job.pop("owner_telegram", None)
+    worker = job.get("worker_url") or None
+    job["worker"] = worker or "primary"
+
+    # Ask the worker that actually holds this job. Going to pool[0] would
+    # report a perfectly healthy app on an overflow worker as missing.
+    live, logs, reachable = {}, "", False
+    try:
+        rid = job.get("runner_job_id")
+        if rid:
+            resp = runner_client._runner_http(
+                "GET", f"/internal/jobs/{rid}", worker=worker)
+            if resp is not None and resp.status_code == 200:
+                live = resp.json() or {}
+                reachable = True
+            elif resp is not None and resp.status_code == 404:
+                # The worker answered and does not know it: genuinely gone,
+                # as opposed to unreachable.
+                reachable = True
+    except Exception as exc:
+        logger.warning("admin job detail: runner unreachable for %s (%s)", job_id, exc)
+
+    logs = live.pop("logs", "") or ""
+    for k in ("status", "uptime_s", "restarts", "mem_mb", "peak_mem_mb",
+              "cpu_pct", "port", "web", "web_slug", "web_public",
+              "last_exit_reason", "started_at"):
+        job[k] = live.get(k)
+    job["libs"] = live.get("libs") or []
+    # Env VALUES hold bot tokens. Only the key names are ever returned, and
+    # this is the one place the distinction matters enough to name it.
+    job["env_keys"] = live.get("env_keys") or []
+    # "offline" is a claim about the job; "unknown" is an admission about us.
+    # Reporting an unreachable worker's job as stopped is how a monitoring
+    # panel manufactures a false alarm.
+    if not reachable:
+        job["status"] = "unknown"
+        job["status_stale"] = True
+    elif not job.get("status"):
+        job["status"] = "offline" if job.get("runner_job_id") else "stopped"
+
+    return {
+        "job": job,
+        # Tail, not the whole ring buffer: the last screenful is what explains
+        # a crash, and the full history would dominate the response.
+        "logs": "\n".join(logs.splitlines()[-200:]),
+        "log_truncated": len(logs.splitlines()) > 200,
+        "runner_reachable": reachable,
+    }
+
+
 @router.get("/admin/libraries")
 def admin_libraries_route(authorization: Optional[str] = Header(None)):
     """Every package installed across every job, by frequency.

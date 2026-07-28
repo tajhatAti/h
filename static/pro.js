@@ -5046,21 +5046,172 @@ function renderAdminSpark(ov) {
   }).join("");
 }
 
+/* The list answers "what exists". Memory and restarts are here because they
+   are what makes a row worth opening — a table of names and uptimes gives no
+   reason to look closer at any particular app. */
 function renderAdminJobs(jobs) {
   const el = document.getElementById("admJobs");
   if (!el) return;
   if (!jobs.length) { el.innerHTML = '<tr><td class="adm-empty">No RunSpace apps yet.</td></tr>'; return; }
-  el.innerHTML = '<tr><th>App</th><th>Owner</th><th>Lang</th><th>Status</th><th>Uptime</th><th>Created</th></tr>' +
+  el.innerHTML = '<tr><th>App</th><th>Owner</th><th>Status</th><th>Memory</th><th>Uptime</th><th>Restarts</th></tr>' +
     jobs.map(j => {
       const st = (j.live_status || (j.runner_job_id ? "offline" : "stopped")).toLowerCase();
       const live = st === "running";
-      return `<tr><td><b>${escapeHtml(j.name)}</b></td>` +
+      const mem = j.mem_mb != null
+        ? `${Math.round(j.mem_mb)}MB${j.peak_mem_mb ? ` <small>peak ${Math.round(j.peak_mem_mb)}MB</small>` : ""}`
+        : "—";
+      // A restart count above zero is the single loudest signal in this table:
+      // the app is crash-looping. It gets the warning treatment, not a number
+      // buried in grey.
+      const rs = j.restarts
+        ? `<span class="adm-pill warn">${j.restarts}×</span>`
+        : '<span class="adm-num-zero">0</span>';
+      return `<tr tabindex="0" role="button" onclick="openAdminJob(${j.id})" ` +
+      `onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAdminJob(${j.id});}">` +
+      `<td><b>${escapeHtml(j.name)}</b><small>${escapeHtml(j.language)} · ${escapeHtml((j.created_at || "").slice(0, 10))}</small></td>` +
       `<td>${escapeHtml(j.owner)}${j.owner_suspended ? ' <span class="adm-pill warn">suspended</span>' : ""}</td>` +
-      `<td>${escapeHtml(j.language)}</td>` +
       `<td><span class="adm-pill${live ? " ok" : ""}">${escapeHtml(st)}</span></td>` +
+      `<td>${mem}</td>` +
       `<td>${j.uptime_s ? _fmtUptime(j.uptime_s) : "—"}</td>` +
-      `<td>${escapeHtml((j.created_at || "").slice(0, 10))}</td></tr>`;
+      `<td>${rs}</td></tr>`;
     }).join("");
+}
+
+/* ---------- per-app detail ---------- */
+
+// Why an app died, in the language of the person reading it. The runner emits
+// a short machine token; leaving that on screen makes the console look like a
+// log file instead of an answer.
+// The four tokens runner/app.py actually writes to last_exit_reason. I first
+// wrote this map from memory and invented "killed"/"error", which the runner
+// never emits — so every real crash would have fallen through to the raw
+// token. The keys below are read off the source, not guessed.
+const ADM_EXIT_REASON = {
+  oom: "Stopped — it used more memory than it is allowed.",
+  crash: "Crashed with a non-zero exit code — see the log below.",
+  manual: "Stopped on request.",
+  exit: "Finished on its own and exited cleanly.",
+};
+
+function _admRow(label, value, cls) {
+  const td = document.createElement("td");
+  if (value instanceof Node) td.appendChild(value);
+  else td.textContent = value == null || value === "" ? "—" : String(value);
+  if (cls) td.className = cls;
+  const th = document.createElement("th");
+  th.textContent = label;
+  const tr = document.createElement("tr");
+  tr.append(th, td);
+  return tr;
+}
+
+async function openAdminJob(jobId) {
+  const modal = document.getElementById("admJobModal");
+  const body = document.getElementById("admJobBody");
+  if (!modal || !body) return;
+  document.getElementById("admJobTitle").textContent = "Loading…";
+  body.textContent = "";
+  openModal("admJobModal");
+  let d;
+  try {
+    d = await api("/admin/jobs/" + jobId, "GET", null, true);
+  } catch (e) {
+    // 404 here means the row vanished between the list load and the click,
+    // or the caller is not an admin. Either way: say nothing revealing.
+    body.innerHTML = '<div class="adm-empty">Nothing here.</div>';
+    return;
+  }
+  renderAdminJobDetail(d);
+}
+
+function renderAdminJobDetail(d) {
+  const j = (d && d.job) || {};
+  const body = document.getElementById("admJobBody");
+  const title = document.getElementById("admJobTitle");
+  if (!body) return;
+  title.textContent = j.name || "App";
+  body.textContent = "";
+
+  const st = (j.status || "unknown").toLowerCase();
+  const head = document.createElement("div");
+  head.className = "adm-jd-head";
+  const pill = document.createElement("span");
+  pill.className = "adm-pill" + (st === "running" ? " ok" : (st === "unknown" ? " warn" : ""));
+  pill.textContent = st;
+  head.appendChild(pill);
+  if (j.status_stale) {
+    // "offline" would be a claim about the app; the truth is that we could not
+    // reach the worker. Saying the wrong one manufactures a false alarm.
+    const note = document.createElement("span");
+    note.className = "adm-hint";
+    note.textContent = "the worker did not answer — this status is stale, not a diagnosis";
+    head.appendChild(note);
+  }
+  body.appendChild(head);
+
+  if (j.last_exit_reason) {
+    const why = document.createElement("div");
+    why.className = "adm-jd-why";
+    why.textContent = ADM_EXIT_REASON[j.last_exit_reason] || ("Last exit: " + j.last_exit_reason);
+    body.appendChild(why);
+  }
+
+  const t = document.createElement("table");
+  t.className = "adm-table adm-jd-table";
+  const mem = j.mem_mb != null
+    ? `${Math.round(j.mem_mb)}MB now · ${Math.round(j.peak_mem_mb || 0)}MB peak`
+    : "—";
+  const ownerCell = document.createElement("span");
+  ownerCell.textContent = j.owner || "—";
+  if (j.owner_suspended) {
+    const s = document.createElement("span");
+    s.className = "adm-pill warn";
+    s.textContent = "suspended";
+    ownerCell.append(" ", s);
+  }
+  const count = document.createElement("span");
+  count.className = "adm-hint";
+  count.textContent = `${j.owner_job_count || 0} app${j.owner_job_count === 1 ? "" : "s"} on this account`;
+  ownerCell.append(document.createElement("br"), count);
+
+  t.append(
+    _admRow("Owner", ownerCell),
+    _admRow("Email", j.owner_email),
+    _admRow("Created via", j.source ? j.source + " (inferred)" : "—"),
+    _admRow("Language", j.language),
+    _admRow("Memory", mem),
+    _admRow("CPU", j.cpu_pct != null ? j.cpu_pct + "%" : "—"),
+    _admRow("Uptime", j.uptime_s ? _fmtUptime(j.uptime_s) : "—"),
+    _admRow("Restarts", j.restarts != null ? String(j.restarts) : "—"),
+    _admRow("Worker", j.worker),
+    _admRow("Created", (j.created_at || "").slice(0, 16)),
+  );
+  if (j.web_slug) t.appendChild(_admRow("Public URL", "/live/" + j.web_slug + "/"));
+  // KEYS only. The values are bot tokens and API secrets; the console has no
+  // reason to display a credential to prove it exists.
+  if ((j.env_keys || []).length) {
+    t.appendChild(_admRow("Env keys", j.env_keys.join(", ")));
+  }
+  if ((j.libs || []).length) t.appendChild(_admRow("Packages", j.libs.join(", ")));
+  body.appendChild(t);
+
+  const logHead = document.createElement("div");
+  logHead.className = "adm-panel-head";
+  const h = document.createElement("h3");
+  h.textContent = "Recent log";
+  const hint = document.createElement("span");
+  hint.className = "adm-hint";
+  hint.textContent = d.log_truncated ? "last 200 lines" : "the app's own output";
+  logHead.append(h, hint);
+  body.appendChild(logHead);
+
+  // textContent, not innerHTML: a job's log is whatever the user's program
+  // decided to print, which makes it the most obviously untrusted string on
+  // the page.
+  const pre = document.createElement("pre");
+  pre.className = "adm-jd-log";
+  pre.textContent = d.logs || (d.runner_reachable ? "(no output yet)" : "(the worker did not answer)");
+  body.appendChild(pre);
 }
 
 function renderAdminUsers(users) {

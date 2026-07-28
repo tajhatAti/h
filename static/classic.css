@@ -1515,8 +1515,41 @@ body.ed-full { overflow: hidden !important; }
 .adm-link { color: var(--acc) !important; text-decoration: none; font-size: 12.5px; word-break: break-all; }
 .adm-link:hover { text-decoration: underline; }
 
+/* A row you can open has to look like one. Without this the table reads as a
+   static report and nobody ever discovers the detail view. */
+.adm-table.clickable tbody tr:hover td,
+.adm-table.clickable tr:hover td { background: var(--panel-2); }
+.adm-table.clickable tr[role="button"] { cursor: pointer; }
+.adm-table.clickable tr[role="button"]:focus-visible {
+  outline: 2px solid var(--acc); outline-offset: -2px;
+}
+.adm-num-zero { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* ---- per-app detail ---- */
+.adm-detail-modal .ah-modal-card { max-width: 620px; width: min(620px, 94vw); }
+.adm-jd-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.adm-jd-why {
+  border: 1px solid var(--line); border-left: 3px solid var(--red);
+  background: var(--panel-2); border-radius: var(--r-sm);
+  padding: 9px 12px; font-size: 12.5px; color: var(--ink-2); margin-bottom: 14px;
+}
+.adm-jd-table { margin-bottom: 16px; }
+.adm-jd-table th {
+  width: 34%; padding: 8px 12px 8px 0; vertical-align: top;
+  border-bottom: 1px solid var(--line);
+}
+.adm-jd-table td { font-size: 12.5px; word-break: break-word; }
+.adm-jd-log {
+  margin: 0; padding: 11px 13px; border: 1px solid var(--line);
+  border-radius: var(--r-sm); background: var(--panel-2);
+  font-family: var(--mono); font-size: 11.5px; line-height: 1.55;
+  color: var(--ink-2); max-height: 260px; overflow: auto;
+  white-space: pre-wrap; word-break: break-word;
+}
+
 @media (max-width: 768px) {
   .adm-stats { grid-template-columns: repeat(2, 1fr); }
+  .adm-jd-table th { width: 42%; }
 }
 
 @media (prefers-reduced-motion: reduce) {

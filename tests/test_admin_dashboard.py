@@ -121,7 +121,7 @@ print("[3] a REAL job, measured end to end")
 # ---------------------------------------------------------------------------
 r = c.post("/api/jobs", headers=AH, json={
     "name": "realbot", "language": "python",
-    "code": "import time\nwhile True:\n    time.sleep(1)\n"})
+    "code": "import time\nprint('hello from the bot', flush=True)\nwhile True:\n    time.sleep(1)\n"})
 check("job created", r.status_code in (200, 201), str(r.status_code))
 for j in R._jobs.values():
     j["libs"] = ["pyTelegramBotAPI", "requests", "numpy"]
@@ -148,6 +148,81 @@ ov = c.get("/admin/overview", headers=AH).json()
 check("status breakdown counts the running job",
       (ov.get("jobs_by_status") or {}).get("running") == 1, str(ov.get("jobs_by_status")))
 check("platform memory reflects the real job", ov["mem_used_mb"] > 0, str(ov["mem_used_mb"]))
+
+# ---------------------------------------------------------------------------
+print("[3b] per-app detail, from the REAL running job")
+# ---------------------------------------------------------------------------
+# The list view already carried mem_mb/peak/restarts/libs and threw them away
+# in the browser, and there was no route to ask for more. GET /admin/jobs/1
+# answered 404 before this existed.
+det = c.get(f"/admin/jobs/{jb['id']}", headers=AH)
+check("a per-app route exists", det.status_code == 200, str(det.status_code))
+dj = det.json()
+job = dj["job"]
+check("it is the right app", job["name"] == "realbot", str(job.get("name")))
+check("status comes from the runner", job["status"] == "running", str(job.get("status")))
+check("memory is measured, not guessed", (job.get("mem_mb") or 0) > 0, str(job.get("mem_mb")))
+check("the peak is carried through", (job.get("peak_mem_mb") or 0) >= job["mem_mb"])
+check("restarts are reported", job.get("restarts") == 0, str(job.get("restarts")))
+check("the owner is named", job["owner"] == "boss")
+check("with their other apps counted", job.get("owner_job_count") == 1,
+      str(job.get("owner_job_count")))
+check("the worker is identified", bool(job.get("worker")))
+check("packages are listed", set(job.get("libs") or []) ==
+      {"numpy", "pyTelegramBotAPI", "requests"}, str(job.get("libs")))
+check("the runner answered", dj["runner_reachable"] is True)
+check("the app's own log is returned", "hello from the bot" in dj["logs"],
+      repr(dj["logs"][:120]))
+check("the log is tailed, not unbounded", len(dj["logs"].splitlines()) <= 200)
+
+# The two things that must never leave the server.
+check("the source code is not in the payload", "code" not in job, str(sorted(job)))
+check("no env VALUE is echoed", "env" not in job and "env_values" not in job,
+      str(sorted(job)))
+check("only env KEY names are returned", isinstance(job.get("env_keys"), list))
+check("a non-admin gets the same 404 as an unknown URL",
+      c.get(f"/admin/jobs/{jb['id']}", headers=NH).status_code == 404)
+check("so does an anonymous visitor",
+      c.get(f"/admin/jobs/{jb['id']}").status_code == 404)
+check("a missing app is 404, not 500",
+      c.get("/admin/jobs/9999", headers=AH).status_code == 404)
+
+# A job whose worker cannot be reached must read as UNKNOWN. Calling it
+# "offline" invents a fact — the app may be running perfectly.
+conn = DB.get_db_connection()
+conn.execute("INSERT INTO jobs (user_id,name,language,code,runner_job_id,worker_url,"
+             "created_at,updated_at) VALUES (1,'ghost','python','x','gone',?,?,?)",
+             ("https://asleep.test", now_utc_str(), now_utc_str()))
+conn.commit()
+gid = dict(conn.execute("SELECT id FROM jobs WHERE name='ghost'").fetchone())["id"]
+conn.close()
+import services.runner_client as _RC  # noqa: E402
+_saved_http = _RC._runner_http
+
+
+def _unreachable(method, path, json_body=None, worker=None):
+    from fastapi import HTTPException as _HE
+    if worker == "https://asleep.test":
+        raise _HE(status_code=503, detail="asleep")
+    return _saved_http(method, path, json_body, worker)
+
+
+_RC._runner_http = _unreachable
+try:
+    g = c.get(f"/admin/jobs/{gid}", headers=AH).json()
+    check("an unreachable worker reads as unknown", g["job"]["status"] == "unknown",
+          str(g["job"].get("status")))
+    check("it is NOT called offline", g["job"]["status"] != "offline")
+    check("and the console is told the status is stale",
+          g["job"].get("status_stale") is True)
+    check("the response says the runner was unreachable",
+          g["runner_reachable"] is False)
+finally:
+    _RC._runner_http = _saved_http
+    conn = DB.get_db_connection()
+    conn.execute("DELETE FROM jobs WHERE name='ghost'")
+    conn.commit()
+    conn.close()
 
 # ---------------------------------------------------------------------------
 print("[4] library aggregation")
