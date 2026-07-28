@@ -4835,18 +4835,62 @@ function stopJobPolling()   { if (_jobsTimer) { clearInterval(_jobsTimer); _jobs
    never leaked. Destructive actions re-ask the admin's OWN 2FA code. */
 let _admPending = null;   // { user_id, suspended } awaiting 2FA confirm
 
+let _adminFetching = false;  // guard: one in-flight markup fetch at a time
 let _adminSectHtml = null;   // pristine copy so the panel can come BACK on
                              // this device when an actual admin signs in next
 function applyAdminVisibility(profile) {
   const isAdm = !!(profile && profile.is_admin);
-  const btn = document.getElementById("tabBtnAdmin");
+  let btn = document.getElementById("tabBtnAdmin");
+  // The nav button is stripped from the shell too, for the same reason as the
+  // section: a hidden button is still discoverable in the page source.
+  if (isAdm && !btn) {
+    const bar = document.querySelector(".dash-tabs");
+    if (bar) {
+      bar.insertAdjacentHTML("beforeend",
+        '<button title="Admin console" class="dash-tab tab-secondary" ' +
+        'id="tabBtnAdmin" data-tab="admin">' +
+        '<svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+        'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' +
+        '<path d="M12 3.5 5 6v5.5c0 4.5 3 7.6 7 9 4-1.4 7-4.5 7-9V6z"/>' +
+        '<path d="M9.2 11.8l2 2 3.6-4"/></svg>' +
+        '<span class="tab-tx">Admin</span></button>');
+      btn = document.getElementById("tabBtnAdmin");
+      if (btn && typeof _wireTabButton === "function") _wireTabButton(btn);
+      else if (btn) btn.addEventListener("click", () => switchTab("admin"));
+    }
+  }
   if (btn) btn.classList.toggle("hidden", !isAdm);
   let sect = document.getElementById("tab-admin");
 
   if (isAdm) {
-    if (!sect && _adminSectHtml) {
-      const host = document.querySelector(".dash-main");
-      if (host) host.insertAdjacentHTML("beforeend", _adminSectHtml);
+    // The shell no longer ships the console's markup — it was readable in the
+    // page source by any anonymous visitor. Fetch it once, from an endpoint
+    // behind the same 404 gate as the admin data.
+    if (!sect) {
+      if (_adminSectHtml) {
+        const host = document.querySelector(".dash-main");
+        if (host) host.insertAdjacentHTML("beforeend", _adminSectHtml);
+      } else if (!_adminFetching) {
+        _adminFetching = true;
+        // Plain fetch, not api(): api() parses JSON and its 5th argument is a
+        // retry flag, not options. This endpoint returns HTML.
+        fetch(API + "/admin/panel-html", {
+          headers: authToken ? {Authorization: "Bearer " + authToken} : {},
+        })
+          .then(r => (r.ok ? r.text() : Promise.reject(r.status)))
+          .then(html => {
+            _adminSectHtml = html;
+            const host = document.querySelector(".dash-main");
+            if (host && !document.getElementById("tab-admin")) {
+              host.insertAdjacentHTML("beforeend", html);
+            }
+            if (currentTab === "admin" && typeof loadAdminPanel === "function") {
+              loadAdminPanel();
+            }
+          })
+          .catch(() => {})          // 404 => not an admin after all; stay quiet
+          .finally(() => { _adminFetching = false; });
+      }
     }
     return;
   }

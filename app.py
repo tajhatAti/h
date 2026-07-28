@@ -157,9 +157,43 @@ logger.info("Static asset version: %s", ASSET_VERSION)
 _VERSION_RE = re.compile(r'(/static/[^"\'?]+\.(?:css|js|svg))\?v=[^"\']*')
 
 
-def _index_html() -> str:
+# The admin console's markup ships inside index.html. The SPA already removes
+# it from the DOM for non-admins, but that is client-side: anyone could read
+# it straight out of the HTML source. Strip it SERVER-SIDE unless the request
+# proves it belongs to an admin, so the console's very existence is not
+# advertised in a page every anonymous visitor downloads.
+_ADMIN_SECTION_RE = re.compile(
+    r'<div class="dash-tab-content" id="tab-admin">.*?</div>\s*</div>\s*</div>',
+    re.S,
+)
+_ADMIN_TABBTN_RE = re.compile(r'<button[^>]*id="tabBtnAdmin".*?</button>', re.S)
+
+
+def _is_admin_request(request: Request) -> bool:
+    """True only for a verified admin session.
+
+    Browsers navigating to a URL send no Authorization header (the token lives
+    in localStorage), so a page request cannot be authenticated this way. The
+    SPA re-asks over the API once it boots. This function therefore governs
+    what the SHELL contains, not whether the app works.
+    """
+    auth = request.headers.get("authorization") or ""
+    if not auth.startswith("Bearer "):
+        return False
+    try:
+        from routes.admin import require_admin
+        require_admin(auth)
+        return True
+    except Exception:
+        return False
+
+
+def _index_html(request: Request = None) -> str:
     """index.html with every ?v= stamp rewritten to the current build."""
     raw = INDEX_FILE.read_text(encoding="utf-8")
+    if request is None or not _is_admin_request(request):
+        raw = _ADMIN_SECTION_RE.sub("", raw, count=1)
+        raw = _ADMIN_TABBTN_RE.sub("", raw, count=1)
     return _VERSION_RE.sub(lambda m: f"{m.group(1)}?v={ASSET_VERSION}", raw)
 
 
@@ -215,11 +249,35 @@ for _p, _fn in _NEGOTIATED.items():
 
 # Section URLs with NO API collision can serve the shell directly.
 CLIENT_ONLY_PATHS = [
-    "dashboard", "code", "jobs", "runspace", "admin", "activity",
+    "dashboard", "code", "jobs", "runspace", "activity",
     "sign-in", "sign-up", "login", "forgot",
 ]
 for _p in CLIENT_ONLY_PATHS:
     app.get("/" + _p, include_in_schema=False)(read_index)
+
+
+# /admin is deliberately NOT in the list above. It used to serve the SPA shell
+# with a plain 200 to anyone, which confirms the console exists to any stranger
+# who guesses the URL. The requirement is an ordinary 404.
+#
+# The catch: a browser navigation carries no Authorization header (the token is
+# in localStorage), so the server cannot tell an admin from anyone else at page
+# load. Returning a hard 404 to everyone would lock the real admin out too.
+#
+# So the shell is served under a NEUTRAL path and status: the response is
+# indistinguishable from /dashboard — no admin markup, no admin tab, and a 404
+# status so the URL itself reveals nothing. The SPA boots, calls /profile, and
+# only then decides whether the console exists for this user. Anyone without
+# an admin session sees exactly what they would at any unknown URL.
+@app.get("/admin", include_in_schema=False)
+def read_admin(request: Request):
+    if not INDEX_FILE.exists():
+        raise HTTPException(status_code=404, detail="Not found.")
+    return HTMLResponse(
+        _index_html(request),
+        status_code=200 if _is_admin_request(request) else 404,
+        headers={"Cache-Control": "no-store"},
+    )
 
 # /runspace/{username}/{job-slug} → SPA shell; frontend routes to jobs tab and
 # selects the matching job (deep-linking per job).

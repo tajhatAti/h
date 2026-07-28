@@ -22,8 +22,17 @@ router = APIRouter()
 
 
 def require_admin(authorization):
-    """404 (not 403) for everyone else — the panel's existence stays private."""
-    user, session = get_current_user_and_session(authorization)
+    """404 for everyone else — the console's existence stays private.
+
+    404 for the UNAUTHENTICATED case too. Letting a missing token answer 401
+    while a valid non-admin token answers 404 is itself a signal: it tells a
+    stranger the route is real and merely gated. Every non-admin caller now
+    gets the identical response an unknown URL would give.
+    """
+    try:
+        user, session = get_current_user_and_session(authorization)
+    except HTTPException:
+        raise HTTPException(status_code=404, detail="Not found.")
     if not ("is_admin" in user.keys() and user["is_admin"]):
         raise HTTPException(status_code=404, detail="Not found.")
     return user, session
@@ -68,6 +77,25 @@ class AbuseReportIn(BaseModel):
     reason: Optional[str] = ""
 
 
+
+
+@router.get("/admin/panel-html", include_in_schema=False)
+def admin_panel_html(authorization: Optional[str] = Header(None)):
+    """The console's MARKUP, behind the same 404 gate as its data.
+
+    index.html no longer ships this section — it was readable in the page
+    source by any anonymous visitor, which advertised the console's existence.
+    The SPA fetches it here once it knows the session is an admin one, so a
+    non-admin gets the same 404 they get for every other admin route.
+    """
+    require_admin(authorization)
+    from fastapi.responses import HTMLResponse
+    from pathlib import Path
+    frag = Path(__file__).resolve().parent.parent / "templates" / "admin_panel.html"
+    if not frag.exists():
+        raise HTTPException(status_code=404, detail="Not found.")
+    return HTMLResponse(frag.read_text(encoding="utf-8"),
+                        headers={"Cache-Control": "no-store"})
 
 
 @router.get("/admin/overview")

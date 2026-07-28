@@ -99,7 +99,10 @@ for p in ("/admin/users", "/admin/jobs", "/admin/audit-log", "/admin/abuse-repor
     check(f"non-admin {p} → 404", c.get(p, headers=auth(tok_u)).status_code == 404)
 r = c.post("/admin/users/set-suspended", json={"user_id": uid_u, "suspended": True}, headers=auth(tok_u))
 check("non-admin suspend attempt → 404", r.status_code == 404)
-check("no-token /admin/overview → 401", c.get("/admin/overview").status_code == 401)
+# 404, not 401. Answering 401 without a token while a non-admin token gets 404
+# is itself a signal — it confirms the route exists and is merely gated. Every
+# non-admin caller now gets the identical response an unknown URL gives.
+check("no-token /admin/overview → 404", c.get("/admin/overview").status_code == 404)
 
 # ============ 4) ADMIN GRANT via env + /profile flag ============
 _deps.ADMIN_EMAILS = {"boss@t.dev"}
@@ -190,9 +193,18 @@ r = c.get("/report-abuse")
 check("report page renders", r.status_code == 200 and "Report abuse" in r.text)
 
 # ============ 9) SPA SHELL PATHS ============
-for p in ("/runspace", "/admin"):
+for p in ("/runspace",):
     r = c.get(p, headers={"Accept": "text/html"})
     check(f"{p} serves the SPA shell", r.status_code == 200 and "RunSpace" in r.text)
+
+# /admin deliberately does NOT serve a 200 shell any more: that confirmed the
+# console's existence to any stranger who guessed the URL. A non-admin now gets
+# a 404 whose body is byte-identical to an ordinary page.
+# Full coverage lives in tests/test_admin_stealth.py.
+r = c.get("/admin", headers={"Accept": "text/html"})
+check("/admin is a plain 404 for non-admins", r.status_code == 404)
+check("/admin leaks no admin markup",
+      "tab-admin" not in r.text and "tabBtnAdmin" not in r.text)
 
 print(f"\n{sum(1 for _, ok in results if ok)}/{len(results)} checks passed")
 if not all(ok for _, ok in results):

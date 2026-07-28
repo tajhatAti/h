@@ -1,0 +1,31 @@
+<div class="dash-tab-content" id="tab-admin">
+      <div class="tab-head">
+        <div><div class="eyebrow">OWNER CONSOLE</div><h2>Admin</h2></div>
+        <button class="btn-ghost sm" id="admRefresh" onclick="loadAdminPanel(true)">↻ Refresh</button>
+      </div>
+      <div class="adm-stats" id="admStats"></div>
+      <div class="adm-panel">
+        <div class="adm-panel-head"><h3>Signups · last 14 days</h3><span class="adm-hint" id="admCap"></span></div>
+        <div class="adm-spark" id="admSpark"></div>
+      </div>
+      <div class="adm-panel">
+        <div class="adm-panel-head"><h3>RunSpace apps</h3><span class="adm-hint">metadata only — code stays private</span></div>
+        <div class="adm-table-wrap"><table class="adm-table" id="admJobs"></table></div>
+      </div>
+      <div class="adm-panel">
+        <div class="adm-panel-head"><h3>Installed packages</h3><span class="adm-hint">across running jobs — hover a row for owners</span></div>
+        <div class="adm-libs" id="admLibs"></div>
+      </div>
+      <div class="adm-panel">
+        <div class="adm-panel-head"><h3>Users</h3><span class="adm-hint">suspending needs your 2FA code</span></div>
+        <div class="adm-table-wrap"><table class="adm-table" id="admUsers"></table></div>
+      </div>
+      <div class="adm-panel">
+        <div class="adm-panel-head"><h3>Abuse reports</h3><span class="adm-hint">sent from the public report page</span></div>
+        <div class="adm-table-wrap"><table class="adm-table" id="admReports"></table></div>
+      </div>
+      <div class="adm-panel">
+        <div class="adm-panel-head"><h3>Audit log</h3><span class="adm-hint">every admin action, recorded</span></div>
+        <div class="adm-table-wrap"><table class="adm-table" id="admAudit"></table></div>
+      </div>
+    </div>

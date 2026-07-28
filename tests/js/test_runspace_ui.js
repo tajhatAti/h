@@ -32,7 +32,9 @@ check("unsaved edits are never overwritten by a poll",
 
 // ---- 2. cache busting ---------------------------------------------------
 check("asset version derives from real file state", /def _asset_version\(\)/.test(appPy));
-check("index.html is rewritten with the live stamp", /def _index_html\(\)/.test(appPy));
+// Signature now takes an optional request, so the shell can strip the admin
+// console for non-admins. Match the name, not the exact parameter list.
+check("index.html is rewritten with the live stamp", /def _index_html\(/.test(appPy));
 check("no hardcoded ?v= is served", !/FileResponse\(INDEX_FILE\)/.test(appPy));
 check("HTML itself is sent no-cache", /Cache-Control": "no-cache, must-revalidate/.test(appPy));
 
