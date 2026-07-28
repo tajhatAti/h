@@ -5297,6 +5297,7 @@ function renderAdminStats(ov) {
     chip("verified", ov.verified ?? 0) +
     chip("suspended", ov.suspended ?? 0, ov.suspended ? "warn" : "") +
     chip("apps live", ov.jobs_deployed ?? 0) +
+    chip("on telegram", ov.telegram_linked ?? 0) +
     chip("memory", ov.mem_safe_mb != null
         ? `${Math.round(ov.mem_used_mb ?? 0)}MB / ${ov.mem_safe_mb}MB`
         : "—",
@@ -5361,7 +5362,10 @@ function renderAdminJobs(jobs) {
       return `<tr tabindex="0" role="button" data-adm-key="job:${j.id}" onclick="openAdminJob(${j.id})" ` +
       `onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAdminJob(${j.id});}">` +
       `<td><b>${escapeHtml(j.name)}</b><small>${escapeHtml(j.language)} · ${escapeHtml((j.created_at || "").slice(0, 10))}</small></td>` +
-      `<td>${escapeHtml(j.owner)}${j.owner_suspended ? ' <span class="adm-pill warn">suspended</span>' : ""}</td>` +
+      `<td>${escapeHtml(j.owner)}${j.owner_suspended ? ' <span class="adm-pill warn">suspended</span>' : ""}` +
+      // The owner can drive this app from a chat. That changes who to contact
+      // when something is wrong, so it belongs on the row.
+      `${j.source === "telegram" ? ' <span class="adm-pill tg">tg</span>' : ""}</td>` +
       `<td><span class="adm-pill${live ? " ok" : ""}">${escapeHtml(st)}</span></td>` +
       `<td>${mem}</td>` +
       `<td>${j.uptime_s ? _fmtUptime(j.uptime_s) : "—"}</td>` +
@@ -5474,7 +5478,10 @@ function renderAdminJobDetail(d) {
   t.append(
     _admRow("Owner", ownerCell),
     _admRow("Email", j.owner_email),
-    _admRow("Created via", j.source ? j.source + " (inferred)" : "—"),
+    _admRow("Created via", j.source
+      ? j.source + (j.owner_telegram_name ? ` · ${j.owner_telegram_name}` : "")
+        + " (inferred)"
+      : "—"),
     _admRow("Language", j.language),
     _admRow("Memory", mem),
     _admRow("CPU", j.cpu_pct != null ? j.cpu_pct + "%" : "—"),
@@ -5516,7 +5523,7 @@ function renderAdminUsers(users) {
   if (!el) return;
   if (!users.length) { el.innerHTML = '<tr><td class="adm-empty">No users yet.</td></tr>'; return; }
   const meId = _lastProfile && _lastProfile.id;
-  el.innerHTML = '<tr><th>User</th><th>Joined</th><th>Apps</th><th>Status</th><th></th></tr>' +
+  el.innerHTML = '<tr><th>User</th><th>Joined</th><th>Apps</th><th>Telegram</th><th>Status</th><th></th></tr>' +
     users.map(u => {
       const isMe = meId && u.id === meId;
       const state = u.is_suspended
@@ -5531,7 +5538,11 @@ function renderAdminUsers(users) {
         `onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAdminUser(${u.id});}">` +
         `<td><b>${escapeHtml(u.username)}</b><small>${escapeHtml(u.email)}</small></td>` +
         `<td>${escapeHtml((u.created_at || "").slice(0, 10))}</td>` +
-        `<td>${u.job_count}</td><td>${state}</td><td>${act}</td></tr>`;
+        `<td>${u.job_count}</td>` +
+        `<td>${u.telegram_id
+            ? `<span class="adm-pill tg">${escapeHtml(u.telegram_name || String(u.telegram_id))}</span>`
+            : '<span class="adm-num-zero">—</span>'}</td>` +
+        `<td>${state}</td><td>${act}</td></tr>`;
     }).join("");
 }
 
@@ -5586,6 +5597,9 @@ function renderAdminUserDetail(d) {
     _admRow("Apps", `${(d.jobs || []).length} total · ${d.jobs_running || 0} running`),
     _admRow("Memory", `${Math.round(d.mem_used_mb || 0)}MB across their running apps`),
     _admRow("Devices seen", `${d.devices || 0} device${d.devices === 1 ? "" : "s"} · ${d.networks || 0} network${d.networks === 1 ? "" : "s"}`),
+    _admRow("Telegram", u.telegram_id
+      ? `${u.telegram_name || "linked"} · ID ${u.telegram_id}`
+      : "not connected"),
     _admRow("Last IP", u.last_ip),
   );
   body.appendChild(t);

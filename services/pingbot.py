@@ -18,6 +18,12 @@ BOT_TOKEN = os.getenv("TELEGRAM_PING_BOT_TOKEN", "").strip()
 # to a CodeNest account. Before it existed, an unknown chat could deploy code
 # — reproduced, a stranger's os.system('whoami') ran on the server.
 from services import telegram_link  # noqa: E402
+from services import bot_ops  # noqa: E402
+from services import runner_client  # noqa: E402
+
+# Chats mid-way through a two-step command.
+pending_name = {}      # chat_id -> the name given with /deploy <name>
+pending_update = {}    # chat_id -> the app whose code is being replaced
 RUNNER_SECRET = os.getenv("RUNNER_SERVICE_SECRET", "")
 SITE_BASE = os.getenv("SITE_BASE_URL", "https://ahadorg.onrender.com").rstrip("/")
 
@@ -135,10 +141,8 @@ def handle_link(chat_id, text, display_name=""):
         rows = [[{"text": "📦 Open dashboard", "url": f"{SITE_BASE}/dashboard"}]] \
             if SITE_BASE else []
         _send(chat_id,
-              f"✅ Connected to *{res['username']}*.\n\n"
-              "`/code`  — deploy code, any size\n"
-              "`/ping`  — check a URL\n"
-              "`/unlink` — disconnect this chat",
+              f"✅ Connected to *{res['username']}*.\n\n" +
+              _help_text({"username": res["username"]}).split("\n\n", 1)[1],
               reply_markup={"inline_keyboard": rows} if rows else None)
         return
 
@@ -154,6 +158,12 @@ def handle_link(chat_id, text, display_name=""):
         # "unknown" and "malformed" get one message on purpose: telling a
         # guesser that a code was well-formed but wrong is a hint.
         _send(chat_id, "❌ That code is not valid. Generate a fresh one on the site.")
+
+
+def _cmd_arg(text):
+    """Everything after the command word. "/logs my bot" -> "my bot"."""
+    parts = (text or "").split(None, 1)
+    return parts[1].strip() if len(parts) > 1 else ""
 
 
 def _tg_display(msg):
@@ -175,6 +185,26 @@ def _menu_buttons():
     if SITE_BASE:
         rows.append([{"text": "🔗 Connect my account", "url": f"{SITE_BASE}/dashboard"}])
     return {"inline_keyboard": rows} if rows else None
+
+
+def _help_text(user):
+    return (
+        f"👋 Hi *{user['username']}*!\n\n"
+        "*Deploy*\n"
+        "`/deploy <name>` — name it, then send the code\n"
+        "`/code` — send code, I pick a name\n"
+        "`/update <name>` — replace the code, keep its saved files\n\n"
+        "*Manage*\n"
+        "`/apps` — everything you have, with live status\n"
+        "`/status [name]` — account summary, or one app in full\n"
+        "`/logs <name>` — the last lines it printed\n"
+        "`/restart <name>`  `/stop <name>`  `/delete <name>`\n"
+        "`/rename <name> <new>`\n\n"
+        "*Other*\n"
+        "`/ping [url]` — check a URL\n"
+        "`/unlink` — disconnect this chat\n\n"
+        "I message you if an app stops on its own."
+    )
 
 
 def handle_start(chat_id, first_name, payload=""):
@@ -200,11 +230,7 @@ def handle_start(chat_id, first_name, payload=""):
 
     user = telegram_link.user_for_chat(chat_id)
     if user:
-        _send(chat_id,
-              f"👋 Hi *{user['username']}*!\n\n"
-              "`/code`  — deploy code, any size\n"
-              "`/ping`  — check a URL\n"
-              "`/unlink` — disconnect this chat")
+        _send(chat_id, _help_text(user))
         return
     _send(chat_id,
           f"👋 Hi {first_name}!\n\n"
@@ -224,7 +250,12 @@ def handle_unlink(chat_id):
     # Anything mid-flight belongs to the account that just left.
     waiting_for_code.pop(chat_id, None)
     code_buffer.pop(chat_id, None)
-    _send(chat_id, "🔌 Disconnected. This chat can no longer deploy.")
+    pending_update.pop(chat_id, None)
+    pending_name.pop(chat_id, None)
+    _send(chat_id,
+          "🔌 Disconnected. This chat can no longer deploy or see your apps.\n\n"
+          "Your apps keep running — nothing was stopped.",
+          reply_markup=_menu_buttons())
 
 
 _link_attempts = defaultdict(list)
@@ -290,136 +321,323 @@ def collect_code(chat_id, text, first_name):
 
 # ==================== DEPLOY + INLINE BUTTONS ====================
 def detect_libs(code):
-    imports = re.findall(r'^\s*(?:import|from)\s+([a-zA-Z0-9_]+)', code, re.MULTILINE)
-    common = {"requests": "requests", "flask": "flask", "fastapi": "fastapi",
-              "pandas": "pandas", "openai": "openai", "telebot": "pyTelegramBotAPI"}
-    return [common.get(i.lower()) for i in imports if i.lower() in common]
+    """Alias — the real table lives in bot_ops so the web path shares it."""
+    return bot_ops.detect_libs(code)
 
 
+def _app_buttons(job_id, url=""):
+    """Buttons keyed on the SITE job id, not the runner id.
+
+    The runner id changes when a job is recreated, so buttons attached to an
+    old message silently stopped working. The site id is stable for the life
+    of the app, and it is also what scopes every action to its owner.
+    """
+    rows = [
+        [{"text": "📜 Logs", "callback_data": f"logs:{job_id}"},
+         {"text": "📊 Status", "callback_data": f"stat:{job_id}"}],
+        [{"text": "🔄 Restart", "callback_data": f"restart:{job_id}"},
+         {"text": "⏹ Stop", "callback_data": f"stop:{job_id}"}],
+        [{"text": "📥 Download data", "callback_data": f"db:{job_id}"}],
+    ]
+    if url:
+        rows.append([{"text": "🌐 Open live URL", "url": url}])
+    return {"inline_keyboard": rows}
+
+
+# Backwards-compatible alias: tests/test_bot_critical.py asserts the five
+# buttons still exist.
 def get_job_buttons(runner_id, url):
-    return {
-        "inline_keyboard": [
-            [
-                {"text": "📜 Logs", "callback_data": f"logs:{runner_id}"},
-                {"text": "⏱ Uptime", "callback_data": f"uptime:{runner_id}"}
-            ],
-            [
-                {"text": "📥 Download DB", "callback_data": f"db:{runner_id}"},
-                {"text": "🔄 Restart", "callback_data": f"restart:{runner_id}"}
-            ],
-            [{"text": "🌐 Open Live URL", "url": url}]
-        ]
-    }
+    return _app_buttons(runner_id, url)
 
 
-def deploy_code(code, chat_id, first_name):
-    libs = detect_libs(code)
-    lang = "python"
-    if "console.log" in code.lower():
-        lang = "javascript"
-    elif "<html" in code.lower():
-        lang = "html"
+def deploy_code(code, chat_id, first_name, name=""):
+    """Deploy through bot_ops so the app lands in the jobs table.
 
-    username = first_name.lower().replace(" ", "_")[:10]
-    job_name = f"tg-{username}-{int(time.time())}"
+    BUG THIS FIXES: this used to POST straight to the runner. Measured — the
+    app ran, burned memory, and wrote 0 rows to the jobs table, so it was
+    invisible in /admin, exempt from MAX_JOBS_PER_USER, and absent from the
+    owner's own dashboard. Two deploy paths meant two sets of rules and only
+    one was enforced.
+    """
+    user = telegram_link.user_for_chat(chat_id)
+    if not user:
+        _send(chat_id, UNKNOWN_REPLY)
+        return
 
-    msg = f"✅ *Code Received*\nLanguage: `{lang}`"
+    # Update-in-place if this chat was answering "which app?" for /update.
+    pending = pending_update.pop(chat_id, None)
+    if pending:
+        _send(chat_id, f"🔧 Rebuilding *{pending}*…")
+        res = bot_ops.update_code(user["id"], pending, code)
+        if not res.get("ok"):
+            _send(chat_id, f"❌ {res['error']}")
+            return
+        libs = res.get("libs") or []
+        extra = f"\nInstalling: `{', '.join(libs)}`" if libs else ""
+        _send(chat_id,
+              f"♻️ *{pending}* rebuilt and restarted.{extra}\n\n"
+              f"Its saved files were kept.",
+              reply_markup=_app_buttons(res["job"]["id"]))
+        return
+
+    name = name or pending_name.pop(chat_id, "")
+    lang = bot_ops.detect_language(code)
+    libs = bot_ops.detect_libs(code)
+    msg = f"✅ *Code received*\nLanguage: `{lang}`"
     if libs:
         msg += f"\nInstalling: `{', '.join(libs)}`"
-    msg += f"\n\nDeploying `{job_name}`..."
-    _send(chat_id, msg)
+    _send(chat_id, msg + "\n\nDeploying…")
 
-    payload = {"name": job_name, "language": lang, "code": code}
-    if libs:
-        payload["requirements"] = "\n".join(libs)
+    res = bot_ops.deploy(user["id"], name or f"bot-{int(time.time())}", code,
+                         lang, libs)
+    if not res.get("ok"):
+        _send(chat_id, f"❌ {res['error']}")
+        return
+    job = res["job"]
+    text = f"🚀 *{job['name']}* is live."
+    if job.get("web_url"):
+        text += f"\n\n{job['web_url']}"
+    _send(chat_id, text, reply_markup=_app_buttons(job["id"], job.get("web_url")))
 
-    try:
-        from services.runner_client import _runner_http
 
-        resp = _runner_http("POST", "/internal/jobs", payload)
-        if resp.status_code != 201:
-            _send(chat_id, f"❌ {resp.json().get('detail', 'Failed')}")
+# ==================== APP COMMANDS ====================
+def _fmt_uptime(sec):
+    sec = int(sec or 0)
+    if sec <= 0:
+        return "—"
+    d, h, m = sec // 86400, (sec % 86400) // 3600, (sec % 3600) // 60
+    if d:
+        return f"{d}d {h}h"
+    if h:
+        return f"{h}h {m}m"
+    return f"{m}m {sec % 60}s"
+
+
+_ICON = {"running": "🟢", "crashed": "🔴", "installing": "🟡",
+         "starting": "🟡", "restarting": "🟡", "stopped": "⚪", "offline": "⚪"}
+
+
+def cmd_apps(chat_id, user):
+    apps = bot_ops.list_apps(user["id"])
+    if not apps:
+        _send(chat_id, "You have no apps yet. Send /code with your source.")
+        return
+    lines = [f"*Your apps* ({len(apps)}/{bot_ops.MAX_JOBS_PER_USER} running slots)\n"]
+    for a in apps:
+        icon = _ICON.get(a["status"], "⚪")
+        bits = [f"{icon} *{a['name']}* — {a['status']}"]
+        if a.get("mem_mb"):
+            bits.append(f"{round(a['mem_mb'])}MB")
+        if a.get("uptime_s"):
+            bits.append(_fmt_uptime(a["uptime_s"]))
+        if a.get("restarts"):
+            bits.append(f"{a['restarts']}× restarted")
+        lines.append(" · ".join(bits))
+    lines.append("\n`/logs <name>` `/restart <name>` `/stop <name>`")
+    lines.append("`/update <name>` `/rename <name> <new>` `/delete <name>`")
+    _send(chat_id, "\n".join(lines))
+
+
+def cmd_status(chat_id, user, ref=""):
+    """Whole-account summary, or one app in full."""
+    if ref:
+        res = bot_ops.logs(user["id"], ref, lines=0)
+        if not res.get("ok"):
+            _send(chat_id, f"❌ {res['error']}")
             return
+        job, info = res["job"], res["info"]
+        icon = _ICON.get(info.get("status"), "⚪")
+        txt = [f"{icon} *{job['name']}*",
+               f"Status: `{info.get('status', 'unknown')}`",
+               f"Language: `{job.get('language') or '—'}`",
+               f"Memory: {round(info.get('mem_mb') or 0)}MB now · "
+               f"{round(info.get('peak_mem_mb') or 0)}MB peak",
+               f"Uptime: {_fmt_uptime(info.get('uptime_s'))}",
+               f"Restarts: {info.get('restarts', 0)}"]
+        if info.get("last_exit_reason"):
+            txt.append(f"Last exit: `{info['last_exit_reason']}`")
+        if info.get("libs"):
+            txt.append(f"Packages: `{', '.join(info['libs'])}`")
+        if info.get("env_keys"):
+            # KEY NAMES ONLY — the values are bot tokens.
+            txt.append(f"Env keys: `{', '.join(info['env_keys'])}`")
+        _send(chat_id, "\n".join(txt),
+              reply_markup=_app_buttons(job["id"]))
+        return
 
-        job = resp.json()
-        runner_id = job.get("id")
-        url = job.get("web_url") or f"{SITE_BASE}/live/{job_name}"
+    apps = bot_ops.list_apps(user["id"])
+    running = [a for a in apps if a["status"] == "running"]
+    mem = sum(a.get("mem_mb") or 0 for a in apps)
+    _send(chat_id,
+          f"*{user['username']}*\n\n"
+          f"Apps: {len(apps)} · running {len(running)}/{bot_ops.MAX_JOBS_PER_USER}\n"
+          f"Memory in use: {round(mem)}MB\n\n"
+          "`/apps` for the list · `/status <name>` for one app")
 
-        _send(chat_id, f"🚀 *Deployed!*\n\nLive URL: {url}", 
-              reply_markup=get_job_buttons(runner_id, url))
 
-    except Exception as e:
-        _send(chat_id, f"Error: {str(e)}")
+def cmd_logs(chat_id, user, ref):
+    if not ref:
+        _send(chat_id, "Which app? `/logs <name>` — /apps lists them.")
+        return
+    res = bot_ops.logs(user["id"], ref)
+    if not res.get("ok"):
+        _send(chat_id, f"❌ {res['error']}")
+        return
+    body = res["logs"] or "(no output yet)"
+    # Telegram rejects a message over ~4096 chars; trim from the FRONT so the
+    # most recent lines — the ones that explain a crash — always survive.
+    if len(body) > 3500:
+        body = "…\n" + body[-3500:]
+    head = "📜 last lines" + (" (trimmed)" if res.get("truncated") else "")
+    _send(chat_id, f"*{res['job']['name']}* — {head}\n```\n{body}\n```",
+          reply_markup=_app_buttons(res["job"]["id"]))
+
+
+def cmd_restart(chat_id, user, ref):
+    if not ref:
+        _send(chat_id, "Which app? `/restart <name>`")
+        return
+    res = bot_ops.restart(user["id"], ref)
+    _send(chat_id, f"🔄 Restarting *{res['job']['name']}*…" if res.get("ok")
+          else f"❌ {res['error']}")
+
+
+def cmd_stop(chat_id, user, ref):
+    if not ref:
+        _send(chat_id, "Which app? `/stop <name>`")
+        return
+    res = bot_ops.stop(user["id"], ref)
+    _send(chat_id, f"⏹ Stopped *{res['job']['name']}*." if res.get("ok")
+          else f"❌ {res['error']}")
+
+
+def cmd_delete(chat_id, user, ref):
+    if not ref:
+        _send(chat_id, "Which app? `/delete <name>` — this cannot be undone.")
+        return
+    res = bot_ops.delete(user["id"], ref)
+    _send(chat_id, f"🗑 Deleted *{res['job']['name']}*." if res.get("ok")
+          else f"❌ {res['error']}")
+
+
+def cmd_rename(chat_id, user, args):
+    parts = (args or "").split()
+    if len(parts) < 2:
+        _send(chat_id, "Usage: `/rename <current name> <new name>`")
+        return
+    res = bot_ops.rename(user["id"], parts[0], " ".join(parts[1:]))
+    _send(chat_id, f"✏️ *{res['old']}* is now *{res['name']}*." if res.get("ok")
+          else f"❌ {res['error']}")
+
+
+def cmd_update(chat_id, user, ref):
+    """Two-step: name the app, then send the new code."""
+    if not ref:
+        _send(chat_id, "Which app? `/update <name>`, then send the new code.")
+        return
+    app = bot_ops.find_app(user["id"], ref)
+    if not app:
+        _send(chat_id, f"❌ No app called “{ref}”. /apps lists yours.")
+        return
+    pending_update[chat_id] = app["name"]
+    waiting_for_code[chat_id] = True
+    code_buffer.pop(chat_id, None)
+    _send(chat_id,
+          f"♻️ Send the new code for *{app['name']}*.\n\n"
+          "Its saved files are kept — this rebuilds, it does not start over.")
+
+
+def cmd_deploy(chat_id, user, name):
+    """/deploy <name> — name it up front instead of getting tg-<user>-<epoch>."""
+    if not name:
+        _send(chat_id, "Usage: `/deploy <name>`, then send the code.")
+        return
+    clean = bot_ops.slugify_name(name)
+    if not clean:
+        _send(chat_id, "That name has no usable characters.")
+        return
+    pending_name[chat_id] = clean
+    waiting_for_code[chat_id] = True
+    code_buffer.pop(chat_id, None)
+    _send(chat_id, f"📦 Send the code for *{clean}*.")
 
 
 # ==================== CALLBACK HANDLER ====================
 def handle_callback(chat_id, data):
+    """Inline buttons. Every action re-resolves the app FOR THIS USER.
+
+    callback_data is attacker-supplied — anyone can craft a button press with
+    someone else's job id — so the id is looked up scoped to the pressing
+    chat's account, never trusted on its own.
+    """
     try:
-        action, runner_id = data.split(":")
-    except:
+        action, ref = data.split(":", 1)
+    except Exception:
+        return
+    user = telegram_link.user_for_chat(chat_id)
+    if not user:
         return
 
-    from services.runner_client import _runner_http
-
     if action == "logs":
-        try:
-            r = _runner_http("GET", f"/internal/jobs/{runner_id}")
-            logs = r.json().get("logs", "No logs yet")[-500:]
-            _send(chat_id, f"📜 *Latest Logs:*\n```\n{logs}\n```")
-        except:
-            _send(chat_id, "❌ Could not fetch logs")
-
-    elif action == "uptime":
-        try:
-            r = _runner_http("GET", f"/internal/jobs/{runner_id}")
-            data = r.json()
-            uptime = data.get("uptime_s", 0)
-            status = data.get("status", "unknown")
-            _send(chat_id, f"⏱ *Uptime:* {uptime}s\nStatus: `{status}`")
-        except:
-            _send(chat_id, "❌ Could not get status")
-
-    elif action == "db":
-        # Real implementation (this used to be a dead "coming soon" button):
-        # find the job's data file in its workspace and upload it to Telegram.
-        try:
-            r = _runner_http("GET", f"/internal/jobs/{runner_id}")
-            jdir = (r.json() or {}).get("dir") or ""
-            if not jdir or not os.path.isdir(jdir):
-                _send(chat_id, "❌ Workspace not found (job may have been deleted).")
-                return
-            best, best_size = None, -1
-            for root, dirs, files in os.walk(jdir):
-                dirs[:] = [d for d in dirs if d not in
-                           ("__pycache__", ".git", "node_modules", "pylibs", ".cache")]
-                for fn in files:
-                    if not fn.lower().endswith((".db", ".sqlite", ".sqlite3", ".json")):
-                        continue
-                    fp = os.path.join(root, fn)
-                    try:
-                        sz = os.path.getsize(fp)
-                    except OSError:
-                        continue
-                    if sz > best_size:
-                        best, best_size = fp, sz
-            if not best:
-                _send(chat_id, "📭 No database file found yet — the bot hasn't created one.")
-                return
-            if best_size > TG_MAX_UPLOAD_BYTES:
-                _send(chat_id, f"❌ `{os.path.basename(best)}` is {best_size // (1024*1024)} MB — "
-                               f"over Telegram's 50 MB limit. Download it from the dashboard.")
-                return
-            _send_document(chat_id, best, caption=f"📥 {os.path.basename(best)} ({best_size} bytes)")
-        except Exception as e:  # noqa: BLE001
-            print("db download failed:", e)
-            _send(chat_id, "❌ Could not fetch the database file.")
-
+        cmd_logs(chat_id, user, ref)
+    elif action == "stat":
+        cmd_status(chat_id, user, ref)
     elif action == "restart":
-        try:
-            _runner_http("POST", f"/internal/jobs/{runner_id}/restart")
-            _send(chat_id, "🔄 Restart requested!")
-        except:
-            _send(chat_id, "❌ Restart failed")
+        cmd_restart(chat_id, user, ref)
+    elif action == "stop":
+        cmd_stop(chat_id, user, ref)
+    elif action == "db":
+        _send_job_data(chat_id, user, ref)
+
+
+def _send_job_data(chat_id, user, ref):
+    """Upload the app's data file (SQLite/JSON) to the chat."""
+    app = bot_ops.find_app(user["id"], ref)
+    if not app:
+        _send(chat_id, "❌ That app is not yours or no longer exists.")
+        return
+    rid = app.get("runner_job_id")
+    if not rid:
+        _send(chat_id, "❌ That app was never deployed.")
+        return
+    try:
+        r = runner_client._runner_http("GET", f"/internal/jobs/{rid}",
+                                       worker=bot_ops._worker_of(app))
+        jdir = (r.json() or {}).get("dir") or ""
+    except Exception:
+        _send(chat_id, "❌ The worker did not answer.")
+        return
+    if not jdir or not os.path.isdir(jdir):
+        # Remote workers do not share a filesystem with this process, so the
+        # path is only readable in the embedded/single-service layout. Say so
+        # instead of reporting "no database".
+        _send(chat_id, "📭 Data files are not reachable from here — "
+                       "download them from the dashboard.")
+        return
+    best, best_size = None, -1
+    for root, dirs, files in os.walk(jdir):
+        dirs[:] = [d for d in dirs if d not in
+                   ("__pycache__", ".git", "node_modules", "pylibs", ".cache")]
+        for fn in files:
+            if not fn.lower().endswith((".db", ".sqlite", ".sqlite3", ".json")):
+                continue
+            fp = os.path.join(root, fn)
+            try:
+                sz = os.path.getsize(fp)
+            except OSError:
+                continue
+            if sz > best_size:
+                best, best_size = fp, sz
+    if not best:
+        _send(chat_id, "📭 No data file yet — the app has not created one.")
+        return
+    if best_size > TG_MAX_UPLOAD_BYTES:
+        _send(chat_id, f"❌ `{os.path.basename(best)}` is "
+                       f"{best_size // (1024 * 1024)}MB — over Telegram's 50MB "
+                       f"limit. Download it from the dashboard.")
+        return
+    _send_document(chat_id, best,
+                   caption=f"📥 {os.path.basename(best)} ({best_size} bytes)")
 
 
 # ==================== MAIN LOOP ====================
@@ -470,7 +688,58 @@ def poll_loop():
                         if _require_link(chat_id):
                             waiting_for_code[chat_id] = True
                             code_buffer.pop(chat_id, None)
+                            pending_update.pop(chat_id, None)
                             _send(chat_id, "✅ Send your code (any size)")
+
+                    # Every command below acts on real apps, so each one is
+                    # gated. _cmd_arg() splits off "/logs mybot" -> "mybot".
+                    elif text.startswith("/apps"):
+                        _u = _require_link(chat_id)
+                        if _u:
+                            cmd_apps(chat_id, _u)
+
+                    elif text.startswith("/status"):
+                        _u = _require_link(chat_id)
+                        if _u:
+                            cmd_status(chat_id, _u, _cmd_arg(text))
+
+                    elif text.startswith("/logs"):
+                        _u = _require_link(chat_id)
+                        if _u:
+                            cmd_logs(chat_id, _u, _cmd_arg(text))
+
+                    elif text.startswith("/restart"):
+                        _u = _require_link(chat_id)
+                        if _u:
+                            cmd_restart(chat_id, _u, _cmd_arg(text))
+
+                    elif text.startswith("/stop"):
+                        _u = _require_link(chat_id)
+                        if _u:
+                            cmd_stop(chat_id, _u, _cmd_arg(text))
+
+                    elif text.startswith("/delete"):
+                        _u = _require_link(chat_id)
+                        if _u:
+                            cmd_delete(chat_id, _u, _cmd_arg(text))
+
+                    elif text.startswith("/rename"):
+                        _u = _require_link(chat_id)
+                        if _u:
+                            cmd_rename(chat_id, _u, _cmd_arg(text))
+
+                    elif text.startswith("/update"):
+                        _u = _require_link(chat_id)
+                        if _u:
+                            cmd_update(chat_id, _u, _cmd_arg(text))
+
+                    elif text.startswith("/deploy"):
+                        _u = _require_link(chat_id)
+                        if _u:
+                            cmd_deploy(chat_id, _u, _cmd_arg(text))
+
+                    elif text.startswith("/help"):
+                        handle_start(chat_id, _tg_display(msg) or first_name)
 
                     elif chat_id in waiting_for_code:
                         # Re-checked on every chunk, not only at /code: a

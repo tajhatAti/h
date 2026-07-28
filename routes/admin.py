@@ -139,6 +139,13 @@ def admin_overview_route(authorization: Optional[str] = Header(None)):
             (active_cut,),
         ).fetchone())["c"]
 
+        # Telegram reach. The bot is a second front door onto the same
+        # platform, so "how many accounts can drive it" belongs next to the
+        # user count rather than buried in a per-user view.
+        tg_linked = dict(conn.execute(
+            "SELECT COUNT(*) AS c FROM users WHERE telegram_id IS NOT NULL"
+        ).fetchone())["c"]
+
         out = {
             "users": users, "suspended": suspended, "verified": verified,
             "jobs_total": jobs_total, "jobs_deployed": deployed,
@@ -150,6 +157,7 @@ def admin_overview_route(authorization: Optional[str] = Header(None)):
             "signups_30d": _since(30),
             "active_users": active_users,
             "active_window_min": ACTIVE_WINDOW_MIN,
+            "telegram_linked": tg_linked,
         }
     finally:
         conn.close()
@@ -228,7 +236,7 @@ def admin_users_route(authorization: Optional[str] = Header(None)):
         rows = conn.execute(
             """
             SELECT u.id, u.username, u.email, u.is_verified, u.is_suspended, u.is_admin,
-                   u.created_at,
+                   u.created_at, u.telegram_id, u.telegram_name,
                    (SELECT COUNT(*) FROM jobs j WHERE j.user_id = u.id) AS job_count
             FROM users u ORDER BY u.id DESC LIMIT 200
             """
@@ -246,7 +254,8 @@ def admin_user_detail_route(user_id: int, authorization: Optional[str] = Header(
     try:
         u = conn.execute(
             "SELECT id, username, email, is_verified, is_suspended, is_admin, "
-            "       created_at, updated_at, telegram_id, fingerprint, last_ip "
+            "       created_at, updated_at, telegram_id, telegram_name, "
+            "       fingerprint, last_ip "
             "FROM users WHERE id = ?", (user_id,)
         ).fetchone()
         if not u:
@@ -354,6 +363,7 @@ def admin_jobs_route(authorization: Optional[str] = Header(None)):
             SELECT j.id, j.name, j.language, j.created_at, j.runner_job_id,
                    j.worker_url, j.user_id,
                    u.username AS owner, u.telegram_id AS owner_telegram,
+                   u.telegram_name AS owner_telegram_name,
                    u.is_suspended AS owner_suspended
             FROM jobs j JOIN users u ON u.id = j.user_id
             ORDER BY j.id DESC LIMIT 300
@@ -385,8 +395,12 @@ def admin_jobs_route(authorization: Optional[str] = Header(None)):
         # Website vs Telegram bot. There is no source column, so this is
         # INFERRED from whether the account was created through Telegram —
         # labelled as an inference rather than presented as recorded fact.
+        # Whether the OWNER has Telegram connected. Still an inference about
+        # where the app came from — there is no source column — but now it can
+        # also name the account, which is what makes it actionable.
         row["source"] = "telegram" if row.get("owner_telegram") else "website"
         row["source_inferred"] = True
+        row["owner_telegram_name"] = row.get("owner_telegram_name")
         row.pop("owner_telegram", None)
     return {"jobs": jobs}
 
@@ -413,7 +427,9 @@ def admin_job_detail_route(job_id: int, authorization: Optional[str] = Header(No
             SELECT j.id, j.name, j.language, j.created_at, j.updated_at,
                    j.runner_job_id, j.worker_url, j.user_id,
                    u.username AS owner, u.email AS owner_email,
-                   u.telegram_id AS owner_telegram, u.is_suspended AS owner_suspended
+                   u.telegram_id AS owner_telegram,
+                   u.telegram_name AS owner_telegram_name,
+                   u.is_suspended AS owner_suspended
             FROM jobs j JOIN users u ON u.id = j.user_id
             WHERE j.id = ?
             """,

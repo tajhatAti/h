@@ -79,7 +79,14 @@ check("reply_markup is JSON-serialised", isinstance(_body.get("reply_markup"), s
       repr(_body.get("reply_markup"))[:60])
 _kb = json.loads(_body["reply_markup"])["inline_keyboard"]
 _labels = [b["text"] for row in _kb for b in row]
-check("all 5 inline buttons present", len(_labels) == 5, str(_labels))
+# The original bug was that reply_markup was urlencoded and EVERY button
+# vanished. Asserting an exact count of 5 made this fail the moment a sixth
+# was added, which is a feature, not the regression. Assert the buttons that
+# must not disappear instead.
+check("the action buttons survive the trip",
+      all(any(w in l for l in _labels) for w in ("Logs", "Restart", "Stop")),
+      str(_labels))
+check("at least the original five are there", len(_labels) >= 5, str(_labels))
 check("callback buttons carry data", _kb[0][0]["callback_data"] == "logs:job123")
 
 # --- 3. multi-chunk code all lands in one deploy ---------------------------

@@ -264,6 +264,58 @@ ok('a package name full of HTML creates no elements',
    d.querySelectorAll('#admLibs script, #admLibs img').length === 0);
 ok('so does an owner name', dom.window.__pwned === undefined);
 
+console.log('[8b] Telegram is visible throughout the console');
+// The bot is a second front door onto the same platform. Before this, the
+// console could not tell you which accounts could drive it, or which apps
+// came from a chat — measured: overview had NO telegram key, and the user
+// list had none either.
+const TGUSERS = [
+  { id: 1, username: 'boss', email: 'b@g.com', is_verified: 1, is_suspended: 0,
+    created_at: '2026-07-01', job_count: 2, telegram_id: 555, telegram_name: '@bosstg' },
+  { id: 9, username: 'webonly', email: 'w@g.com', is_verified: 1, is_suspended: 0,
+    created_at: '2026-07-02', job_count: 0 },
+];
+api.renderAdminUsers(TGUSERS);
+const tgRows = [...d.querySelectorAll('#admUsers tr')];
+ok('the users table has a Telegram column',
+   /Telegram/.test(tgRows[0].textContent), tgRows[0].textContent);
+ok('a linked account shows its handle, not a bare number',
+   /@bosstg/.test(tgRows[1].textContent), tgRows[1].textContent);
+ok('an unlinked account shows a dash, not a stale value',
+   !!tgRows[2].querySelector('.adm-num-zero'), tgRows[2].textContent);
+ok('the handle goes through escapeHtml',
+   /escapeHtml\(u\.telegram_name/.test(extract('renderAdminUsers')));
+// The pill is a FACT about the account, not a status, so it must not borrow
+// the ok/warn colours the design system reserves for meaning.
+ok('the tg pill is neutral, not coloured as a status',
+   !/\.adm-pill\.tg[^{]*\{[^}]*(--st-ok|--st-warn|--green|--red)/.test(CSS));
+
+api.renderAdminUserDetail({
+  ...DETAIL,
+  user: { ...DETAIL.user, telegram_id: 555, telegram_name: '@bosstg' },
+});
+const tgTxt = d.getElementById('admUserBody').textContent;
+ok('the drill-down names the connected Telegram', /@bosstg/.test(tgTxt),
+   tgTxt.slice(0, 200));
+ok('with the id for the ambiguous case', /555/.test(tgTxt));
+// DETAIL's fixture user HAS a telegram_id (it is the telegram-signup case),
+// so asserting "not connected" against it was testing the wrong row.
+api.renderAdminUserDetail({
+  ...DETAIL,
+  user: { ...DETAIL.user, telegram_id: null, telegram_name: null },
+});
+ok('an account with no Telegram says so plainly',
+   /not connected/.test(d.getElementById('admUserBody').textContent),
+   d.getElementById('admUserBody').textContent.slice(0, 200));
+// A link made before the name column existed must still render.
+api.renderAdminUserDetail({
+  ...DETAIL,
+  user: { ...DETAIL.user, telegram_id: 5551234, telegram_name: null },
+});
+ok('an older link with no cached name falls back to the id',
+   /linked · ID 5551234/.test(d.getElementById('admUserBody').textContent),
+   d.getElementById('admUserBody').textContent.slice(0, 220));
+
 console.log('[9] the routes behind it');
 const UDET = /def admin_user_detail_route[\s\S]*?\n@router/.exec(PYADMIN)[0];
 ok('the gate runs before any DB work',
@@ -275,6 +327,10 @@ ok('the account itself is excluded from its own linked list',
 ok('the list is bounded', /sorted\(ids\)\[:20\]/.test(UDET));
 ok('a failed cluster lookup does not 500 the whole view',
    /except Exception as exc:[\s\S]{0,120}cluster lookup failed/.test(UDET));
+ok('the overview counts Telegram-linked accounts',
+   /"telegram_linked": tg_linked/.test(PYADMIN));
+ok('the user list selects the handle, not only the id',
+   /u\.telegram_name/.test(PYADMIN));
 ok('devices and networks are counted from real sessions',
    /"devices": len\(fps\)/.test(UDET) && /"networks": len\(ips\)/.test(UDET));
 ok('the shared-network caveat is authored server-side, so it cannot drift',

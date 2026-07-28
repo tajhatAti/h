@@ -71,6 +71,14 @@ async def startup_event():
         _start_pingbot()
     except Exception as e:  # noqa: BLE001
         logger.warning("Ping bot failed to start: %s", e)
+    # Watch job state and message the owner when an app stops on its own. The
+    # runner cannot do this itself: it has no database and no Telegram token,
+    # and with a worker pool that would mean the same credential on every box.
+    try:
+        from services.bot_notify import start_watcher as _start_watcher
+        _start_watcher()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Bot state watcher failed to start: %s", e)
     # Periodically copy each job's data files (database.db, session.json, …)
     # into Postgres. On Render's free tier the runner's filesystem is rebuilt
     # on every deploy, so this is what makes a referral bot's points survive.
