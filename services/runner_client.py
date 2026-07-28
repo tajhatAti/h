@@ -95,7 +95,72 @@ def _embedded_client():
     return _tc
 
 
-def _runner_http(method: str, path: str, json_body=None):
+# ---------------------------------------------------------------------------
+# WORKER REGISTRY  —  cached health, least-loaded placement
+# ---------------------------------------------------------------------------
+# Deliberately in memory, not a database table. The set of workers is CONFIG
+# (an env var you edit in the Render dashboard), not user data; a table would
+# add CRUD, an admin UI and a migration while answering the same question.
+# The cache exists so job creation never waits on a health round-trip.
+_HEALTH_TTL_S = int(os.getenv("WORKER_HEALTH_TTL_S", "45"))
+_health_cache = {}          # url -> {"at": ts, "free": int, "load": float, "online": bool}
+
+
+def _probe_worker(url: str) -> dict:
+    """Ask one worker how loaded it is. Never raises."""
+    try:
+        r = requests.get(url + "/health", timeout=6)
+        if r.status_code != 200:
+            return {"online": False, "free": 0, "load": 1.0}
+        d = r.json()
+        return {
+            "online": True,
+            "free": int(d.get("free", 0)),
+            "load": float(d.get("load", 1.0)),
+            "jobs": int(d.get("jobs", 0)),
+            "capacity": int(d.get("capacity", 0)),
+            "mem_mb": float(d.get("mem_mb", 0.0)),
+        }
+    except Exception:
+        # Offline, asleep, or too old to expose /health load fields.
+        return {"online": False, "free": 0, "load": 1.0}
+
+
+def worker_health(refresh: bool = False) -> dict:
+    """Cached health for every worker in the pool."""
+    import time
+    now = time.time()
+    out = {}
+    for url in runner_pool():
+        cached = _health_cache.get(url)
+        if not refresh and cached and now - cached["at"] < _HEALTH_TTL_S:
+            out[url] = cached
+            continue
+        info = _probe_worker(url)
+        info["at"] = now
+        _health_cache[url] = info
+        out[url] = info
+    return out
+
+
+def _placement_order() -> list:
+    """Workers to try for a NEW job, least-loaded first.
+
+    Falls back to pool order when nothing has been probed yet, so a cold start
+    still places jobs instead of refusing them.
+    """
+    pool = runner_pool()
+    if len(pool) < 2:
+        return pool
+    health = worker_health()
+    def key(u):
+        h = health.get(u) or {}
+        # Offline last; then most free slots; then pool order for stability.
+        return (0 if h.get("online") else 1, -h.get("free", 0), pool.index(u))
+    return sorted(pool, key=key)
+
+
+def _runner_http(method: str, path: str, json_body=None, worker: str = None):
     """Call the runner (embedded or remote) with the shared secret; map every
     transport failure to a clean HTTPException the frontend can display."""
     if embedded_mode():
@@ -128,9 +193,28 @@ def _runner_http(method: str, path: str, json_body=None):
         )
 
     # Creating a job is the only PLACEMENT decision — every other call targets
-    # a job that already lives on a specific runner, so it must not roam.
+    # a job that already lives on ONE specific worker and must go there.
+    #
+    # BUG THIS FIXES: `targets = pool[:1]` sent every follow-up call to the
+    # FIRST worker regardless of where the job actually ran. With one worker
+    # that is harmless; with two, a restart for a job on worker-B hit worker-A,
+    # got "job not found", and the site reported a healthy bot as dead.
+    # Callers now pass worker= from the jobs table.
     creating = method.upper() == "POST" and path == "/internal/jobs"
-    targets = pool if creating else pool[:1]
+    if creating:
+        # Least-loaded first. Placement is the only decision that benefits from
+        # health data, and it reads the CACHE — a create never blocks on a
+        # round-trip to every worker.
+        targets = _placement_order()
+    elif worker:
+        # Honour the recorded worker even if it has since been dropped from
+        # the pool — the job is still there, and refusing to talk to it would
+        # orphan a running bot.
+        targets = [worker.rstrip("/")]
+    else:
+        # No recorded worker: a job created before this column existed. Those
+        # all live on the primary.
+        targets = pool[:1]
 
     last_exc = None
     last_full = None
@@ -148,6 +232,14 @@ def _runner_http(method: str, path: str, json_body=None):
             continue
         if creating and i:
             logger.info("job placed on overflow runner %s", base)
+        if creating:
+            # Stamp the winning worker onto the response so create_job() can
+            # persist it. An attribute keeps requests.Response duck-typing
+            # intact for every existing caller and test double.
+            try:
+                resp.placed_on = base
+            except Exception:
+                pass
         return resp
 
     if last_full is not None:
@@ -157,13 +249,22 @@ def _runner_http(method: str, path: str, json_body=None):
     raise HTTPException(status_code=503, detail="Waking up your RunSpace... this can take up to a minute on the free tier.")
 
 
-def _job_web_fields(info: dict) -> dict:
+def _job_web_fields(info: dict, worker: str = None) -> dict:
     """Translate a runner job view into frontend web fields (public URL etc.).
 
     In embedded mode the /live gateway is served by THIS main service, so the
-    public URL is <site-base>/live/{slug}/; in remote mode it's the runner's."""
+    public URL is <site-base>/live/{slug}/; in remote mode it is served by the
+    worker the job actually runs on.
+
+    BUG THIS FIXES: this used runner_cfg()[0], i.e. always the PRIMARY worker.
+    A job placed on worker-B was handed worker-A's public URL, so its live page
+    404'd even though the bot was running fine.
+    """
     slug = (info or {}).get("web_slug")
-    base = public_base_url() if embedded_mode() else runner_cfg()[0]
+    if embedded_mode():
+        base = public_base_url()
+    else:
+        base = (worker or "").rstrip("/") or runner_cfg()[0]
     if not slug or not base:
         return {}
     out = {

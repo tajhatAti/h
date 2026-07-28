@@ -162,8 +162,52 @@ def root():
 
 @app.api_route("/health", methods=["GET", "HEAD"])
 def health():
-    """Simple health check — no auth needed."""
-    return {"status": "ok", "languages": sorted(LANGS.keys())}
+    """Health + LOAD, so the control plane can route to the least-loaded worker.
+
+    No auth: this is the endpoint used to decide whether a worker is reachable
+    at all, and it must answer even when the shared secret is misconfigured.
+    It exposes only counts and totals — no job names, no code, no env values.
+
+    Memory is read from /proc rather than psutil: the same numbers, one less
+    dependency on a 512MB box.
+    """
+    running = 0
+    mem_mb = 0.0
+    try:
+        with _jobs_lock:
+            procs = [j.get("proc") for j in _jobs.values()]
+    except Exception as exc:                      # never let /health 500
+        logger.warning("health load probe failed: %s", exc)
+        procs = []
+    for proc in procs:
+        # Per-process try: one job whose handle is mid-teardown must not abort
+        # the whole count. A single wrapping try/except silently under-reported
+        # load, and an under-reported worker looks emptiest — so the dispatcher
+        # would preferentially route MORE work to the one that is struggling.
+        try:
+            if not proc or proc.poll() is not None:
+                continue
+            running += 1
+            mem_mb += (_proc_stats(proc) or {}).get("mem_mb", 0.0) or 0.0
+        except Exception:
+            running += 1                          # counted, memory unknown
+
+    capacity = MAX_BG_JOBS
+    free = max(0, capacity - running)
+    return {
+        "status": "ok",
+        "languages": sorted(LANGS.keys()),
+        # Routing inputs.
+        "jobs": running,
+        "capacity": capacity,
+        "free": free,
+        "full": free == 0,
+        "mem_mb": round(mem_mb, 1),
+        # Lets the dispatcher compare unequal workers on one scale.
+        # Clamped: adopted jobs after a redeploy can briefly exceed capacity,
+        # and a load of 2.0 would sort nonsensically against other workers.
+        "load": round(min(running / capacity, 1.0), 3) if capacity else 1.0,
+    }
 
 
 @app.get("/api/v2/runtimes")

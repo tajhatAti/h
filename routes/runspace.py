@@ -133,6 +133,34 @@ def _get_own_job(job_id: int, user: dict) -> dict:
     return dict(row)
 
 
+def _worker_of(row) -> str:
+    """Which worker this job physically runs on.
+
+    Every per-job call must go to THIS worker, not to whichever one happens to
+    be first in the pool. NULL means the row predates the column, and those
+    jobs all live on the primary worker — the fallback inside _runner_http.
+    """
+    try:
+        return (dict(row).get("worker_url") or "") or None
+    except Exception:
+        return None
+
+
+def _remember_worker(job_db_id: int, resp) -> None:
+    """Persist the worker a create landed on, so later calls can find it."""
+    placed = getattr(resp, "placed_on", None)
+    if not placed or not job_db_id:
+        return
+    conn = get_db_connection()
+    try:
+        conn.execute("UPDATE jobs SET worker_url = ? WHERE id = ?", (placed, job_db_id))
+        conn.commit()
+    except Exception as exc:            # never fail a launch over bookkeeping
+        logger.warning("could not record worker for job %s: %s", job_db_id, exc)
+    finally:
+        conn.close()
+
+
 def _row_env(row) -> dict:
     """Env vars saved for a job row (empty when unset / unparsable)."""
     try:
@@ -142,7 +170,7 @@ def _row_env(row) -> dict:
         return {}
 
 
-def _restore_then_restart(job_id: int, info: dict) -> dict:
+def _restore_then_restart(job_id: int, info: dict, worker: str = None) -> dict:
     """After a COLD start, push the last snapshot into the fresh workspace.
 
     A cold start means the runner lost the directory (a deploy on the free
@@ -160,7 +188,7 @@ def _restore_then_restart(job_id: int, info: dict) -> dict:
         from services import snapshots
         res = snapshots.restore_snapshot(job_id, rid, overwrite=True)
         if res.get("restored"):
-            r = runner_client._runner_http("POST", f"/internal/jobs/{rid}/restart")
+            r = runner_client._runner_http("POST", f"/internal/jobs/{rid}/restart", worker=worker)
             if r.status_code == 200:
                 fresh = r.json()
                 fresh["restored_files"] = res["restored"]
@@ -298,7 +326,11 @@ def create_job(payload: JobCreateRequest, request: Request, authorization: Optio
         )
         conn.commit()
         info["job_db_id"] = cursor.lastrowid
-        info.update(runner_client._job_web_fields(info))  # web / web_url (web often False seconds after birth)
+        # Remember WHICH worker accepted this job. Every later restart / stop /
+        # log call reads it back, so a job on worker-B is never addressed to
+        # worker-A once a second worker exists.
+        _remember_worker(cursor.lastrowid, resp)
+        info.update(runner_client._job_web_fields(info, getattr(resp, "placed_on", None)))  # web / web_url
         return info
     finally:
         conn.close()
@@ -335,7 +367,7 @@ def list_jobs(authorization: Optional[str] = Header(None)):
             r.update({"status": info["status"], "uptime_s": info.get("uptime_s", 0),
                       "restarts": info.get("restarts", 0), "port": info.get("port"),
                       "cpu_pct": info.get("cpu_pct"), "mem_mb": info.get("mem_mb")})
-            r.update(runner_client._job_web_fields(info))                # web / web_url / access
+            r.update(runner_client._job_web_fields(info, _worker_of(r)))     # web / web_url / access
         elif runner_ok:
             # The runner answered and did not list this job -> genuinely down.
             r.update({"status": "offline", "uptime_s": 0, "restarts": 0})
@@ -364,7 +396,7 @@ def get_job(job_id: int, authorization: Optional[str] = Header(None)):
     row["status_stale"] = False
     if rid:
         try:
-            resp = runner_client._runner_http("GET", f"/internal/jobs/{rid}")
+            resp = runner_client._runner_http("GET", f"/internal/jobs/{rid}", worker=_worker_of(row))
             if resp.status_code == 200:
                 info = resp.json()
                 row["status"] = info.get("status")
@@ -375,7 +407,7 @@ def get_job(job_id: int, authorization: Optional[str] = Header(None)):
                 row["mem_mb"] = info.get("mem_mb")
                 # Populate web URL fields
                 info2 = dict(info)
-                info2.update(runner_client._job_web_fields(info))
+                info2.update(runner_client._job_web_fields(info, _worker_of(row)))
                 row["web"] = info2.get("web")
                 row["web_url"] = info2.get("web_url")
                 row["web_private_url"] = info2.get("web_private_url")
@@ -403,7 +435,7 @@ def job_logs(job_id: int, authorization: Optional[str] = Header(None)):
     rid = row.get("runner_job_id")
     if not rid:
         return {"status": "offline", "logs": "(never started)"}
-    resp = runner_client._runner_http("GET", f"/internal/jobs/{rid}")
+    resp = runner_client._runner_http("GET", f"/internal/jobs/{rid}", worker=_worker_of(row))
     if resp.status_code == 404:
         return {"status": "offline", "logs": "(runner restarted — press ▶ Restart to relaunch)"}
     if resp.status_code != 200:
@@ -541,7 +573,7 @@ def list_job_files(job_id: int, authorization: Optional[str] = Header(None)):
     out = []
     if rid:
         try:
-            resp = runner_client._runner_http("GET", f"/internal/jobs/{rid}")
+            resp = runner_client._runner_http("GET", f"/internal/jobs/{rid}", worker=_worker_of(row))
             if resp.status_code == 200:
                 info = resp.json()
                 jdir = info.get("dir") or ""
@@ -578,7 +610,7 @@ def download_job_file(job_id: int, file_path: str, authorization: Optional[str] 
     rid = row.get("runner_job_id")
     if not rid:
         raise HTTPException(status_code=404, detail="Job not running.")
-    resp = runner_client._runner_http("GET", f"/internal/jobs/{rid}")
+    resp = runner_client._runner_http("GET", f"/internal/jobs/{rid}", worker=_worker_of(row))
     if resp.status_code != 200:
         raise HTTPException(status_code=404, detail="Job workspace unavailable.")
     info = resp.json()
@@ -647,7 +679,7 @@ def restore_job_snapshot(job_id: int, authorization: Optional[str] = Header(None
         raise HTTPException(status_code=502,
                             detail=f"Restore failed — {res.get('reason') or 'unknown error'}.")
     try:
-        runner_client._runner_http("POST", f"/internal/jobs/{rid}/restart")
+        runner_client._runner_http("POST", f"/internal/jobs/{rid}/restart", worker=_worker_of(row))
     except Exception as exc:
         logger.warning("restart after restore failed (job %s): %s", job_id, exc)
     return res
@@ -672,7 +704,7 @@ def download_job_workspace(job_id: int, authorization: Optional[str] = Header(No
     b64 = None
     if rid:
         try:
-            resp = runner_client._runner_http("GET", f"/internal/jobs/{rid}/snapshot")
+            resp = runner_client._runner_http("GET", f"/internal/jobs/{rid}/snapshot", worker=_worker_of(row))
             if resp.status_code == 200:
                 data = resp.json()
                 if not data.get("empty"):
@@ -711,7 +743,7 @@ def stop_job(job_id: int, authorization: Optional[str] = Header(None)):
             snapshots.save_snapshot(job_id, rid)
         except Exception as exc:
             logger.warning("pre-stop snapshot failed for job %s: %s", job_id, exc)
-        resp = runner_client._runner_http("POST", f"/internal/jobs/{rid}/stop")
+        resp = runner_client._runner_http("POST", f"/internal/jobs/{rid}/stop", worker=_worker_of(row))
         if resp.status_code not in (200, 404):
             raise HTTPException(status_code=502, detail="Runner refused to stop the job.")
     return {"status": "stopped"}
@@ -732,7 +764,7 @@ def restart_job(job_id: int, request: Request, authorization: Optional[str] = He
     if rid:
         # Fast path: in-place restart on the SAME job id/dir/port/slug.
         # This is what keeps referral-bot databases alive across restarts.
-        resp = runner_client._runner_http("POST", f"/internal/jobs/{rid}/restart")
+        resp = runner_client._runner_http("POST", f"/internal/jobs/{rid}/restart", worker=_worker_of(row))
         if resp.status_code == 200:
             info = resp.json()
 
@@ -760,16 +792,16 @@ def restart_job(job_id: int, request: Request, authorization: Optional[str] = He
         conn = get_db_connection()
         try:
             conn.execute(
-                "UPDATE jobs SET runner_job_id = ?, updated_at = ? WHERE id = ?",
-                (info["id"], now_utc_str(), job_id),
+                "UPDATE jobs SET runner_job_id = ?, worker_url = ?, updated_at = ? WHERE id = ?",
+                (info["id"], getattr(resp, "placed_on", None), now_utc_str(), job_id),
             )
             conn.commit()
         finally:
             conn.close()
-        _restore_then_restart(job_id, info)
+        _restore_then_restart(job_id, info, getattr(resp, "placed_on", None))
 
     info["job_db_id"] = job_id
-    info.update(runner_client._job_web_fields(info))
+    info.update(runner_client._job_web_fields(info, _worker_of(row)))
     return info
 
 
@@ -837,7 +869,7 @@ def update_job(job_id: int, payload: JobUpdateRequest, request: Request, authori
     if new_repo:
         patch_body["repo_url"] = new_repo
         if new_entry: patch_body["entry"] = new_entry
-    resp = runner_client._runner_http("PATCH", f"/internal/jobs/{rid}", patch_body)
+    resp = runner_client._runner_http("PATCH", f"/internal/jobs/{rid}", patch_body, worker=_worker_of(row))
     if resp.status_code == 200:
         info = resp.json()
     elif resp.status_code == 404:
@@ -857,14 +889,14 @@ def update_job(job_id: int, payload: JobUpdateRequest, request: Request, authori
         info = resp2.json()
         conn = get_db_connection()
         try:
-            conn.execute("UPDATE jobs SET runner_job_id = ?, updated_at = ? WHERE id = ?",
-                         (info["id"], now_utc_str(), job_id))
+            conn.execute("UPDATE jobs SET runner_job_id = ?, worker_url = ?, updated_at = ? WHERE id = ?",
+                         (info["id"], getattr(resp2, "placed_on", None), now_utc_str(), job_id))
             conn.commit()
         finally:
             conn.close()
         # Same cold-start recovery as restart_job(): the new workspace is
         # empty, so replay the snapshot we just took (or an older one).
-        info = _restore_then_restart(job_id, info)
+        info = _restore_then_restart(job_id, info, getattr(resp2, "placed_on", None))
     else:
         try:
             detail = resp.json().get("detail", "Runner rejected the update.")
@@ -873,7 +905,7 @@ def update_job(job_id: int, payload: JobUpdateRequest, request: Request, authori
         raise HTTPException(status_code=502, detail=detail)
 
     info["job_db_id"] = job_id
-    info.update(runner_client._job_web_fields(info))
+    info.update(runner_client._job_web_fields(info, _worker_of(row)))
     return info
 
 
@@ -885,7 +917,7 @@ def delete_job(job_id: int, authorization: Optional[str] = Header(None)):
     if rid:
         # Hard delete on the runner too — wipes the persistent workspace.
         try:
-            runner_client._runner_http("DELETE", f"/internal/jobs/{rid}")
+            runner_client._runner_http("DELETE", f"/internal/jobs/{rid}", worker=_worker_of(row))
         except HTTPException:
             pass
     conn = get_db_connection()
@@ -905,13 +937,13 @@ def toggle_job_access(job_id: int, payload: JobAccessToggle, authorization: Opti
     rid = row.get("runner_job_id")
     if not rid:
         raise HTTPException(status_code=409, detail="Job is not up on the runner — press Restart first.")
-    resp = runner_client._runner_http("POST", f"/internal/jobs/{rid}/access", {"public": payload.public})
+    resp = runner_client._runner_http("POST", f"/internal/jobs/{rid}/access", {"public": payload.public}, worker=_worker_of(row))
     if resp.status_code == 404:
         raise HTTPException(status_code=409, detail="Runner restarted — press Restart to relaunch, then retry.")
     if resp.status_code != 200:
         raise HTTPException(status_code=502, detail="Runner refused the access change.")
     info = resp.json()
-    info.update(runner_client._job_web_fields(info))
+    info.update(runner_client._job_web_fields(info, _worker_of(row)))
     info["job_db_id"] = job_id
     return info
 

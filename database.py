@@ -508,6 +508,11 @@ _SCHEMA_TABLES = [
         language TEXT NOT NULL,
         code TEXT NOT NULL,
         runner_job_id TEXT,
+        -- WHICH worker this job physically runs on. Without it, a follow-up
+        -- call (restart/stop/logs) went to whichever worker happened to be
+        -- first in the pool, so with 2+ workers the site would report a
+        -- perfectly healthy bot as dead. NULL = the single-worker default.
+        worker_url TEXT,
         env TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
@@ -683,6 +688,12 @@ def init_db():
         # existing deployments need the ALTER too.
         if not _column_exists(conn, "jobs", "env"):
             conn.execute("ALTER TABLE jobs ADD COLUMN env TEXT")
+
+        # Which worker a job physically lives on. Existing rows stay NULL and
+        # fall back to the primary worker, which is exactly where they already
+        # are — so this migration cannot strand a running bot.
+        if not _column_exists(conn, "jobs", "worker_url"):
+            conn.execute("ALTER TABLE jobs ADD COLUMN worker_url TEXT")
 
         # Same story for the sessions table.
         if not _column_exists(conn, "sessions", "fingerprint"):
