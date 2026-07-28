@@ -574,8 +574,22 @@ body.rs-side-open #tab-jobs .rs-menu-backdrop { display: block; }
    ============================================================ */
 @media (min-width: 761px) {
   #tab-jobs .rs-menu-backdrop { display: none !important; }
+  /* BUG (reported as "Jobs header bar stays stuck and cannot be closed").
+     The old rule set only `flex-basis: 0; width: 0`. Two things defeated it:
+       1. `width: 250px` on the base rule is same-specificity, so which one
+          wins depends purely on source order — fragile, and it silently
+          stopped working as rules were added above.
+       2. Even at width:0 a flex item's default `min-width: auto` floors it
+          at its CONTENT width, so the 250px job list held the panel open
+          regardless. That is the part nothing could override.
+     Declaring the full shorthand plus an explicit min-width:0 makes the
+     collapse deterministic. */
   body.rs-side-collapsed #tab-jobs .rs-side {
-    flex-basis: 0; width: 0; border-right-color: transparent;
+    flex: 0 0 0 !important;
+    width: 0 !important;
+    min-width: 0 !important;
+    border-right-color: transparent;
+    overflow: hidden;
   }
 }
 

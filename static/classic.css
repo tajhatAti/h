@@ -1521,3 +1521,154 @@ body.ed-full { overflow: hidden !important; }
 
 @media (prefers-reduced-motion: reduce) {
 }
+
+/* ============================================================================
+   §16 · UNIFIED COLOR SYSTEM  —  the single source of truth
+   ----------------------------------------------------------------------------
+   THE PROBLEM (measured, not felt): an audit of every rule that paints a
+   button background found 39 DISTINCT values across the stylesheets. Among
+   them "Publish" was GitHub-green #238636, "Create new job" was status-green
+   var(--ok), the code-studio primary was a near-white gradient, and the
+   terminal had eight bespoke grays of its own. Nothing was systematically
+   wrong on its own — together they read as random.
+
+   THE RULE, modelled on GitHub: the interface is GRAYSCALE. Color appears
+   only when it MEANS something.
+
+     PRIMARY   exactly one per view. High-contrast ink-on-light (light theme)
+               or light-on-ink (dark). It is not a hue, so it never competes
+               with status color.
+     NEUTRAL   everything else — secondary actions, borders, icons, chrome.
+     STATUS    green = running/success · red = error/stopped/destructive ·
+               amber = warning. NEVER decorative. A button is green only if
+               green is the fact it is reporting, never because it is the
+               important one.
+
+   This block is last in the last-loaded sheet, so it settles the cascade.
+   ========================================================================= */
+:root {
+  /* Status — identical values in both themes so meaning never shifts. */
+  --st-ok:     #1a7f37;
+  --st-warn:   #9a6700;
+  --st-danger: #b3261e;
+  --st-ok-bg:     rgba(26, 127, 55, .10);
+  --st-warn-bg:   rgba(154, 103, 0, .10);
+  --st-danger-bg: rgba(179, 38, 30, .10);
+}
+html[data-theme="dark"] {
+  --st-ok:     #3fb950;
+  --st-warn:   #d29922;
+  --st-danger: #f85149;
+  --st-ok-bg:     rgba(63, 185, 80, .14);
+  --st-warn-bg:   rgba(210, 153, 34, .14);
+  --st-danger-bg: rgba(248, 81, 73, .14);
+}
+
+/* ---- PRIMARY: one per view, and it is contrast, not colour --------------- */
+.btn-primary,
+.cs-act.primary, #btnSaveSnippet, #btnShareSnippet,
+.code-studio .cs-act.primary, .code-studio .cs-act.publish-btn,
+.wb-btn.primary,
+#tab-jobs .rs-empty-btn,
+.jd-btn.start {
+  background: var(--btn) !important;
+  background-image: none !important;
+  border: 1px solid var(--btn) !important;
+  color: var(--btn-fg) !important;
+  box-shadow: none !important;
+}
+.btn-primary:hover,
+.cs-act.primary:hover, #btnSaveSnippet:hover, #btnShareSnippet:hover,
+.code-studio .cs-act.primary:hover, .code-studio .cs-act.publish-btn:hover,
+.wb-btn.primary:hover,
+#tab-jobs .rs-empty-btn:hover,
+.jd-btn.start:hover {
+  background: var(--btn-hover) !important;
+  border-color: var(--btn-hover) !important;
+  color: var(--btn-fg) !important;
+}
+/* Icons inside a primary button must follow its label, not stay white. */
+.btn-primary .btn-svg, .cs-act.primary .btn-svg,
+.code-studio .cs-act.publish-btn .btn-svg,
+#tab-jobs .rs-empty-btn svg, .jd-btn.start svg {
+  stroke: currentColor !important; color: currentColor !important;
+}
+
+/* ---- DESTRUCTIVE: red, because deleting IS the danger it signals --------- */
+.btn-danger, .jd-btn.danger, #tab-jobs .rs-seg-danger:hover {
+  color: var(--st-danger) !important;
+}
+.btn-danger {
+  background: var(--st-danger-bg) !important;
+  border: 1px solid var(--st-danger) !important;
+}
+.btn-danger:hover {
+  background: var(--st-danger) !important;
+  color: #fff !important;
+}
+
+/* ---- STATUS TEXT: the only other place colour is allowed ---------------- */
+.status-ok,     .badge-ok,     .job-pill.running  { color: var(--st-ok) !important; }
+.status-warn,   .badge-warn,   .job-pill.starting { color: var(--st-warn) !important; }
+.status-danger, .badge-danger, .job-pill.crashed  { color: var(--st-danger) !important; }
+
+/* ---- OFF-PALETTE CORRECTIONS -------------------------------------------- */
+/* "Run" was green because running is green — but the BUTTON is an action,
+   not a state. The running state is already reported by the status dot and
+   the header chip, so the control itself returns to neutral. */
+.code-studio .cs-act.run, #btnRunCode { color: var(--ink) !important; }
+.code-studio .cs-act.run:hover, #btnRunCode:hover {
+  background: var(--btn) !important; color: var(--btn-fg) !important;
+}
+/* Terminal keypad: eight hand-rolled grays -> the shared neutral ramp.
+   kbd-ok / kbd-err keep their colour: those two DO report a result. */
+.wb-term-kbd button,
+.wb-term-kbd button.kbd-nano,
+.wb-term-kbd button.kbd-paste,
+.term-connect-btn,
+.term-ctx button {
+  background: var(--panel) !important;
+  border-color: var(--line-2) !important;
+  color: var(--ink) !important;
+}
+.wb-term-kbd button:active,
+.wb-term-kbd button.on,
+.term-connect-btn:hover,
+.term-ctx button:active {
+  background: var(--paper-2) !important;
+  color: var(--ink) !important;
+}
+.wb-term-kbd button.kbd-ok  { background: var(--st-ok-bg) !important;     color: var(--st-ok) !important; }
+.wb-term-kbd button.kbd-err { background: var(--st-danger-bg) !important; color: var(--st-danger) !important; }
+
+/* ============================================================================
+   §17 · DASHBOARD READABILITY + BOTTOM-NAV CLEARANCE
+   ----------------------------------------------------------------------------
+   (a) CONTRAST. The feature-card body copy ("Write & run code…", "Deploy a
+       Telegram bot…") used var(--muted). Measured against the card surface:
+           light  #7c7c85 on #ffffff = 4.13:1   <- FAILS WCAG AA (needs 4.5)
+           dark   #85858f on #1b1b1f = 4.70:1   <- passes, barely
+       These are the first two things a new user reads, so they get --ink-2
+       (6.6:1 light) instead of the muted tertiary tone.
+
+   (b) OVERLAP. .bottom-nav is position:fixed and 67px tall PLUS
+       env(safe-area-inset-bottom). .dash-main reserved a flat 110px, which
+       ignores the inset entirely — on a notched iPhone the nav is 101px, so
+       only 9px of clearance was left and the final stat row ("8") sat under
+       the bar. Reserve the nav's real height instead of a guessed number.
+   ========================================================================= */
+.fc-body small {
+  color: var(--ink-2) !important;
+}
+.fc-body b i { color: var(--ink-2) !important; }
+
+/* One token for the nav's true footprint, used by every scroll container
+   that sits behind it — so this can never drift out of sync again. */
+:root { --bottom-nav-h: 67px; }
+
+@media (max-width: 860px) {
+  .dash-main {
+    padding-bottom: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom) + 32px) !important;
+    scroll-padding-bottom: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom) + 32px);
+  }
+}

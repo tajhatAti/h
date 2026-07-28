@@ -137,16 +137,10 @@ body.code-active .dash-tab-content.code-studio {
 .code-studio .cs-act:hover { background: #30363d !important; color: #e6edf3 !important; transform: none !important; }
 .code-studio .cs-act:active { background: #3e444d !important; transition-duration: .05s !important; }
 .code-studio .cs-act .btn-svg { width: 14px !important; height: 14px !important; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; display: block; }
-.code-studio .cs-act.primary {
-  background: #238636 !important;
-  border-color: #238636 !important;
-  color: #fff !important;
-  font-weight: 600 !important;
-}
-.code-studio .cs-act.primary:hover { background: #2ea043 !important; border-color: #2ea043 !important; }
-.code-studio .cs-act.primary .btn-svg { stroke: #fff !important; }
-.code-studio .cs-act.run { color: #3fb950 !important; }
-.code-studio .cs-act.run:hover { background: rgba(63,185,80,.15) !important; color: #56d364 !important; }
+/* Colour for .cs-act.primary / .run now comes from the unified system in
+   classic.css §16. Green here meant "important", not "running", which is
+   precisely the misuse that made the UI look random. */
+.code-studio .cs-act.primary { font-weight: 600 !important; }
 .code-studio .cs-act.ic-btn { width: 28px !important; padding: 0 !important; justify-content: center !important; }
 .code-studio .cs-act.ic-btn .btn-svg { width: 14px !important; height: 14px !important; margin: 0 !important; }
 
@@ -197,7 +191,7 @@ body.code-active .dash-tab-content.code-studio {
 .code-studio .cs-act-btn.active { color: #e6edf3 !important; }
 .code-studio .cs-act-btn.active::before {
   content: ""; position: absolute; left: -6px; top: 6px; bottom: 6px; width: 2px;
-  background: #f78166; border-radius: 2px;
+  background: var(--fg-3, #7d8590); border-radius: 2px;
 }
 
 .code-studio .cs-explorer {
@@ -561,21 +555,18 @@ body.ed-full { overflow: hidden !important; }
 }
 
 /* ---------- Publish = primary rocket with emphasis ---------- */
+/* Fill/colour come from the unified system in classic.css §16. This rule
+   kept only its layout concerns — the gradient here was more specific than
+   the system rule and silently won, which is how one button stayed off
+   palette after the audit. */
 .code-studio .cs-act.publish-btn {
-  background: linear-gradient(135deg, #e6e6ea, #c9c9d1) !important;  /* orange→red rocket glow */
-  border-color: transparent !important;
-  color: #111113 !important;
   font-weight: 600 !important;
   margin-left: 4px !important;
   position: relative !important;
   overflow: visible !important;
   box-shadow: 0 1px 0 rgba(255,255,255,.08) inset, 0 2px 6px rgba(249,115,22,.35) !important;
 }
-.code-studio .cs-act.publish-btn:hover {
-  background: linear-gradient(135deg, #f2f2f5, #d8d8de) !important;
-  box-shadow: 0 1px 0 rgba(255,255,255,.12) inset, 0 3px 10px rgba(249,115,22,.5) !important;
-}
-.code-studio .cs-act.publish-btn .btn-svg { stroke: #fff !important; }
+.code-studio .cs-act.publish-btn .btn-svg { stroke: currentColor !important; }
 /* Save becomes quiet ghost */
 .code-studio #btnSaveSnippet {
   background: #21262d !important;
@@ -708,7 +699,7 @@ body.ed-full { overflow: hidden !important; }
 .cs-act-btn.active { color: #e6edf3 !important; background: rgba(255,255,255,.06) !important; }
 .cs-act-btn.active::before {
   content: ""; position: absolute; left: 0; top: 6px; bottom: 6px; width: 2px;
-  background: #f78166; border-radius: 2px;
+  background: var(--fg-3, #7d8590); border-radius: 2px;
 }
 
 /* Publish button publishing state */
