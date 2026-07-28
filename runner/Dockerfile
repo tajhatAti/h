@@ -18,6 +18,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential pkg-config openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
+# ------------------------------------------------------------
+# CURATED MEDIA / FILE TOOLING  (see SYSTEM_TOOLS.md)
+# Must stay in lockstep with the root Dockerfile: a job that works in the
+# single-service deployment has to work identically here, or the two-service
+# layout silently becomes a different platform.
+# ------------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg imagemagick \
+    && rm -rf /var/lib/apt/lists/*
+
 # Node 20
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \

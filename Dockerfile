@@ -32,6 +32,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential pkg-config openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
+# ------------------------------------------------------------
+# CURATED MEDIA / FILE TOOLING  (see runner/SYSTEM_TOOLS.md)
+#
+# Installed at BUILD time, under platform control. Jobs may call these as
+# ordinary subprocesses; they can never install system packages themselves.
+# That is deliberate: RunSpace is a multi-tenant free platform, so letting
+# anonymous user code run apt-get would let one user mutate the shared
+# container for everyone.
+#
+# Kept in its own layer so adding a tool later does not rebuild the whole
+# toolchain above it.
+#   ffmpeg      audio/video transcoding + trimming; also provides ffprobe
+#   imagemagick `convert` / `mogrify` / `identify`
+# git, unzip, zip and tar are already installed in the layer above.
+# ------------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg imagemagick \
+    && rm -rf /var/lib/apt/lists/*
+
 # Node.js (LTS 20) via NodeSource
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \

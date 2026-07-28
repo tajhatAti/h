@@ -954,6 +954,22 @@
                   </div>
                   <p class="jd-sub">Only jobs that open a port get a public address.</p>
 
+                  <!-- Pre-installed tooling. Users kept asking "is ffmpeg
+                       available?"; the answer belongs in the product, not only
+                       in a markdown file they have to find. -->
+                  <div class="jd-pane-head"><span class="jd-pane-title">Pre-installed tools</span></div>
+                  <p class="jd-sub">Call these from your code with <code>subprocess</code> — no install step needed.</p>
+                  <div class="jd-tools">
+                    <span class="jd-tool" title="ffmpeg · ffprobe — audio/video">ffmpeg</span>
+                    <span class="jd-tool" title="convert · mogrify · identify — images">imagemagick</span>
+                    <span class="jd-tool" title="git — clone repositories">git</span>
+                    <span class="jd-tool" title="zip · unzip · tar · xz — archives">zip / unzip</span>
+                    <span class="jd-tool" title="curl · wget — HTTP downloads">curl / wget</span>
+                    <span class="jd-tool" title="sqlite3 — inspect a database">sqlite3</span>
+                    <span class="jd-tool" title="jq — JSON in shell pipelines">jq</span>
+                  </div>
+                  <p class="jd-sub">Python and Node libraries install automatically from your imports. System packages cannot be installed per job — RunSpace is shared, so one job changing the container would affect everyone. Need another tool? Ask on the Telegram channel and it can be added to the image.</p>
+
                   <div class="jd-pane-head"><span class="jd-pane-title">Danger zone</span></div>
                   <p class="jd-sub">Deleting a job stops it and removes its workspace, including any database it wrote.</p>
                 </div>
