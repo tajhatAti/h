@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re as _re
 import sqlite3
 import threading
 import time
@@ -169,8 +170,38 @@ def _translate_sql(sql: str) -> str:
     PostgreSQL's psycopg2 driver uses %s placeholders. Literal '%' is not used
     anywhere in the app's SQL (no LIKE with %), so a straight swap is safe.
     """
-    if DIALECT == "postgres":
-        return sql.replace("?", "%s")
+    if DIALECT != "postgres":
+        return sql
+    sql = sql.replace("?", "%s")
+    # SQLite's upsert spelling. The module docstring has always claimed this
+    # was translated; it never was, and Postgres answers
+    #   syntax error at or near "OR"
+    # so runner/terminal.py's home-snapshot write failed on every call. It is
+    # inside a bare try/except, so the failure was invisible.
+    #
+    # ON CONFLICT needs the conflicting column, which the statement does not
+    # state. Every INSERT OR REPLACE in this app targets a table whose first
+    # inserted column carries a single-column PRIMARY KEY or UNIQUE constraint
+    # — the two things Postgres will accept as a conflict target. That is
+    # asserted against the live schema in tests/test_pg_returning_id.py rather
+    # than assumed, so a future upsert on a table shaped differently fails a
+    # test here instead of at runtime on the deployed site.
+    m = _re.match(
+        r"(\s*)INSERT\s+OR\s+REPLACE\s+INTO\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)(.*)",
+        sql, _re.I | _re.S)
+    if m:
+        lead, table, cols, rest = m.groups()
+        names = [c.strip() for c in cols.split(",") if c.strip()]
+        if names:
+            key = names[0]
+            updates = ", ".join(f"{c} = EXCLUDED.{c}" for c in names[1:])
+            sql = f"{lead}INSERT INTO {table} ({', '.join(names)}){rest}"
+            sql = sql.rstrip().rstrip(";")
+            sql += (f" ON CONFLICT ({key}) DO UPDATE SET {updates}"
+                    if updates else f" ON CONFLICT ({key}) DO NOTHING")
+    # INSERT OR IGNORE has the same problem, with a simpler answer.
+    sql = _re.sub(r"^(\s*)INSERT\s+OR\s+IGNORE\s+INTO", r"\1INSERT INTO",
+                  sql, flags=_re.I)
     return sql
 
 
@@ -188,6 +219,30 @@ def _translate_ddl(ddl: str) -> str:
 # ---------------------------------------------------------------------------
 # Cursor / Connection wrappers — present one API for both engines
 # ---------------------------------------------------------------------------
+# Tables with NO surrogate `id` column — they are keyed by the id of whatever
+# they hang off (user_id / job_id). Appending "RETURNING id" to an insert on
+# these is a guaranteed UndefinedColumn error on Postgres.
+#
+# Derived from the schema at import time rather than hand-listed: a future
+# table without an id would otherwise reintroduce exactly this bug, and the
+# failure only shows up on Postgres, i.e. only in production.
+_NO_ID_TABLES_CACHE = None
+
+
+def _tables_without_id() -> set:
+    # _SCHEMA_TABLES is defined further down this module, so this resolves on
+    # first use rather than at import time.
+    global _NO_ID_TABLES_CACHE
+    if _NO_ID_TABLES_CACHE is None:
+        out = set()
+        for m in _re.finditer(r"CREATE TABLE IF NOT EXISTS (\w+)\s*\((.*?)\n    \)",
+                              "\n".join(_SCHEMA_TABLES), _re.S):
+            if not _re.search(r"^\s*id\s", m.group(2), _re.M):
+                out.add(m.group(1).lower())
+        _NO_ID_TABLES_CACHE = out
+    return _NO_ID_TABLES_CACHE
+
+
 class _Cursor:
     """Wraps a sqlite3 or psycopg2 cursor.
 
@@ -201,17 +256,38 @@ class _Cursor:
         self._cur = cur
         self._returning_id = None
 
+    @staticmethod
+    def _insert_target(sql: str) -> str:
+        """The table an INSERT writes to, lowercased ('' if unparseable)."""
+        m = _re.match(r"\s*INSERT\s+(?:OR\s+\w+\s+)?INTO\s+[\"']?([A-Za-z_][A-Za-z0-9_]*)",
+                      sql, _re.I)
+        return m.group(1).lower() if m else ""
+
     def execute(self, sql, params=()):
         sql_t = _translate_sql(sql)
         if DIALECT == "postgres":
             head = sql_t.lstrip()[:6].upper()
-            if head == "INSERT":
+            if head == "INSERT" and self._insert_target(sql_t) not in _tables_without_id():
                 # Append RETURNING id (strip a trailing semicolon if present).
+                #
+                # BUG THIS FIXES: this used to fire for EVERY insert, including
+                # the three tables that have no id column at all — they are
+                # keyed by user_id or job_id. Postgres answered
+                #   psycopg2.errors.UndefinedColumn: column "id" does not exist
+                # and the whole request 500'd. So every write to term_homes,
+                # job_data_snapshots and telegram_link_codes failed in
+                # production while passing locally, because SQLite never takes
+                # this branch. The workspace-snapshot and terminal-home
+                # features had therefore never once worked on the live site.
                 body = sql_t.rstrip().rstrip(";")
                 self._cur.execute(body + " RETURNING id", tuple(params))
                 row = self._cur.fetchone()
                 self._returning_id = row["id"] if row else None
                 return self
+            if head == "INSERT":
+                # No id to return. lastrowid stays None, which is correct:
+                # these tables are addressed by the key the caller already has.
+                self._returning_id = None
         try:
             self._cur.execute(sql_t, tuple(params))
         except Exception as exc:

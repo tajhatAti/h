@@ -30,6 +30,24 @@ SQLITE_ONLY_MARKERS = (" OR REPLACE ",)
 
 SQL_STATEMENTS = []
 DOCSTRING_IDS = set()
+FSTRING_PART_IDS = set()
+
+
+def _mark_fstring_parts(tree):
+    """Record the literal chunks of every f-string.
+
+    An f-string like f"{lead}INSERT INTO {table} ({cols}){rest}" is stored as
+    JoinedStr, and ast.walk() hands back its plain-text pieces as separate
+    Constant nodes. Reassembled without the placeholders they read as
+    "INSERT INTO  RETURNING id" — a statement that is never executed and
+    cannot parse. Skipping the pieces is right: the f-string is validated by
+    the runtime tests that call _translate_sql for real.
+    """
+    for node in ast.walk(tree):
+        if isinstance(node, ast.JoinedStr):
+            for part in node.values:
+                if isinstance(part, ast.Constant) and isinstance(part.value, str):
+                    FSTRING_PART_IDS.add(id(part))
 
 
 def _mark_docstrings(tree):
@@ -50,12 +68,22 @@ def collect_from(path):
     src = open(path).read()
     tree = ast.parse(src, filename=path)
     _mark_docstrings(tree)
+    _mark_fstring_parts(tree)
     base = os.path.basename(path)
     for node in ast.walk(tree):
         if isinstance(node, ast.Constant) and isinstance(node.value, str):
-            if id(node) in DOCSTRING_IDS:
+            if id(node) in DOCSTRING_IDS or id(node) in FSTRING_PART_IDS:
                 continue
             s = node.value
+            # A REGEX that describes SQL is not SQL. database.py now derives
+            # its id-less-table set by matching CREATE TABLE text, and parses
+            # an INSERT's target the same way — both literals start with a SQL
+            # keyword and are not statements. Backslash escapes and the
+            # capture-group syntax only ever appear in the pattern, never in a
+            # real query in this codebase.
+            if "\\" in s or "(?:" in s or "(.*?)" in s or "[A-Za-z_]" in s:
+                continue
+
             if SQL_RE.match(s):
                 SQL_STATEMENTS.append((base, s))
 
