@@ -14,6 +14,10 @@ from services import limits
 from services.runner_client import MAX_JOBS_PER_USER
 from services.twofa import _verify_second_factor
 
+# "Active now" window. Long enough that someone reading logs still counts,
+# short enough that it means present rather than "visited today".
+ACTIVE_WINDOW_MIN = int(os.getenv("ADMIN_ACTIVE_WINDOW_MIN", "15"))
+
 router = APIRouter()
 
 
@@ -83,12 +87,36 @@ def admin_overview_route(authorization: Optional[str] = Header(None)):
             (threshold,),
         ).fetchall()
         series = [{"day": dict(r)["day"], "count": dict(r)["c"]} for r in rows]
+        # Signups over rolling windows. Computed in SQL rather than by walking
+        # the daily series, which only covers 13 days and would silently
+        # under-report the 30-day figure.
+        def _since(days):
+            cutoff = (now_utc() - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
+            r = conn.execute(
+                "SELECT COUNT(*) AS c FROM users WHERE created_at >= ?", (cutoff,)
+            ).fetchone()
+            return dict(r)["c"]
+
+        # Users seen recently. sessions.last_seen is refreshed on authenticated
+        # requests, so this is "who is actually using the platform", not "who
+        # ever registered".
+        active_cut = (now_utc() - timedelta(minutes=ACTIVE_WINDOW_MIN)).strftime("%Y-%m-%d %H:%M:%S")
+        active_users = dict(conn.execute(
+            "SELECT COUNT(DISTINCT user_id) AS c FROM sessions WHERE last_seen >= ?",
+            (active_cut,),
+        ).fetchone())["c"]
+
         out = {
             "users": users, "suspended": suspended, "verified": verified,
             "jobs_total": jobs_total, "jobs_deployed": deployed,
             "jobs_max_per_user": MAX_JOBS_PER_USER,
             "capacity_max": users * MAX_JOBS_PER_USER,
             "signups_daily": series,
+            "signups_24h": _since(1),
+            "signups_7d": _since(7),
+            "signups_30d": _since(30),
+            "active_users": active_users,
+            "active_window_min": ACTIVE_WINDOW_MIN,
         }
     finally:
         conn.close()
@@ -132,6 +160,20 @@ def admin_overview_route(authorization: Optional[str] = Header(None)):
                             "full": bool(h.get("full"))})
         except Exception:
             pass
+    # Live status breakdown. The DB knows a job EXISTS; only the runner knows
+    # whether it is running, and a count of rows would call a crashed bot
+    # "deployed".
+    try:
+        r = runner_client._runner_http("GET", "/internal/jobs")
+        jl = (r.json() or {}).get("jobs") or []
+        by = {}
+        for j in jl:
+            by[j.get("status") or "unknown"] = by.get(j.get("status") or "unknown", 0) + 1
+        out["jobs_by_status"] = by
+        out["jobs_running"] = by.get("running", 0)
+    except Exception:
+        pass
+
     if safe_mb:
         out["mem_used_mb"] = round(used_mb, 1)
         out["mem_safe_mb"] = round(safe_mb)
@@ -161,6 +203,76 @@ def admin_users_route(authorization: Optional[str] = Header(None)):
         conn.close()
 
 
+@router.get("/admin/users/{user_id}")
+def admin_user_detail_route(user_id: int, authorization: Optional[str] = Header(None)):
+    """One account in full: profile, jobs, sessions, security events."""
+    require_admin(authorization)
+    conn = get_db_connection()
+    try:
+        u = conn.execute(
+            "SELECT id, username, email, is_verified, is_suspended, is_admin, "
+            "       created_at, updated_at, telegram_id, fingerprint, last_ip "
+            "FROM users WHERE id = ?", (user_id,)
+        ).fetchone()
+        if not u:
+            raise HTTPException(status_code=404, detail="Not found.")
+        user = dict(u)
+        # How they signed up. Inferred from which credential exists, since no
+        # explicit auth_method column was ever recorded.
+        user["auth_method"] = "telegram" if user.get("telegram_id") else "email"
+        user["auth_method_inferred"] = True
+
+        jobs = [dict(r) for r in conn.execute(
+            "SELECT id, name, language, runner_job_id, worker_url, created_at, updated_at "
+            "FROM jobs WHERE user_id = ? ORDER BY id DESC", (user_id,)
+        ).fetchall()]
+
+        # Login history. IP + fingerprint are exactly what makes duplicate
+        # accounts visible, which is the point of this view.
+        sessions = [dict(r) for r in conn.execute(
+            "SELECT id, ip_address, device_info, fingerprint, created_at, last_seen, expires_at "
+            "FROM sessions WHERE user_id = ? ORDER BY id DESC LIMIT 50", (user_id,)
+        ).fetchall()]
+
+        events = []
+        try:
+            events = [dict(r) for r in conn.execute(
+                "SELECT action, details, ip_address, created_at FROM activity_log "
+                "WHERE user_id = ? ORDER BY id DESC LIMIT 50", (user_id,)
+            ).fetchall()]
+        except Exception:
+            pass
+    finally:
+        conn.close()
+
+    # Live resource usage for this user's jobs.
+    live = {}
+    try:
+        resp = runner_client._runner_http("GET", "/internal/jobs")
+        for j in ((resp.json() or {}).get("jobs") or []):
+            live[j.get("id")] = j
+    except Exception:
+        pass
+    total_mem = 0.0
+    for j in jobs:
+        info = live.get(j.get("runner_job_id")) or {}
+        j["live_status"] = info.get("status")
+        j["mem_mb"] = info.get("mem_mb")
+        j["peak_mem_mb"] = info.get("peak_mem_mb")
+        j["uptime_s"] = info.get("uptime_s")
+        j["libs"] = info.get("libs") or []
+        total_mem += float(info.get("mem_mb") or 0)
+
+    return {
+        "user": user,
+        "jobs": jobs,
+        "jobs_running": sum(1 for j in jobs if j.get("live_status") == "running"),
+        "mem_used_mb": round(total_mem, 1),
+        "sessions": sessions,
+        "events": events,
+    }
+
+
 @router.get("/admin/jobs")
 def admin_jobs_route(authorization: Optional[str] = Header(None)):
     """Job METADATA only (+ live status/uptime from the runner, best-effort) —
@@ -171,7 +283,9 @@ def admin_jobs_route(authorization: Optional[str] = Header(None)):
         rows = conn.execute(
             """
             SELECT j.id, j.name, j.language, j.created_at, j.runner_job_id,
-                   u.username AS owner, u.is_suspended AS owner_suspended
+                   j.worker_url, j.user_id,
+                   u.username AS owner, u.telegram_id AS owner_telegram,
+                   u.is_suspended AS owner_suspended
             FROM jobs j JOIN users u ON u.id = j.user_id
             ORDER BY j.id DESC LIMIT 300
             """
@@ -194,7 +308,98 @@ def admin_jobs_route(authorization: Optional[str] = Header(None)):
         row["live_status"] = info.get("status")
         row["uptime_s"] = info.get("uptime_s")
         row["web_slug"] = info.get("web_slug")
+        # Resource picture. mem_mb is now; peak_mem_mb is the high-water mark
+        # for this run, which is what explains an OOM after the process has
+        # already shrunk back or died.
+        row["mem_mb"] = info.get("mem_mb")
+        row["peak_mem_mb"] = info.get("peak_mem_mb")
+        row["cpu_pct"] = info.get("cpu_pct")
+        row["restarts"] = info.get("restarts")
+        row["last_exit_reason"] = info.get("last_exit_reason")
+        row["libs"] = info.get("libs") or []
+        # Which physical worker. NULL means it predates multi-worker routing
+        # and therefore lives on the primary.
+        row["worker"] = row.get("worker_url") or "primary"
+        # Website vs Telegram bot. There is no source column, so this is
+        # INFERRED from whether the account was created through Telegram —
+        # labelled as an inference rather than presented as recorded fact.
+        row["source"] = "telegram" if row.get("owner_telegram") else "website"
+        row["source_inferred"] = True
+        row.pop("owner_telegram", None)
     return {"jobs": jobs}
+
+
+@router.get("/admin/libraries")
+def admin_libraries_route(authorization: Optional[str] = Header(None)):
+    """Every package installed across every job, by frequency.
+
+    Answers "which jobs pulled in opencv-python?" without grepping logs, and
+    surfaces heavy or odd dependencies for a look. The HEAVY list is a prompt
+    for human review, not an accusation — plenty of legitimate bots use numpy.
+    """
+    require_admin(authorization)
+
+    # Frameworks that dominate a 512MB box, plus categories worth a glance on a
+    # free bot host. Matched on the package name only.
+    HEAVY = {
+        "tensorflow", "torch", "pytorch", "jax", "keras", "transformers",
+        "opencv-python", "opencv-contrib-python", "scipy", "pandas", "numpy",
+        "scikit-learn", "sklearn", "matplotlib", "playwright", "selenium",
+    }
+    WATCH = {
+        # Mining / hashing adjacent, and remote-control tooling. Presence is
+        # not proof of anything; it is a reason to read the job.
+        "pycryptodome", "ecdsa", "web3", "eth-account", "bitcoinlib",
+        "paramiko", "pyngrok", "requests-html",
+    }
+
+    conn = get_db_connection()
+    try:
+        rows = conn.execute(
+            "SELECT j.id, j.name, j.runner_job_id, u.username AS owner "
+            "FROM jobs j JOIN users u ON u.id = j.user_id"
+        ).fetchall()
+        meta = {dict(r)["runner_job_id"]: dict(r) for r in rows if dict(r)["runner_job_id"]}
+    finally:
+        conn.close()
+
+    live = {}
+    try:
+        resp = runner_client._runner_http("GET", "/internal/jobs")
+        for j in ((resp.json() or {}).get("jobs") or []):
+            live[j.get("id")] = j
+    except Exception:
+        pass
+
+    counts = {}
+    for rid, j in live.items():
+        m = meta.get(rid) or {}
+        for lib in (j.get("libs") or []):
+            e = counts.setdefault(lib, {"library": lib, "count": 0, "jobs": []})
+            e["count"] += 1
+            e["jobs"].append({
+                "job_id": m.get("id"),
+                "name": m.get("name") or j.get("name"),
+                "owner": m.get("owner"),
+            })
+
+    out = sorted(counts.values(), key=lambda e: (-e["count"], e["library"]))
+    for e in out:
+        name = e["library"].lower()
+        e["heavy"] = name in HEAVY
+        e["watch"] = name in WATCH
+    total_jobs = len(live) or 1
+    for e in out:
+        e["pct_of_jobs"] = round(e["count"] / total_jobs * 100)
+    return {
+        "libraries": out,
+        "jobs_sampled": len(live),
+        # Stated plainly: only RUNNING jobs report their packages, because the
+        # list lives on the runner's in-memory record. A stopped job's
+        # libraries are not known, and pretending otherwise would make the
+        # percentages quietly wrong.
+        "note": "Counts cover jobs currently known to the runner.",
+    }
 
 
 @router.post("/admin/users/set-suspended")

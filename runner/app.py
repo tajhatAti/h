@@ -993,6 +993,14 @@ def _installed_version(name: str, pylibs: str) -> str:
 def _prepare_and_run(j: dict, reqs: list, is_repo: bool = False) -> None:
     """Background worker: install deps (repo manifests first, then inline imports),
     then start the job."""
+    # Remember what this job asked for. The log line already said it, but a log
+    # is a ring buffer — it scrolls away, and the admin panel needs to aggregate
+    # across every job. Union, because a repo install can add more later.
+    try:
+        have = set(j.get("libs") or [])
+        j["libs"] = sorted(have | {_pkg_display_name(x) for x in (reqs or [])})
+    except Exception:
+        pass
     # Repo-mode: install requirements.txt / package.json / Gemfile first
     if is_repo:
         ok = _install_repo_deps(j["dir"], j.get("pylibs"), j["lang"], j["log"])
@@ -1399,6 +1407,22 @@ def _recover_jobs() -> None:
         logger.warning("job recovery failed: %s", exc)
 
 
+def _track_peak(j: dict, stats: dict) -> dict:
+    """Remember the highest RSS seen for this run.
+
+    A job that OOMs is often small again by the time anyone looks — the spike
+    is what explains the kill, so it has to be recorded as it happens rather
+    than reconstructed later.
+    """
+    try:
+        cur = float((stats or {}).get("mem_mb") or 0.0)
+        if cur > float(j.get("peak_mem_mb") or 0.0):
+            j["peak_mem_mb"] = cur
+    except Exception:
+        pass
+    return stats or {}
+
+
 def _job_public(j: dict) -> dict:
     """Safe public view of a job (no internal objects)."""
     running = j["proc"] is not None and j["proc"].poll() is None
@@ -1414,9 +1438,17 @@ def _job_public(j: dict) -> dict:
         # The Details page shows a Port row; without this it was always "—".
         "port": j.get("port") if running else None,
         # Live resource usage (Details page). Empty dict when unavailable.
-        **(_proc_stats(j.get("proc")) if running else {}),
+        **_track_peak(j, _proc_stats(j.get("proc")) if running else {}),
         # Only the KEYS — values may hold bot tokens and must not be echoed.
         "env_keys": sorted((j.get("env") or {}).keys()),
+        # Packages auto-installed for this job. Recorded so the admin panel can
+        # answer "which jobs pulled in opencv-python?" across the platform
+        # without grepping every job's log.
+        "libs": sorted(j.get("libs") or []),
+        # Peak RSS seen for this run — a job can look small right now and still
+        # have spiked; the peak is what explains an OOM after the fact.
+        "peak_mem_mb": round(j.get("peak_mem_mb") or 0.0, 1),
+        "last_exit_reason": j.get("last_exit_reason"),
         "web_slug": j.get("web_slug"),
         "web_public": bool(j.get("web_public", True)),
         # access_key only reaches the main site (this API is secret-guarded) —
@@ -1564,6 +1596,9 @@ def _spawn(j: dict) -> None:
                        or "JavaScript heap out of memory" in tail)
             except Exception:
                 oom = False
+        j["last_exit_reason"] = ("oom" if oom
+                                 else "manual" if j.get("stop_requested")
+                                 else "crash" if rc not in (0, None) else "exit")
         if oom:
             j["log"].append(
                 f"[system] Process stopped: exceeded memory limit "

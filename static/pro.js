@@ -94,6 +94,7 @@ function switchTab(tabId) {
   if (tabId === "jobs") { startJobPolling(); } else { stopJobPolling(); }
   // Admin console loads fresh every time it's opened (owner-only anyway).
   if (tabId === "admin" && typeof loadAdminPanel === "function") { loadAdminPanel(); }
+  if (typeof _admSetPolling === "function") _admSetPolling(tabId === "admin");
   // ⚙️ Settings: keep the security panel truthful every time it opens.
   if (tabId === "profile") { refreshSecurityPanel(); loadSessionsList(); }
   if (tabId === "code") { initCodeMirror(); if (cmEditor) cmEditor.refresh(); }
@@ -4864,6 +4865,29 @@ function applyAdminVisibility(profile) {
   } catch (e) {}
 }
 
+/* Live refresh for the admin panel.
+   10s, and ONLY while the tab is open and the document is visible. A
+   monitoring tool that keeps polling in a background tab is just a second
+   source of load on the box it is supposed to be watching — the exact
+   mistake worth avoiding on a 512MB free tier. */
+let _admTimer = null;
+const ADM_POLL_MS = 10000;
+
+function _admSetPolling(on) {
+  if (_admTimer) { clearInterval(_admTimer); _admTimer = null; }
+  if (!on) return;
+  _admTimer = setInterval(() => {
+    if (document.hidden) return;                 // tab in the background
+    if (!document.getElementById("admStats")) return;
+    loadAdminPanel(true).catch(() => {});        // a failed poll is not fatal
+  }, ADM_POLL_MS);
+}
+// Resume immediately when the admin comes back to the tab, rather than
+// waiting out the remainder of an interval on stale numbers.
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && _admTimer) loadAdminPanel(true).catch(() => {});
+});
+
 async function loadAdminPanel(force) {
   const stats = document.getElementById("admStats");
   if (!stats) return;
@@ -4872,12 +4896,13 @@ async function loadAdminPanel(force) {
     stats.innerHTML = '<div class="adm-stat"><b>…</b><span>loading</span></div>';
   }
   try {
-    const [ov, usersR, jobsR, reportsR, auditR] = await Promise.all([
+    const [ov, usersR, jobsR, reportsR, auditR, libsR] = await Promise.all([
       api("/admin/overview", "GET", null, true),
       api("/admin/users", "GET", null, true),
       api("/admin/jobs", "GET", null, true),
       api("/admin/abuse-reports", "GET", null, true),
       api("/admin/audit-log", "GET", null, true),
+      api("/admin/libraries", "GET", null, true).catch(() => null),
     ]);
     renderAdminStats(ov || {});
     renderAdminSpark(ov || {});
@@ -4885,11 +4910,46 @@ async function loadAdminPanel(force) {
     renderAdminUsers((usersR && usersR.users) || []);
     renderAdminReports((reportsR && reportsR.reports) || []);
     renderAdminAudit((auditR && auditR.audit) || []);
+    renderAdminLibs(libsR || {});
     stats.dataset.loaded = "1";
   } catch (e) {
     // 404 for non-admins — stay quiet and ambiguous, just like the server.
     stats.innerHTML = '<div class="adm-empty">Nothing here.</div>';
   }
+}
+
+/* Installed packages across the platform, most common first. */
+function renderAdminLibs(data) {
+  const el = document.getElementById("admLibs");
+  if (!el) return;
+  const rows = (data && data.libraries) || [];
+  if (!rows.length) {
+    el.innerHTML = '<div class="adm-empty">No packages recorded yet.</div>';
+    return;
+  }
+  // textContent per cell — a package name is untrusted input and must never
+  // be parsed as HTML.
+  el.textContent = "";
+  rows.slice(0, 60).forEach(r => {
+    const row = document.createElement("div");
+    row.className = "adm-lib";
+    const name = document.createElement("span");
+    name.className = "adm-lib-name";
+    name.textContent = r.library;
+    const count = document.createElement("span");
+    count.className = "adm-lib-count";
+    count.textContent = `${r.count} job${r.count === 1 ? "" : "s"} · ${r.pct_of_jobs}%`;
+    row.append(name, count);
+    if (r.heavy || r.watch) {
+      const tag = document.createElement("span");
+      tag.className = "adm-lib-tag " + (r.watch ? "watch" : "heavy");
+      // "review", not "abuse" — a flag is a prompt to look, not a verdict.
+      tag.textContent = r.watch ? "review" : "heavy";
+      row.appendChild(tag);
+    }
+    row.title = (r.jobs || []).map(j => `${j.owner}/${j.name}`).join(", ");
+    el.appendChild(row);
+  });
 }
 
 function renderAdminStats(ov) {

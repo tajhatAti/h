@@ -1804,3 +1804,28 @@ a:not(.btn-primary):not(.btn-secondary):not(.btn-ghost):not(.jd-btn):not(.link):
   outline: 2px solid var(--accent, #58a6ff) !important;
   outline-offset: 2px;
 }
+
+/* Admin · installed-package list. Neutral rows; only the review flag carries
+   colour, because only it means something. */
+.adm-libs { display: flex; flex-direction: column; }
+.adm-lib {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12.5px;
+}
+.adm-lib:last-child { border-bottom: 0; }
+.adm-lib-name {
+  flex: 1; min-width: 0;
+  font-family: var(--mono);
+  color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.adm-lib-count { color: var(--muted); white-space: nowrap; }
+.adm-lib-tag {
+  padding: 1px 8px; border-radius: 999px;
+  font-size: 11px; font-weight: 500; white-space: nowrap;
+  border: 1px solid var(--line-2); color: var(--muted);
+}
+.adm-lib-tag.heavy { color: var(--st-warn); border-color: color-mix(in srgb, var(--st-warn) 40%, transparent); }
+.adm-lib-tag.watch { color: var(--st-danger); border-color: color-mix(in srgb, var(--st-danger) 40%, transparent); }
