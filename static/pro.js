@@ -2790,7 +2790,15 @@ async function loadJobs() {
   // instead of swapping to skeleton (avoids flicker). Only show skeleton
   // when there is no prior content.
   const hasPrior = !!(window._lastJobs && window._lastJobs.length) || !!list.querySelector(".job-item");
-  if (!hasPrior) _setJobsStatus("loading"); else _jobsStatus = "loading";
+  // SECOND leak of the same class as the one below, and the one that actually
+  // fires FIRST. _setJobsStatus("loading") does `ws.style.display = "none"`.
+  // On an account with zero saved jobs hasPrior is false, so every 7s poll
+  // hid the workspace here — BEFORE the _composingNew guard further down ever
+  // ran. An editor the user is typing into owns the main pane; a background
+  // refresh may never take it away, so skip the visual state change entirely
+  // and only track the internal flag.
+  const _editorOwnsPane = _composingNew || _jobDirty;
+  if (!hasPrior && !_editorOwnsPane) _setJobsStatus("loading"); else _jobsStatus = "loading";
 
   try {
     const data = await api("/api/jobs", "GET", null, true);
@@ -2803,7 +2811,20 @@ async function loadJobs() {
     // editor and destroy that text — which is exactly what looked like a
     // spontaneous page reload. Refresh ONLY the sidebar list and stop.
     if (_composingNew || _jobDirty) {
-      _setJobsStatus(jobs.length ? "loaded" : "empty");
+      // ROOT CAUSE of "New RunSpace reloads after 3-4 seconds", found again
+      // here because the PREVIOUS fix guarded the wrong layer. The guard
+      // above correctly avoids _showEmpty()/_showWorkspace() — but then
+      // called _setJobsStatus("empty"), and THAT function does
+      // `ws.style.display = "none"` on the workspace (see the "empty" branch).
+      // So on an account with zero saved jobs, every 7s poll hid the blank
+      // New editor and swapped in the "No RunSpace yet" panel. It looked
+      // exactly like a spontaneous page reload, and it also explains the
+      // stray word on screen: that panel's subtitle is the sentence
+      // "...it goes live in seconds."
+      //
+      // A composing/dirty editor owns the main pane. Only the SIDEBAR may be
+      // refreshed here, and only through _renderJobList(), which touches the
+      // list and nothing else.
       if (sig !== _lastJobsSig) { _lastJobsSig = sig; _renderJobList(jobs); }
       return;
     }
