@@ -4921,6 +4921,10 @@ function _admSetPolling(on) {
   if (_admTimer) { clearInterval(_admTimer); _admTimer = null; }
   if (!on) return;
   _admTimer = setInterval(() => {
+    // The age label has to keep counting even while the tab is hidden or a
+    // request is failing, otherwise it freezes at a reassuring "updated 3s
+    // ago" that is no longer true.
+    _admRenderFreshness();
     if (document.hidden) return;                 // tab in the background
     if (!document.getElementById("admStats")) return;
     loadAdminPanel(true).catch(() => {});        // a failed poll is not fatal
@@ -4932,11 +4936,61 @@ document.addEventListener("visibilitychange", () => {
   if (!document.hidden && _admTimer) loadAdminPanel(true).catch(() => {});
 });
 
+/* Every render here replaces innerHTML wholesale, which is fine on first load
+ * and destructive on a poll: the row the admin was reading scrolls back to the
+ * top and keyboard focus falls out to <body>. That makes the panel unusable by
+ * keyboard and jumpy on a phone — every 10 seconds, silently.
+ *
+ * Rather than teach seven renderers to diff, preserve the two things a person
+ * actually notices across a repaint: where they had scrolled, and what they
+ * had focused. Rows are re-findable because they carry a stable id. */
+function _admPreserve(fn) {
+  const active = document.activeElement;
+  // Only track focus that is INSIDE the panel. Restoring it otherwise would
+  // steal focus from, say, the 2FA box in the confirm modal.
+  const panel = document.getElementById("tab-admin");
+  // Identify the focused element by a stable key the renderers stamp on, not
+  // by its onclick string — quoting an arbitrary attribute back into a
+  // selector is a bug waiting to happen.
+  const tracked = active && panel && panel.contains(active) && active !== document.body
+    ? active.getAttribute("data-adm-key")
+    : null;
+  const scrolls = [...document.querySelectorAll("#tab-admin .adm-table-wrap")]
+    .map(el => [el.id || el.querySelector("table")?.id || "", el.scrollTop]);
+
+  fn();
+
+  scrolls.forEach(([key, top]) => {
+    if (!top) return;
+    const el = document.getElementById(key)?.closest(".adm-table-wrap");
+    if (el) el.scrollTop = top;
+  });
+  if (tracked) {
+    // The key names the LOGICAL row ("job:12"), so the same row is refocused
+    // even though the element itself was replaced.
+    const again = document.querySelector(
+      `#tab-admin [data-adm-key="${tracked}"]`);
+    if (again && again.focus) again.focus();
+  }
+}
+
+let _admInFlight = false;
+
 async function loadAdminPanel(force) {
   const stats = document.getElementById("admStats");
   if (!stats) return;
+  // A slow poll must not stack on the previous one. Without this, a runner
+  // taking longer than the interval to answer queues refreshes until the
+  // whole pool is being hammered by the panel watching it.
+  if (_admInFlight) return;
+  _admInFlight = true;
+  // Whether the panel currently HAS real numbers on screen. Read before
+  // force clears the marker: the poll always passes force=true, so testing
+  // dataset.loaded in the catch below would always have seen "not loaded"
+  // and blanked a perfectly good panel on the first failed refresh.
+  const hadData = stats.dataset.loaded === "1";
   if (force) delete stats.dataset.loaded;
-  if (stats.dataset.loaded !== "1") {
+  if (!hadData) {
     stats.innerHTML = '<div class="adm-stat"><b>…</b><span>loading</span></div>';
   }
   try {
@@ -4948,18 +5002,57 @@ async function loadAdminPanel(force) {
       api("/admin/audit-log", "GET", null, true),
       api("/admin/libraries", "GET", null, true).catch(() => null),
     ]);
-    renderAdminStats(ov || {});
-    renderAdminSpark(ov || {});
-    renderAdminJobs((jobsR && jobsR.jobs) || []);
-    renderAdminUsers((usersR && usersR.users) || []);
-    renderAdminReports((reportsR && reportsR.reports) || []);
-    renderAdminAudit((auditR && auditR.audit) || []);
-    renderAdminLibs(libsR || {});
+    _admPreserve(() => {
+      renderAdminStats(ov || {});
+      renderAdminSpark(ov || {});
+      renderAdminJobs((jobsR && jobsR.jobs) || []);
+      renderAdminUsers((usersR && usersR.users) || []);
+      renderAdminReports((reportsR && reportsR.reports) || []);
+      renderAdminAudit((auditR && auditR.audit) || []);
+      renderAdminLibs(libsR || {});
+    });
+    _admMarkFresh();
     stats.dataset.loaded = "1";
   } catch (e) {
     // 404 for non-admins — stay quiet and ambiguous, just like the server.
-    stats.innerHTML = '<div class="adm-empty">Nothing here.</div>';
+    // On a POLL, though, leave the numbers alone: one failed request is
+    // usually a sleeping worker, and blanking a working panel to "Nothing
+    // here" over it is a lie about the platform's state.
+    if (hadData) {
+      _admMarkStale();
+      stats.dataset.loaded = "1";      // the numbers are old, not absent
+    } else {
+      stats.innerHTML = '<div class="adm-empty">Nothing here.</div>';
+    }
+  } finally {
+    _admInFlight = false;
   }
+}
+
+/* When the numbers were last true. A live panel that silently stops updating
+ * is worse than one that never claimed to be live, so the timestamp is shown
+ * and goes stale visibly. */
+let _admLastOk = 0;
+
+function _admMarkFresh() {
+  _admLastOk = Date.now();
+  _admRenderFreshness();
+}
+
+function _admMarkStale() {
+  _admRenderFreshness(true);
+}
+
+function _admRenderFreshness(failed) {
+  const el = document.getElementById("admFresh");
+  if (!el) return;
+  if (!_admLastOk) { el.textContent = ""; return; }
+  const age = Math.round((Date.now() - _admLastOk) / 1000);
+  const when = age < 15 ? "just now" : age < 90 ? `${age}s ago` :
+               `${Math.round(age / 60)}m ago`;
+  el.textContent = failed || age > 30 ? `last updated ${when} · retrying` :
+                   `updated ${when}`;
+  el.classList.toggle("stale", !!failed || age > 30);
 }
 
 /* Installed packages, heaviest first.
@@ -5106,7 +5199,7 @@ function renderAdminJobs(jobs) {
       const rs = j.restarts
         ? `<span class="adm-pill warn">${j.restarts}×</span>`
         : '<span class="adm-num-zero">0</span>';
-      return `<tr tabindex="0" role="button" onclick="openAdminJob(${j.id})" ` +
+      return `<tr tabindex="0" role="button" data-adm-key="job:${j.id}" onclick="openAdminJob(${j.id})" ` +
       `onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAdminJob(${j.id});}">` +
       `<td><b>${escapeHtml(j.name)}</b><small>${escapeHtml(j.language)} · ${escapeHtml((j.created_at || "").slice(0, 10))}</small></td>` +
       `<td>${escapeHtml(j.owner)}${j.owner_suspended ? ' <span class="adm-pill warn">suspended</span>' : ""}</td>` +
@@ -5275,7 +5368,7 @@ function renderAdminUsers(users) {
         : `<button class="adm-act${u.is_suspended ? " ok" : ""}" onclick="askSuspend(${u.id}, ${u.is_suspended ? 0 : 1}, this)">${u.is_suspended ? "Reactivate" : "Suspend"}</button>`;
       // The Suspend button lives inside the row, so its click must not also
       // open the drill-down behind the confirm modal.
-      return `<tr tabindex="0" role="button" onclick="if(!event.target.closest('.adm-act'))openAdminUser(${u.id})" ` +
+      return `<tr tabindex="0" role="button" data-adm-key="user:${u.id}" onclick="if(!event.target.closest('.adm-act'))openAdminUser(${u.id})" ` +
         `onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAdminUser(${u.id});}">` +
         `<td><b>${escapeHtml(u.username)}</b><small>${escapeHtml(u.email)}</small></td>` +
         `<td>${escapeHtml((u.created_at || "").slice(0, 10))}</td>` +

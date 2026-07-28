@@ -18,6 +18,11 @@ from services.twofa import _verify_second_factor
 # short enough that it means present rather than "visited today".
 ACTIVE_WINDOW_MIN = int(os.getenv("ADMIN_ACTIVE_WINDOW_MIN", "15"))
 
+# How stale a worker-health reading the console will accept. Below the 10s
+# poll interval, so consecutive refreshes still show movement, but a burst of
+# refreshes (or two admins looking at once) collapses into one probe.
+ADMIN_HEALTH_MAX_AGE_S = float(os.getenv("ADMIN_HEALTH_MAX_AGE_S", "8"))
+
 router = APIRouter()
 
 
@@ -155,7 +160,10 @@ def admin_overview_route(authorization: Optional[str] = Header(None)):
     used_mb = safe_mb = total_mb = 0.0
     running_total = 0
     try:
-        for url, h in (runner_client.worker_health(refresh=True) or {}).items():
+        # A few seconds of staleness, not a forced re-probe of every worker on
+        # every 10s poll.
+        health = runner_client.worker_health(max_age_s=ADMIN_HEALTH_MAX_AGE_S) or {}
+        for url, h in health.items():
             workers.append({
                 "url": url,
                 "online": bool(h.get("online")),

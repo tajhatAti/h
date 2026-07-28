@@ -327,8 +327,40 @@ def half_down(method, url, **kw):
 
 
 rc.requests.request = half_down
+# refresh=True, because the previous call is still inside FLEET_CACHE_MS and
+# would otherwise be answered from the memo — which is the cache doing its job,
+# not a routing bug. Asserting through a stale memo would have tested nothing.
 check("an unreachable worker does not hide the reachable one",
-      set(rc.fleet_jobs()) == {"jb"}, str(sorted(rc.fleet_jobs())))
+      set(rc.fleet_jobs(refresh=True)) == {"jb"},
+      str(sorted(rc.fleet_jobs(refresh=True))))
+
+# The memo itself: four admin routes ask for the fleet on every 10s refresh,
+# and unmemoised that was 3 identical round-trips each on a 3-worker pool.
+probes = []
+
+
+def counting(method, url, **kw):
+    probes.append(url)
+    return Resp(200, {}, {"jobs": []})
+
+
+rc.requests.request = counting
+rc._fleet_cache.update(at=0.0, jobs=None)
+rc.fleet_jobs()
+first = len(probes)
+rc.fleet_jobs(); rc.fleet_jobs(); rc.fleet_jobs()
+check("repeat reads inside the window cost nothing",
+      len(probes) == first, f"{len(probes)} vs {first}")
+rc._runner_http("POST", "/internal/jobs/x/stop", worker=A)
+probes.clear()
+rc.fleet_jobs()
+check("a write invalidates it, so an action is never contradicted",
+      len(probes) == 2, str(probes))
+rc._fleet_cache["at"] = 0.0
+probes.clear()
+rc.fleet_jobs()
+check("and it expires on its own rather than freezing the panel",
+      len(probes) == 2, str(probes))
 
 # The memory fields the admin capacity panel sums must survive the probe.
 rc._health_cache.clear()

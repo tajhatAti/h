@@ -139,14 +139,23 @@ def _probe_worker(url: str) -> dict:
                 "total_mb": 0.0, "free_mb": 0.0, "full": False}
 
 
-def worker_health(refresh: bool = False) -> dict:
-    """Cached health for every worker in the pool."""
+def worker_health(refresh: bool = False, max_age_s: float = None) -> dict:
+    """Cached health for every worker in the pool.
+
+    max_age_s lets a caller say how stale an answer it can live with, instead
+    of the all-or-nothing choice between the 45s placement cache and a forced
+    round-trip to every worker. The admin overview polls every 10s and used
+    refresh=True, so it re-probed the whole pool on every tick — the console
+    generating load on the box it is watching. It now accepts a few seconds of
+    staleness, which is invisible at a 10s refresh.
+    """
     import time
     now = time.time()
+    ttl = _HEALTH_TTL_S if max_age_s is None else max_age_s
     out = {}
     for url in runner_pool():
         cached = _health_cache.get(url)
-        if not refresh and cached and now - cached["at"] < _HEALTH_TTL_S:
+        if not refresh and cached and now - cached["at"] < ttl:
             out[url] = cached
             continue
         info = _probe_worker(url)
@@ -173,7 +182,17 @@ def _placement_order() -> list:
     return sorted(pool, key=key)
 
 
-def fleet_jobs() -> dict:
+# A single dashboard refresh calls four routes that each want the fleet's job
+# list. Unmemoised on a 3-worker pool that was 9 identical HTTP round-trips per
+# refresh, every 10s — the monitoring console becoming a real source of load on
+# the box it exists to watch. The window is deliberately shorter than the poll
+# interval, so consecutive refreshes still see fresh data; it only collapses
+# the burst WITHIN one refresh.
+FLEET_CACHE_MS = int(os.getenv("FLEET_CACHE_MS", "3000"))
+_fleet_cache = {"at": 0.0, "jobs": None}
+
+
+def fleet_jobs(refresh: bool = False) -> dict:
     """Every live job on EVERY worker, keyed by runner job id.
 
     BUG THIS FIXES: `_runner_http("GET", "/internal/jobs")` with no worker=
@@ -188,6 +207,12 @@ def fleet_jobs() -> dict:
     where a job actually lives. Best-effort per worker: one sleeping runner
     must not blank out the others.
     """
+    import time
+    now = time.time()
+    if (not refresh and _fleet_cache["jobs"] is not None
+            and (now - _fleet_cache["at"]) * 1000 < FLEET_CACHE_MS):
+        return _fleet_cache["jobs"]
+
     out = {}
     pool = runner_pool()
     if not pool:                                   # embedded single service
@@ -198,6 +223,7 @@ def fleet_jobs() -> dict:
                 out[j.get("id")] = j
         except Exception as exc:
             logger.warning("fleet_jobs: embedded runner unreachable (%s)", exc)
+        _fleet_cache.update(at=now, jobs=out)
         return out
     for base in pool:
         try:
@@ -209,12 +235,20 @@ def fleet_jobs() -> dict:
                 out[j.get("id")] = j
         except Exception as exc:
             logger.warning("fleet_jobs: %s unreachable (%s)", base, exc)
+    _fleet_cache.update(at=now, jobs=out)
     return out
 
 
 def _runner_http(method: str, path: str, json_body=None, worker: str = None):
     """Call the runner (embedded or remote) with the shared secret; map every
     transport failure to a clean HTTPException the frontend can display."""
+    # Anything that is not a read CHANGES the fleet, so the memoised job list
+    # is stale the instant it returns. Without this, stopping a job would keep
+    # showing it as running for up to FLEET_CACHE_MS — a monitoring panel
+    # contradicting an action the admin just took is worse than a slow one.
+    if method.upper() != "GET":
+        _fleet_cache["jobs"] = None
+
     if embedded_mode():
         secret = os.getenv("RUNNER_SERVICE_SECRET", "").strip()
         if not secret:

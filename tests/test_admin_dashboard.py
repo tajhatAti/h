@@ -337,6 +337,86 @@ check("it resumes on refocus", "visibilitychange" in js)
 check("a failed poll does not break the panel", "loadAdminPanel(true).catch(() => {})" in js)
 
 # ---------------------------------------------------------------------------
+print("[6b] the monitor is not a load source")
+# ---------------------------------------------------------------------------
+# Counted at the HTTP layer on a 3-worker pool, BEFORE the fix: one dashboard
+# refresh made 12 upstream calls (9 x /internal/jobs + 3 x /health), because
+# four admin routes each call fleet_jobs() and the overview forced
+# worker_health(refresh=True). At a 10s poll that is 72 calls/minute — the
+# console becoming a real source of load on the box it exists to watch.
+import services.runner_client as _RC2  # noqa: E402
+
+_pool_saved = (os.environ.get("RUNNER_SERVICE_URL"), os.environ.get("RUNNER_SERVICE_URLS"))
+os.environ["RUNNER_SERVICE_URL"] = "https://w-a.test"
+os.environ["RUNNER_SERVICE_URLS"] = "https://w-b.test,https://w-c.test"
+_RC2._health_cache.clear()
+_RC2._fleet_cache.update(at=0.0, jobs=None)
+_upstream = []
+
+
+class _R2:
+    def __init__(self, code, body=None):
+        self.status_code, self._b, self.headers = code, body or {}, {}
+
+    def json(self):
+        return self._b
+
+
+def _count_req(method, url, **kw):
+    _upstream.append(url)
+    return _R2(200, {"jobs": []})
+
+
+def _count_get(url, **kw):
+    _upstream.append(url)
+    return _R2(200, {"status": "ok", "jobs": 0, "mem_mb": 0.0, "safe_mb": 419.0,
+                     "total_mb": 512.0, "free_mb": 419.0, "load": 0.0,
+                     "free": 13, "full": False})
+
+
+_sr, _sg = _RC2.requests.request, _RC2.requests.get
+_RC2.requests.request, _RC2.requests.get = _count_req, _count_get
+try:
+    # Exactly what one refresh of the panel does.
+    for _p in ("/admin/overview", "/admin/users", "/admin/jobs",
+               "/admin/abuse-reports", "/admin/audit-log", "/admin/libraries"):
+        c.get(_p, headers=AH)
+    jobs_calls = [u for u in _upstream if u.endswith("/internal/jobs")]
+    health_calls = [u for u in _upstream if u.endswith("/health")]
+    check("the fleet is polled ONCE per worker, not once per admin route",
+          len(jobs_calls) == 3, f"{len(jobs_calls)} calls: {jobs_calls}")
+    check("health is probed once per worker too",
+          len(health_calls) == 3, f"{len(health_calls)}")
+    check("a refresh costs 6 upstream calls on a 3-worker pool, not 12",
+          len(_upstream) == 6, f"{len(_upstream)}")
+
+    # Correctness must not be traded for the saving: a write invalidates.
+    _upstream.clear()
+    _RC2._runner_http("POST", "/internal/jobs/x/stop", worker="https://w-a.test")
+    _upstream.clear()
+    c.get("/admin/jobs", headers=AH)
+    check("a write invalidates the cache, so a stopped job stops showing",
+          len([u for u in _upstream if u.endswith("/internal/jobs")]) == 3,
+          str(_upstream))
+
+    # And the cache must expire on its own, or the panel would freeze.
+    _RC2._fleet_cache["at"] = 0.0
+    _upstream.clear()
+    c.get("/admin/jobs", headers=AH)
+    check("an expired cache re-probes rather than serving forever",
+          len([u for u in _upstream if u.endswith("/internal/jobs")]) == 3,
+          str(_upstream))
+finally:
+    _RC2.requests.request, _RC2.requests.get = _sr, _sg
+    _RC2._fleet_cache.update(at=0.0, jobs=None)
+    _RC2._health_cache.clear()
+    for _k, _v in zip(("RUNNER_SERVICE_URL", "RUNNER_SERVICE_URLS"), _pool_saved):
+        if _v is None:
+            os.environ.pop(_k, None)
+        else:
+            os.environ[_k] = _v
+
+# ---------------------------------------------------------------------------
 print("[7] rendering is injection-safe")
 # ---------------------------------------------------------------------------
 check("package names are set via textContent", "name.textContent = r.library" in js)

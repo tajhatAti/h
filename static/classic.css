@@ -1843,6 +1843,15 @@ a:not(.btn-primary):not(.btn-secondary):not(.btn-ghost):not(.jd-btn):not(.link):
 /* A package row now carries the owners inline instead of in a title= tooltip,
    which does not exist on a phone — on mobile the panel used to answer
    nothing at all. */
+/* .tab-head only pushes .btn-primary.sm to the right, and the admin header's
+   button is .btn-ghost — so this pair needs its own margin-left:auto or it
+   sits jammed against the title. */
+.adm-head-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-left: auto; }
+/* A live panel that quietly stops updating is worse than one that never
+   claimed to be live, so the age of the numbers is on screen and goes amber
+   rather than disappearing. */
+.adm-fresh { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.adm-fresh.stale { color: var(--st-warn); }
 .adm-jd-sub { margin: 18px 0 8px; }
 .adm-jd-why.neutral { border-left-color: var(--line-2); }
 

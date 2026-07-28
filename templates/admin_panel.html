@@ -1,7 +1,10 @@
 <div class="dash-tab-content" id="tab-admin">
       <div class="tab-head">
         <div><div class="eyebrow">OWNER CONSOLE</div><h2>Admin</h2></div>
-        <button class="btn-ghost sm" id="admRefresh" onclick="loadAdminPanel(true)">↻ Refresh</button>
+        <div class="adm-head-right">
+          <span class="adm-hint adm-fresh" id="admFresh"></span>
+          <button class="btn-ghost sm" id="admRefresh" onclick="loadAdminPanel(true)">↻ Refresh</button>
+        </div>
       </div>
       <div class="adm-stats" id="admStats"></div>
       <div class="adm-panel">
