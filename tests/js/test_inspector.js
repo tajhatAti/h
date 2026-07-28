@@ -45,8 +45,15 @@ console.log('[2] positioning');
 // Take the LAST @media(max-width:760px) block — the inspector's own — and
 // read its .rs-insp rule. A lazy match from the first media query would run
 // past it and grab the desktop rule instead.
-const mq = CSS.lastIndexOf('@media (max-width: 760px)');
-const inspMobile = /#tab-jobs \.rs-insp \{([\s\S]*?)\}/.exec(CSS.slice(mq));
+// Find the media block that actually contains the inspector's mobile rule.
+// lastIndexOf() broke once more CSS was appended after it, so search forward
+// from the sheet start for the first @media whose body defines .rs-insp.
+let inspMobile = null;
+for (const m of CSS.matchAll(/@media \(max-width: 760px\)/g)) {
+  const chunk = CSS.slice(m.index, m.index + 2600);
+  const hit = /#tab-jobs \.rs-insp \{([\s\S]*?)\}/.exec(chunk);
+  if (hit && /inset:\s*auto/.test(hit[1])) { inspMobile = hit; break; }
+}
 ok('mobile sheet rule found', !!inspMobile);
 if (inspMobile) {
   const body = inspMobile[1];

@@ -786,132 +786,177 @@
                  the workspace was hidden). Every action lives in its own
                  labelled section instead of being crowded into one toolbar.
                  ============================================================ -->
+            <!-- ============================================================
+                 JOB DETAIL PAGE  ·  rebuilt as a tabbed workspace
+                 ------------------------------------------------------------
+                 The previous component stacked EIGHT always-visible cards in
+                 one scroller (Status, Controls, URL, Env, Logs, Download,
+                 Backup, History). Everything competed for attention at once
+                 and the page was mostly scrolling.
+
+                 Three distinct structural pieces now:
+                   1. header row  — identity + status pill + primary action
+                   2. tab row     — pill tabs, one accent-filled active tab
+                   3. panel       — ONE view at a time, filling the height
+                 ============================================================ -->
             <section class="jd" id="jobDetailPanel" aria-hidden="true" aria-label="Job details">
 
-              <!-- Header: identity + back to editor -->
+              <!-- 1 · HEADER ROW -->
               <header class="jd-top">
-                <button class="jd-back" id="jobDetailBack" type="button" title="Back to editor">
-                  <svg viewBox="0 0 24 24" class="jd-i" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
-                  <span>Editor</span>
+                <button class="jd-back" id="jobDetailBack" type="button" title="Back to editor" aria-label="Back to editor">
+                  <svg viewBox="0 0 16 16" class="jd-i" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="10 3 5 8 10 13"/></svg>
                 </button>
+
+                <span class="jd-avatar" id="jdLang" aria-hidden="true">py</span>
+
                 <div class="jd-id">
-                  <h2 class="jd-name" id="jdName">—</h2>
-                  <div class="jd-meta">
-                    <span class="jlang-icon" id="jdLang">py</span>
-                    <span class="jd-badge" id="jdBadge">stopped</span>
+                  <h2 class="jd-name" id="jdName" title="Rename this job">—</h2>
+                  <!-- Status is a PILL: dot + word. A bare dot forces the
+                       reader to decode a colour; the word does not. -->
+                  <span class="jd-pill" id="jdBadge">stopped</span>
+                </div>
+
+                <div class="jd-top-acts">
+                  <button class="jd-btn jd-primary" id="jdStart" type="button">
+                    <svg viewBox="0 0 16 16" class="jd-i" fill="currentColor" aria-hidden="true"><path d="M4.5 3.3v9.4c0 .3.3.5.6.3l7.4-4.7a.4.4 0 0 0 0-.6L5.1 3a.4.4 0 0 0-.6.3Z"/></svg>
+                    <span>Deploy</span>
+                  </button>
+                  <button class="jd-icon-btn" id="jdThemeToggle" type="button" title="Toggle theme" aria-label="Toggle theme">
+                    <svg viewBox="0 0 16 16" class="jd-i" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="3.2"/><path d="M8 1v1.6M8 13.4V15M1 8h1.6M13.4 8H15M3.05 3.05l1.13 1.13M11.82 11.82l1.13 1.13M12.95 3.05l-1.13 1.13M4.18 11.82l-1.13 1.13"/></svg>
+                  </button>
+                  <!-- Overflow: secondary + destructive actions live here so
+                       they never compete with the one primary button. -->
+                  <div class="jd-more-wrap">
+                    <button class="jd-icon-btn" id="jdMoreBtn" type="button" title="More actions"
+                            aria-label="More actions" aria-haspopup="menu" aria-expanded="false">
+                      <svg viewBox="0 0 16 16" class="jd-i" fill="currentColor" aria-hidden="true"><circle cx="3" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="13" cy="8" r="1.4"/></svg>
+                    </button>
+                    <div class="jd-menu" id="jdMoreMenu" role="menu" hidden>
+                      <button class="jd-menu-item" id="jdRestart" type="button" role="menuitem">Restart</button>
+                      <button class="jd-menu-item" id="jdStop" type="button" role="menuitem">Stop</button>
+                      <button class="jd-menu-item" id="jdEditCode" type="button" role="menuitem">Open in editor</button>
+                      <div class="jd-menu-sep" role="separator"></div>
+                      <button class="jd-menu-item jd-menu-danger" id="jdDelete" type="button" role="menuitem">Delete job</button>
+                    </div>
                   </div>
                 </div>
               </header>
 
-              <div class="jd-scroll" id="jdScroll">
+              <!-- 2 · TAB ROW (new component — pill tabs, single accent) -->
+              <nav class="jd-tabs" id="jdTabs" role="tablist" aria-label="Job sections">
+                <button class="jd-tab is-active" role="tab" data-jdtab="code"     id="jdTabCode"     aria-selected="true"  aria-controls="jdPanelCode">Code</button>
+                <button class="jd-tab"           role="tab" data-jdtab="logs"     id="jdTabLogs"     aria-selected="false" aria-controls="jdPanelLogs">Logs</button>
+                <button class="jd-tab"           role="tab" data-jdtab="env"      id="jdTabEnv"      aria-selected="false" aria-controls="jdPanelEnv">Env</button>
+                <button class="jd-tab"           role="tab" data-jdtab="files"    id="jdTabFiles"    aria-selected="false" aria-controls="jdPanelFiles">Files</button>
+                <button class="jd-tab"           role="tab" data-jdtab="metrics"  id="jdTabMetrics"  aria-selected="false" aria-controls="jdPanelMetrics">Metrics</button>
+                <button class="jd-tab"           role="tab" data-jdtab="settings" id="jdTabSettings" aria-selected="false" aria-controls="jdPanelSettings">Settings</button>
+              </nav>
 
-                <!-- 1 · STATUS -->
-                <section class="jd-card">
-                  <h3 class="jd-h">Status</h3>
-                  <div class="jd-stats">
-                    <div class="jd-stat"><span class="jd-k">State</span><span class="jd-v" id="jdState">—</span></div>
-                    <div class="jd-stat"><span class="jd-k">Uptime</span><span class="jd-v" id="jdUptime">—</span></div>
-                    <div class="jd-stat"><span class="jd-k">Restarts</span><span class="jd-v" id="jdRestarts">0</span></div>
-                    <div class="jd-stat"><span class="jd-k">Language</span><span class="jd-v" id="jdLangName">—</span></div>
-                    <div class="jd-stat"><span class="jd-k">Job ID</span><span class="jd-v mono" id="jdPid">—</span></div>
-                    <div class="jd-stat"><span class="jd-k">Port</span><span class="jd-v mono" id="jdPort">—</span></div>
-                    <div class="jd-stat"><span class="jd-k">CPU</span><span class="jd-v" id="jdCpu">—</span></div>
-                    <div class="jd-stat"><span class="jd-k">Memory</span><span class="jd-v" id="jdMem">—</span></div>
+              <!-- 3 · CONTENT AREA — exactly one panel visible -->
+              <div class="jd-body" id="jdScroll">
+
+                <!-- CODE -->
+                <div class="jd-panel is-active" id="jdPanelCode" role="tabpanel" aria-labelledby="jdTabCode">
+                  <div class="jd-split">
+                    <div class="jd-code-pane">
+                      <div class="jd-pane-head">
+                        <span class="jd-pane-title" id="jdLangName">main.py</span>
+                        <span class="jd-pane-meta" id="jdPid">—</span>
+                      </div>
+                      <div class="jd-code-host" id="jdCodeHost">
+                        <pre class="jd-code-ro" id="jdCodePreview">// Open in editor to make changes.</pre>
+                      </div>
+                    </div>
+                    <!-- Output: a real terminal surface, live-streamed -->
+                    <div class="jd-out-pane">
+                      <div class="jd-pane-head">
+                        <span class="jd-term-dot" id="jdHealth"></span>
+                        <span class="jd-pane-title">Output</span>
+                        <span class="jd-pane-meta" id="jdHealthSub">—</span>
+                        <label class="jd-follow"><input type="checkbox" id="jdFollow" checked><span>Follow</span></label>
+                        <button class="jd-icon-btn sm" id="jdHealthNow" type="button" title="Re-check">
+                          <svg viewBox="0 0 16 16" class="jd-i" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 8a6 6 0 0 1 10-4.4L14 5"/><path d="M14 2v3.5h-3.5"/><path d="M14 8a6 6 0 0 1-10 4.4L2 11"/><path d="M2 14v-3.5h3.5"/></svg>
+                        </button>
+                        <button class="jd-icon-btn sm" id="jdCopy" type="button" title="Copy output">
+                          <svg viewBox="0 0 16 16" class="jd-i" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.6"/><path d="M2.5 10.5V3a1 1 0 0 1 1-1h7"/></svg>
+                        </button>
+                        <button class="jd-icon-btn sm" id="jdClear" type="button" title="Clear">
+                          <svg viewBox="0 0 16 16" class="jd-i" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 4 4 12"/><path d="m4 4 8 8"/></svg>
+                        </button>
+                      </div>
+                      <pre class="jd-term" id="jdLogBody"><span class="jd-term-idle">Waiting for output…</span></pre>
+                    </div>
                   </div>
-                </section>
+                </div>
 
-                <!-- 2 · CONTROLS (each action separated, with its own label) -->
-                <section class="jd-card">
-                  <h3 class="jd-h">Controls</h3>
-                  <div class="jd-acts">
-                    <button class="jd-btn start" id="jdStart" type="button">
-                      <svg viewBox="0 0 24 24" class="jd-i" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
-                      <span>Start</span>
-                    </button>
-                    <button class="jd-btn" id="jdRestart" type="button">
-                      <svg viewBox="0 0 24 24" class="jd-i" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>
-                      <span>Restart</span>
-                    </button>
-                    <button class="jd-btn" id="jdStop" type="button">
-                      <svg viewBox="0 0 24 24" class="jd-i" fill="currentColor" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>
-                      <span>Stop</span>
-                    </button>
-                    <button class="jd-btn" id="jdEditCode" type="button">
-                      <svg viewBox="0 0 24 24" class="jd-i" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
-                      <span>Edit code</span>
-                    </button>
-                    <button class="jd-btn danger" id="jdDelete" type="button">
-                      <svg viewBox="0 0 24 24" class="jd-i" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
-                      <span>Delete</span>
-                    </button>
+                <!-- LOGS -->
+                <div class="jd-panel" id="jdPanelLogs" role="tabpanel" aria-labelledby="jdTabLogs" hidden>
+                  <div class="jd-pane-head">
+                    <span class="jd-pane-title">Live log stream</span>
+                    <button class="jd-btn sm" id="jdDlLogs" type="button" data-type="logs"><span>Download</span></button>
                   </div>
-                </section>
+                  <pre class="jd-term jd-term-full" id="jdLogFull"><span class="jd-term-idle">Logs appear here while the job runs.</span></pre>
+                </div>
 
-                <!-- 3 · PUBLIC URL + HEALTH -->
-                <section class="jd-card" id="jdUrlCard" hidden>
-                  <h3 class="jd-h">Public URL</h3>
-                  <div class="jd-url-row">
-                    <a class="jd-url mono" id="jdUrl" href="#" target="_blank" rel="noopener">—</a>
-                    <button class="jd-mini" id="jdUrlCopy" type="button" title="Copy URL">Copy</button>
-                    <a class="jd-mini" id="jdUrlOpen" href="#" target="_blank" rel="noopener">Open</a>
+                <!-- ENV -->
+                <div class="jd-panel" id="jdPanelEnv" role="tabpanel" aria-labelledby="jdTabEnv" hidden>
+                  <div class="jd-pane-head">
+                    <span class="jd-pane-title">Environment variables</span>
+                    <button class="jd-btn sm" id="jdEnvAdd" type="button"><span>+ Add</span></button>
                   </div>
-                  <div class="jd-health-row">
-                    <span class="jd-health" id="jdHealth"><i class="jd-dot"></i><span class="jd-h-tx">not checked</span></span>
-                    <span class="jd-sub" id="jdHealthSub"></span>
-                    <button class="jd-mini" id="jdHealthNow" type="button">Check now</button>
-                  </div>
-                </section>
-
-                <!-- 4 · LIVE LOGS -->
-                <section class="jd-card">
-                  <h3 class="jd-h">
-                    Live logs
-                    <span class="jd-h-acts">
-                      <label class="jd-follow"><input type="checkbox" id="jdFollow" checked> Follow</label>
-                      <button class="jd-mini" id="jdCopy" type="button">Copy</button>
-                      <button class="jd-mini" id="jdClear" type="button">Clear</button>
-                    </span>
-                  </h3>
-                  <pre class="jd-logs" id="jdLogBody"><span class="rs-log-empty">// Waiting for output…</span></pre>
-                </section>
-
-                <!-- 5 · ENVIRONMENT VARIABLES -->
-                <section class="jd-card">
-                  <h3 class="jd-h">
-                    Environment variables
-                    <span class="jd-h-acts"><button class="jd-mini" id="jdEnvAdd" type="button">+ Add</button></span>
-                  </h3>
                   <div class="jd-env" id="jdEnvList"></div>
                   <p class="jd-sub" id="jdEnvHint">Changes apply on the next restart.</p>
-                </section>
+                </div>
 
-                <!-- 6 · DOWNLOAD / EXPORT -->
-                <section class="jd-card">
-                  <h3 class="jd-h">Download</h3>
+                <!-- FILES -->
+                <div class="jd-panel" id="jdPanelFiles" role="tabpanel" aria-labelledby="jdTabFiles" hidden>
+                  <div class="jd-pane-head"><span class="jd-pane-title">Download</span></div>
                   <div class="jd-acts">
                     <button class="jd-btn" id="jdDlSource" type="button" data-type="source"><span>Source code</span></button>
-                    <button class="jd-btn" id="jdDlLogs" type="button" data-type="logs"><span>Logs</span></button>
                     <button class="jd-btn" id="jdDlDb" type="button" data-type="db"><span>Data files</span></button>
                   </div>
                   <p class="jd-sub">Data files download as one .tar.gz (database, sessions, everything the bot wrote).</p>
-                </section>
 
-                <!-- 6b · DATA BACKUP -->
-                <section class="jd-card">
-                  <h3 class="jd-h">Data backup</h3>
+                  <div class="jd-pane-head"><span class="jd-pane-title">Data backup</span></div>
                   <div class="jd-row"><span class="jd-k">Last backup</span><span class="jd-v" id="jdBackup">—</span></div>
                   <div class="jd-acts">
                     <button class="jd-btn" id="jdBackupNow" type="button"><span>Back up now</span></button>
                     <button class="jd-btn" id="jdRestoreBackup" type="button"><span>Restore backup</span></button>
                   </div>
                   <p class="jd-sub">Your bot's database is copied to permanent storage automatically, so it survives a redeploy. Restore overwrites current data.</p>
-                </section>
+                </div>
 
-                <!-- 7 · RUN HISTORY -->
-                <section class="jd-card">
-                  <h3 class="jd-h">Run history</h3>
+                <!-- METRICS -->
+                <div class="jd-panel" id="jdPanelMetrics" role="tabpanel" aria-labelledby="jdTabMetrics" hidden>
+                  <div class="jd-stats">
+                    <div class="jd-stat"><span class="jd-k">State</span><span class="jd-v" id="jdState">—</span></div>
+                    <div class="jd-stat"><span class="jd-k">Uptime</span><span class="jd-v" id="jdUptime">—</span></div>
+                    <div class="jd-stat"><span class="jd-k">Restarts</span><span class="jd-v" id="jdRestarts">—</span></div>
+                    <div class="jd-stat"><span class="jd-k">Port</span><span class="jd-v mono" id="jdPort">—</span></div>
+                    <div class="jd-stat"><span class="jd-k">CPU</span><span class="jd-v" id="jdCpu">—</span></div>
+                    <div class="jd-stat"><span class="jd-k">Memory</span><span class="jd-v" id="jdMem">—</span></div>
+                  </div>
+                  <div class="jd-pane-head"><span class="jd-pane-title">Run history</span></div>
                   <ol class="jd-timeline" id="jdTimeline"><li class="jd-empty">Events will appear here.</li></ol>
-                </section>
+                </div>
+
+                <!-- SETTINGS -->
+                <div class="jd-panel" id="jdPanelSettings" role="tabpanel" aria-labelledby="jdTabSettings" hidden>
+                  <div class="jd-pane-head"><span class="jd-pane-title">Public URL</span></div>
+                  <div class="jd-url-row" id="jdUrlCard" hidden>
+                    <a class="jd-url mono" id="jdUrl" href="#" target="_blank" rel="noopener">—</a>
+                    <button class="jd-icon-btn" id="jdUrlCopy" type="button" title="Copy URL" aria-label="Copy URL">
+                      <svg viewBox="0 0 16 16" class="jd-i" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.6"/><path d="M2.5 10.5V3a1 1 0 0 1 1-1h7"/></svg>
+                    </button>
+                    <button class="jd-icon-btn" id="jdUrlOpen" type="button" title="Open URL" aria-label="Open URL">
+                      <svg viewBox="0 0 16 16" class="jd-i" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M9 2.5h4.5V7"/><path d="M13.5 2.5 7 9"/><path d="M12.5 9.5v3a1 1 0 0 1-1 1h-8a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1h3"/></svg>
+                    </button>
+                  </div>
+                  <p class="jd-sub">Only jobs that open a port get a public address.</p>
+
+                  <div class="jd-pane-head"><span class="jd-pane-title">Danger zone</span></div>
+                  <p class="jd-sub">Deleting a job stops it and removes its workspace, including any database it wrote.</p>
+                </div>
 
               </div>
             </section>

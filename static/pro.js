@@ -2991,6 +2991,10 @@ function _renderLogs(text, force) {
   body.insertAdjacentHTML("afterbegin", tail.map(_colorizeLine).join("\n"));
   if (atBottom) body.scrollTop = body.scrollHeight;
   if (dot) { dot.className = "rs-log-dot running"; dot.title = "streaming"; }
+  // The Logs tab is a full-height view of this same buffer. Mirror it only
+  // when that tab is actually mounted — writing to a hidden panel on every
+  // SSE tick is exactly the kind of wasted work that froze this page before.
+  if (_jdOpen && _jdTab === "logs") _jdMirrorLogs();
 }
 
 // ─── Workspace chrome ─────────────────────────────────────────────────
@@ -4014,6 +4018,10 @@ function openJobDetails(id, opts) {
   panel.setAttribute("aria-hidden", "false");
   document.body.classList.add("rs-detail-open", "rs-drawer-open");
 
+  // Always land on Code. Reopening on whatever tab was last used means the
+  // page shows something different each time for no reason the user chose.
+  _initJdTabs();
+  jdSwitchTab("code");
   renderJobDetails();
   _jdEnvLoad();
   _jdRefreshBackupRow();
@@ -4085,18 +4093,36 @@ function renderJobDetails() {
   _jdText("jdLang", _langIcon(job.language));
   const badge = document.getElementById("jdBadge");
   if (badge) {
-    const cls = "jd-badge " + (stKey === "running" ? "running"
+    // Now a PILL (dot + word), not a bare coloured dot: a dot alone forces
+    // the reader to decode a colour, and colour-blind users cannot.
+    const cls = "jd-pill " + (stKey === "running" ? "running"
       : (stKey === "crashed" || stKey === "install_failed") ? "crashed"
       : (stKey === "starting" || stKey === "installing") ? "starting" : "");
     if (badge.className !== cls) badge.className = cls;
-    _jdText("jdBadge", st.label);
+    // The status map SHOUTS for the old badges; sentence case reads calmer.
+    const lbl = st.label || stKey;
+    _jdText("jdBadge", lbl.charAt(0) + lbl.slice(1).toLowerCase());
+  }
+  // Primary button reflects what pressing it will do.
+  const startBtn = document.getElementById("jdStart");
+  if (startBtn) {
+    const sp = startBtn.querySelector("span");
+    if (sp) sp.textContent = live ? "Redeploy" : "Deploy";
   }
 
   // ---- 1 status ------------------------------------------------------
   _jdText("jdState", st.label);
   _jdText("jdUptime", live ? _fmtUptime(job.uptime_s || 0) : "—");
   _jdText("jdRestarts", String(job.restarts || 0));
-  _jdText("jdLangName", job.language || "—");
+  // Filename, not a bare language word — the Code tab is showing a file.
+  const _ext = {python:"py", javascript:"js", bash:"sh", ruby:"rb", php:"php"};
+  _jdText("jdLangName", "main." + (_ext[job.language] || "txt"));
+  // Read-only preview. textContent, never innerHTML: this is user code.
+  const _cp = document.getElementById("jdCodePreview");
+  if (_cp) {
+    const src = job.code || "";
+    _cp.textContent = src || "// Nothing saved yet — open in editor to write code.";
+  }
   _jdText("jdPid", job.runner_job_id || "—");
   _jdText("jdPort", job.port || "—");
   _jdText("jdCpu", job.cpu_pct != null ? job.cpu_pct + "%" : "—");
@@ -4354,7 +4380,103 @@ function _agoText(iso) {
 }
 
 /* ---- wiring: every control below performs a real action ------------- */
+/* ============================================================
+   JOB DETAIL PAGE  ·  pill tab router
+   The old page stacked eight always-visible cards. Now exactly one
+   panel is mounted at a time, so switching tabs replaces the whole
+   content area rather than scrolling to a different card.
+   ============================================================ */
+let _jdTab = "code";
+
+function jdSwitchTab(name) {
+  const tabs = document.querySelectorAll("#jdTabs .jd-tab");
+  if (!tabs.length) return;
+  const valid = [...tabs].some(t => t.dataset.jdtab === name);
+  if (!valid) name = "code";
+  _jdTab = name;
+
+  tabs.forEach(t => {
+    const on = t.dataset.jdtab === name;
+    t.classList.toggle("is-active", on);
+    t.setAttribute("aria-selected", on ? "true" : "false");
+  });
+  document.querySelectorAll("#jdScroll .jd-panel").forEach(p => {
+    const on = p.id === "jdPanel" + name.charAt(0).toUpperCase() + name.slice(1);
+    p.classList.toggle("is-active", on);
+    p.hidden = !on;
+  });
+
+  // The Logs tab shows the same stream as the Code tab's Output pane, so
+  // mirror the buffer instead of opening a second connection.
+  if (name === "logs") _jdMirrorLogs();
+  // CodeMirror paints blank if it was sized while display:none.
+  if (name === "code") { try { _jobCmRefresh(); } catch (e) {} }
+}
+
+/* Keep the full-height Logs panel in step with the Output pane. */
+function _jdMirrorLogs() {
+  const src = document.getElementById("jdLogBody");
+  const dst = document.getElementById("jdLogFull");
+  if (!src || !dst) return;
+  // textContent, never innerHTML: log lines are untrusted program output.
+  dst.textContent = src.textContent || "";
+  if (_jdLogFollow) dst.scrollTop = dst.scrollHeight;
+}
+
+function _initJdTabs() {
+  const bar = document.getElementById("jdTabs");
+  if (!bar || bar.dataset.wired === "1") return;
+  bar.dataset.wired = "1";
+  bar.addEventListener("click", (e) => {
+    const t = e.target.closest(".jd-tab");
+    if (!t) return;
+    e.preventDefault();
+    jdSwitchTab(t.dataset.jdtab);
+  });
+  // Arrow keys move between tabs, per the ARIA tablist pattern.
+  bar.addEventListener("keydown", (e) => {
+    if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+    const tabs = [...bar.querySelectorAll(".jd-tab")];
+    const i = tabs.findIndex(t => t.classList.contains("is-active"));
+    if (i < 0) return;
+    e.preventDefault();
+    const n = (i + (e.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+    jdSwitchTab(tabs[n].dataset.jdtab);
+    tabs[n].focus();
+  });
+
+  // Overflow menu — Restart / Stop / Open in editor / Delete.
+  const moreBtn = document.getElementById("jdMoreBtn");
+  const menu = document.getElementById("jdMoreMenu");
+  if (moreBtn && menu) {
+    const close = () => { menu.hidden = true; moreBtn.setAttribute("aria-expanded", "false"); };
+    moreBtn.addEventListener("click", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const open = menu.hidden;
+      menu.hidden = !open;
+      moreBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+    // Clicking an item runs its own handler; the menu just gets out of the way.
+    menu.addEventListener("click", () => setTimeout(close, 0));
+    document.addEventListener("click", (e) => {
+      if (menu.hidden) return;
+      if (!menu.contains(e.target) && e.target !== moreBtn) close();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !menu.hidden) { e.stopPropagation(); close(); }
+    });
+  }
+
+  // Theme toggle in the detail header reuses the app-wide toggle.
+  const th = document.getElementById("jdThemeToggle");
+  if (th) th.addEventListener("click", (e) => {
+    e.preventDefault();
+    if (typeof toggleTheme === "function") toggleTheme();
+  });
+}
+
 function _initDetailWiring() {
+  _initJdTabs();
   const panel = document.getElementById("jobDetailPanel");
   if (!panel || panel.dataset.wired === "1") return;
   panel.dataset.wired = "1";

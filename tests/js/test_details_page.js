@@ -37,14 +37,31 @@ check("hiding rule targets .rs-ws only, not the panel",
 check("panel becomes visible when body has rs-detail-open",
   /body\.rs-detail-open #tab-jobs \.jd \{[^}]*visibility:\s*visible/.test(css));
 
-// ---- structure: one card per concern ---------------------------------
-const cards = [...panel.querySelectorAll(".jd-card h3")].map(h => h.textContent.trim().split("\n")[0].trim());
-// 8 since the Data backup card was added alongside Download.
-check("has one card per concern", panel.querySelectorAll(".jd-card").length === 8,
+// ---- structure: one concern per TAB ----------------------------------
+// The page was rebuilt: the eight always-visible .jd-card sections became
+// six mutually exclusive tab panels. The concerns they covered must all
+// still be reachable, so assert the panels rather than the old cards.
+// (Deep structural checks live in test_jd_rebuild.js.)
+check("old card stack is gone", panel.querySelectorAll(".jd-card").length === 0,
   String(panel.querySelectorAll(".jd-card").length));
-for (const want of ["Status", "Controls", "Public URL", "Live logs",
-                    "Environment variables", "Download", "Run history"]) {
-  check("section present: " + want, cards.some(c => c.startsWith(want)), cards.join(" | "));
+const tabLabels = [...panel.querySelectorAll(".jd-tab")].map(t => t.textContent.trim());
+for (const want of ["Code", "Logs", "Env", "Files", "Metrics", "Settings"]) {
+  check("tab present: " + want, tabLabels.includes(want), tabLabels.join(" | "));
+}
+// Every concern the old cards owned still has a home.
+const homes = {
+  "status/metrics":  "jdState",
+  "controls":        "jdStart",
+  "public URL":      "jdUrl",
+  "live logs":       "jdLogBody",
+  "env vars":        "jdEnvList",
+  "downloads":       "jdDlSource",
+  "run history":     "jdTimeline",
+};
+for (const [concern, id] of Object.entries(homes)) {
+  const el = d.getElementById(id);
+  check("concern still present: " + concern, !!el && !!el.closest(".jd-panel, .jd-top"),
+    id);
 }
 
 // ---- every control must exist AND be wired ---------------------------
