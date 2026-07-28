@@ -87,6 +87,20 @@ _deployed = []
 _real_deploy = pb.deploy_code
 pb.deploy_code = lambda code, chat_id, first_name: _deployed.append(code)
 
+# The deploy path is now gated on the chat being bound to an account — an
+# unlinked chat could previously run code on the server. Chat 7 has to be a
+# real linked account for this regression test to reach deploy_code() at all;
+# the gate itself is covered by tests/test_telegram_link.py.
+import database as _DB
+from routes.deps import now_utc_str as _now
+_DB.init_db()
+_c = _DB.get_db_connection()
+_c.execute("INSERT INTO users (username,email,password,is_verified,telegram_id,"
+           "created_at,updated_at) VALUES (?,?,?,1,?,?,?)",
+           ("botuser", "botuser@gmail.com", "x", 7, _now(), _now()))
+_c.commit()
+_c.close()
+
 pb.waiting_for_code[7] = True
 pb.collect_code(7, "import requests", "Ahad")
 pb.collect_code(7, "print('one')", "Ahad")

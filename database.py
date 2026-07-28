@@ -591,6 +591,26 @@ _SCHEMA_TABLES = [
     --
     -- Keyed by the SITE job id (jobs.id), not the runner id: the runner id
     -- changes whenever a job is recreated, the site id does not.
+    -- TELEGRAM ACCOUNT LINKING
+    --
+    -- A short-lived code the site issues and the bot redeems, so a Telegram
+    -- chat can prove which CodeNest account it belongs to. Without this the
+    -- bot has no identity at all: any stranger who finds the bot's username
+    -- could deploy code onto the platform.
+    --
+    -- Keyed by user_id, so requesting a new code REPLACES the old one — an
+    -- account can never have two live codes, and an abandoned code cannot be
+    -- redeemed later by someone who saw it over a shoulder.
+    CREATE TABLE IF NOT EXISTS telegram_link_codes (
+        user_id INTEGER PRIMARY KEY,
+        code TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS job_data_snapshots (
         job_id INTEGER PRIMARY KEY,
         tarball_b64 TEXT NOT NULL,

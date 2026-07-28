@@ -1,0 +1,361 @@
+"""The Telegram bot's identity gate.
+
+THE HOLE THIS CLOSES
+--------------------
+services/pingbot.py had no authorisation of any kind. Driven through its real
+dispatch path with an unknown chat id, before this existed:
+
+    bot replied                       : "send code"
+    jobs deployed by an unknown chat  : 1
+    payload                           : os.system('whoami')
+    rows in the jobs table            : 0
+
+Any stranger who found the bot's username could run code on the server.
+
+What is asserted here:
+  * an unlinked chat can do NOTHING, and is not told why
+  * the code is issued to a web session, never to the chat
+  * codes expire, burn out after repeated wrong guesses, and are single-use
+  * one Telegram account maps to one CodeNest account
+  * a suspended account loses Telegram access without a separate step
+  * the guard survives the 5s buffer timer, where the deploy actually happens
+
+Run:  DATA_DIR=$(mktemp -d) python3 tests/test_telegram_link.py
+"""
+import os
+import sys
+import tempfile
+import time
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+os.chdir(ROOT)
+
+_tmp = tempfile.mkdtemp()
+os.environ.setdefault("DATA_DIR", _tmp)
+os.environ["DB_PATH"] = os.path.join(_tmp, "tglink.db")
+os.environ.setdefault("RUNNER_SERVICE_SECRET", "test-secret")
+os.environ.setdefault("TELEGRAM_PING_BOT_TOKEN", "fake-token")
+os.environ.setdefault("LIVE_PORT_MIN", "17600")
+os.environ.setdefault("LIVE_PORT_MAX", "17699")
+
+import bcrypt  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+
+import database as DB  # noqa: E402
+DB.init_db()
+import app as A  # noqa: E402
+from routes.deps import now_utc, now_utc_str  # noqa: E402
+from services import telegram_link as TL  # noqa: E402
+import services.pingbot as PB  # noqa: E402
+import services.runner_client as RC  # noqa: E402
+
+PASS = FAIL = 0
+
+
+def check(name, cond, extra=""):
+    global PASS, FAIL
+    if cond:
+        PASS += 1
+    else:
+        FAIL += 1
+        print(f"  FAIL: {name}" + (f" -> {extra}" if extra else ""))
+
+
+# ---- fixtures -------------------------------------------------------------
+PW = "Passw0rd!x"
+_h = bcrypt.hashpw(PW.encode(), bcrypt.gensalt()).decode()
+conn = DB.get_db_connection()
+for name in ("owner", "second", "victim"):
+    conn.execute("INSERT INTO users (username,email,password,is_verified,created_at,updated_at)"
+                 " VALUES (?,?,?,1,?,?)",
+                 (name, f"{name}@gmail.com", _h, now_utc_str(), now_utc_str()))
+conn.commit()
+conn.close()
+
+c = TestClient(A.app, raise_server_exceptions=False)
+
+
+def login(u):
+    return (c.post("/login", json={"username": u, "password": PW}).json() or {}).get("token")
+
+
+OT = login("owner")
+OH = {"Authorization": "Bearer " + OT}
+
+# Capture what the bot sends instead of talking to Telegram.
+SENT = []
+DEPLOYED = []
+PB._tg = lambda m, **p: (SENT.append((m, p)), {"ok": True})[1]
+
+
+class _Resp:
+    status_code = 201
+
+    def json(self):
+        return {"id": "job-x", "web_url": "http://x/live/y"}
+
+
+def _fake_http(method, path, body=None, worker=None):
+    if method == "POST" and path == "/internal/jobs":
+        DEPLOYED.append(body)
+    return _Resp()
+
+
+RC._runner_http = _fake_http
+
+STRANGER = 999888777
+OWNER_CHAT = 111222333
+OTHER_CHAT = 444555666
+
+
+def last_text():
+    for m, p in reversed(SENT):
+        if m == "sendMessage":
+            return p.get("text", "")
+    return ""
+
+
+def dispatch(chat_id, text, first_name="Someone"):
+    """Drive the bot exactly as poll_loop() does for a text message."""
+    if text.startswith("/start"):
+        PB.handle_start(chat_id, first_name)
+    elif text.startswith("/link"):
+        PB.handle_link(chat_id, text)
+    elif text.startswith("/unlink"):
+        PB.handle_unlink(chat_id)
+    elif text.startswith("/ping"):
+        if PB._require_link(chat_id):
+            PB.handle_ping(chat_id, text)
+    elif text.startswith("/code"):
+        if PB._require_link(chat_id):
+            PB.waiting_for_code[chat_id] = True
+            PB.code_buffer.pop(chat_id, None)
+            PB._send(chat_id, "✅ Send your code (any size)")
+    elif chat_id in PB.waiting_for_code:
+        if PB._require_link(chat_id):
+            PB.collect_code(chat_id, text, first_name)
+        else:
+            PB.waiting_for_code.pop(chat_id, None)
+            PB.code_buffer.pop(chat_id, None)
+    elif text.startswith("/"):
+        PB._send(chat_id, PB.UNKNOWN_REPLY)
+
+
+# ---------------------------------------------------------------------------
+print("\n[1] an unlinked chat can do nothing")
+# ---------------------------------------------------------------------------
+DEPLOYED.clear()
+dispatch(STRANGER, "/code")
+check("/code is refused", not PB.waiting_for_code.get(STRANGER),
+      str(PB.waiting_for_code.get(STRANGER)))
+check("and nothing is deployed", len(DEPLOYED) == 0, str(len(DEPLOYED)))
+refusal = last_text()
+check("the refusal reads as an unknown command",
+      "Unknown command" in refusal, refusal)
+# Telling a stranger a link step exists confirms the bot guards something.
+check("it does not advertise that linking exists",
+      "link" not in refusal.lower(), refusal)
+check("nor that an account is needed",
+      "account" not in refusal.lower(), refusal)
+
+dispatch(STRANGER, "/ping https://example.com")
+check("/ping is refused too", "Unknown command" in last_text(), last_text())
+
+# Even if a stranger forces the buffer flag, the deploy path re-checks.
+DEPLOYED.clear()
+PB.waiting_for_code[STRANGER] = True
+PB.code_buffer[STRANGER] = ["import os\nos.system('whoami')"]
+PB.flush_code(STRANGER, "Stranger")
+check("a forced buffer still cannot deploy", len(DEPLOYED) == 0, str(DEPLOYED))
+check("because the timer path re-checks identity",
+      "Unknown command" in last_text(), last_text())
+PB.waiting_for_code.pop(STRANGER, None)
+PB.code_buffer.pop(STRANGER, None)
+
+# Buttons are as powerful as commands: Restart and Download DB both act.
+CB = []
+_saved_cb = PB.handle_callback
+PB.handle_callback = lambda cid, data: CB.append((cid, data))
+cb_chat = STRANGER
+if TL.user_for_chat(cb_chat):
+    PB.handle_callback(cb_chat, "restart:job-x")
+check("an unlinked chat's button press is ignored", not CB, str(CB))
+PB.handle_callback = _saved_cb
+
+# ---------------------------------------------------------------------------
+print("[2] /start is the one place linking is explained")
+# ---------------------------------------------------------------------------
+dispatch(STRANGER, "/start", "Curious")
+s = last_text()
+check("a chat that ASKED gets the instructions", "/link" in s, s[:80])
+check("it names the settings step", "Settings" in s, s[:120])
+
+# ---------------------------------------------------------------------------
+print("[3] the code comes from the website, not the chat")
+# ---------------------------------------------------------------------------
+r = c.post("/profile/telegram/code", headers=OH)
+check("a logged-in user can request one", r.status_code == 200, str(r.status_code))
+code = r.json()["code"]
+check("it is 6 digits", code.isdigit() and len(code) == 6, code)
+check("the instructions name the command", "/link" in r.json()["instructions"])
+check("an anonymous visitor cannot request one",
+      c.post("/profile/telegram/code").status_code in (401, 403),
+      str(c.post("/profile/telegram/code").status_code))
+st = c.get("/profile/telegram", headers=OH).json()
+check("status says not linked yet", st["linked"] is False)
+
+# Requesting again must REPLACE, so a glimpsed code dies.
+old_code = code
+code = c.post("/profile/telegram/code", headers=OH).json()["code"]
+check("a new request replaces the old code", code != old_code)
+res = TL.redeem_code(old_code, OTHER_CHAT)
+check("the replaced code no longer works", res["ok"] is False, str(res))
+
+# ---------------------------------------------------------------------------
+print("[4] redeeming binds the chat")
+# ---------------------------------------------------------------------------
+dispatch(OWNER_CHAT, f"/link {code}")
+check("the bot confirms", "Connected" in last_text(), last_text())
+u = TL.user_for_chat(OWNER_CHAT)
+check("the chat now resolves to the account", u and u["username"] == "owner", str(u))
+check("the site agrees", c.get("/profile/telegram", headers=OH).json()["linked"] is True)
+
+check("the code is single-use",
+      TL.redeem_code(code, OTHER_CHAT)["ok"] is False)
+
+DEPLOYED.clear()
+dispatch(OWNER_CHAT, "/code")
+check("/code is now accepted", PB.waiting_for_code.get(OWNER_CHAT) is True)
+dispatch(OWNER_CHAT, "print('hi')")
+time.sleep(6)
+check("and the deploy actually happens", len(DEPLOYED) == 1, str(len(DEPLOYED)))
+
+dispatch(OWNER_CHAT, "/start")
+check("/start now greets by username", "owner" in last_text(), last_text())
+
+# ---------------------------------------------------------------------------
+print("[5] one Telegram account, one CodeNest account")
+# ---------------------------------------------------------------------------
+S2 = login("second")
+r2 = c.post("/profile/telegram/code", headers={"Authorization": "Bearer " + S2})
+res = TL.redeem_code(r2.json()["code"], OWNER_CHAT)
+check("an already-linked chat cannot hop to another account",
+      res["ok"] is False and res["reason"] == "chat_already_linked", str(res))
+check("and it names the account it is stuck to", res.get("username") == "owner")
+check("the first binding survives",
+      TL.user_for_chat(OWNER_CHAT)["username"] == "owner")
+
+# ---------------------------------------------------------------------------
+print("[6] codes expire and burn out")
+# ---------------------------------------------------------------------------
+V = login("victim")
+VH = {"Authorization": "Bearer " + V}
+vcode = c.post("/profile/telegram/code", headers=VH).json()["code"]
+
+conn = DB.get_db_connection()
+vid = dict(conn.execute("SELECT id FROM users WHERE username='victim'").fetchone())["id"]
+conn.execute("UPDATE telegram_link_codes SET expires_at=? WHERE user_id=?",
+             ("2000-01-01 00:00:00", vid))
+conn.commit()
+conn.close()
+res = TL.redeem_code(vcode, OTHER_CHAT)
+check("an expired code is refused", res["ok"] is False and res["reason"] == "expired", str(res))
+conn = DB.get_db_connection()
+left = conn.execute("SELECT COUNT(*) c FROM telegram_link_codes WHERE user_id=?", (vid,)).fetchone()
+check("and it is deleted rather than left lying around", dict(left)["c"] == 0)
+conn.close()
+
+# A 6-digit space is a million wide — wrong guesses must cost something.
+vcode = c.post("/profile/telegram/code", headers=VH).json()["code"]
+for _ in range(TL.MAX_ATTEMPTS):
+    TL.note_failed_attempt(vcode)
+res = TL.redeem_code(vcode, OTHER_CHAT)
+check("a code burns out after repeated wrong guesses",
+      res["ok"] is False and res["reason"] == "burned", str(res))
+
+# And the bot rate-limits per chat regardless of which code is tried.
+PB._link_attempts.clear()
+blocked = False
+for i in range(PB.LINK_TRIES_PER_HOUR + 3):
+    if not PB._link_rate_ok(OTHER_CHAT):
+        blocked = True
+        break
+check("the bot stops a guessing loop", blocked)
+check("the cap is a sane number", 3 <= PB.LINK_TRIES_PER_HOUR <= 20,
+      str(PB.LINK_TRIES_PER_HOUR))
+PB._link_attempts.clear()
+
+check("a malformed code is refused without touching the DB",
+      TL.redeem_code("abc", OTHER_CHAT)["reason"] == "malformed")
+check("so is one of the wrong length",
+      TL.redeem_code("1234567", OTHER_CHAT)["reason"] == "malformed")
+
+# ---------------------------------------------------------------------------
+print("[7] suspension closes the Telegram door too")
+# ---------------------------------------------------------------------------
+conn = DB.get_db_connection()
+oid = dict(conn.execute("SELECT id FROM users WHERE username='owner'").fetchone())["id"]
+conn.execute("UPDATE users SET is_suspended=1 WHERE id=?", (oid,))
+conn.commit()
+conn.close()
+check("a suspended account stops resolving", TL.user_for_chat(OWNER_CHAT) is None)
+DEPLOYED.clear()
+dispatch(OWNER_CHAT, "/code")
+check("so /code is refused again", len(DEPLOYED) == 0 and
+      "Unknown command" in last_text(), last_text())
+# Mid-flight work belongs to the account that just lost access.
+PB.waiting_for_code[OWNER_CHAT] = True
+PB.code_buffer[OWNER_CHAT] = ["print('sneak')"]
+PB.flush_code(OWNER_CHAT, "Owner")
+check("an in-flight deploy is stopped by the suspension", len(DEPLOYED) == 0, str(DEPLOYED))
+check("a suspended account cannot re-link either",
+      TL.redeem_code("000000", OWNER_CHAT)["ok"] is False)
+
+conn = DB.get_db_connection()
+conn.execute("UPDATE users SET is_suspended=0 WHERE id=?", (oid,))
+conn.commit()
+conn.close()
+check("reactivation restores it without re-linking",
+      TL.user_for_chat(OWNER_CHAT) is not None)
+
+# ---------------------------------------------------------------------------
+print("[8] unlinking")
+# ---------------------------------------------------------------------------
+PB.waiting_for_code[OWNER_CHAT] = True
+PB.code_buffer[OWNER_CHAT] = ["print('x')"]
+dispatch(OWNER_CHAT, "/unlink")
+check("the bot confirms", "Disconnected" in last_text(), last_text())
+check("the chat no longer resolves", TL.user_for_chat(OWNER_CHAT) is None)
+check("any half-typed code is dropped with it",
+      OWNER_CHAT not in PB.waiting_for_code and OWNER_CHAT not in PB.code_buffer)
+check("the site agrees", c.get("/profile/telegram", headers=OH).json()["linked"] is False)
+check("an unlinked chat's /unlink says nothing revealing",
+      (dispatch(OWNER_CHAT, "/unlink"), "Unknown command" in last_text())[1], last_text())
+
+# The chat is free to bind again, and to a DIFFERENT account this time.
+ncode = c.post("/profile/telegram/code", headers={"Authorization": "Bearer " + S2}).json()["code"]
+dispatch(OWNER_CHAT, f"/link {ncode}")
+check("after unlinking the chat can bind elsewhere",
+      (TL.user_for_chat(OWNER_CHAT) or {}).get("username") == "second",
+      str(TL.user_for_chat(OWNER_CHAT)))
+
+# ---------------------------------------------------------------------------
+print("[9] the gate is wired into every path, not just the ones tested")
+# ---------------------------------------------------------------------------
+src = open(os.path.join(ROOT, "services/pingbot.py"), encoding="utf-8").read()
+check("/code is gated", "if _require_link(chat_id):\n                            waiting_for_code" in src)
+check("/ping is gated", 'text.startswith("/ping")' in src and "_require_link" in src)
+check("the buffer path is gated", src.count("_require_link(chat_id)") >= 3,
+      str(src.count("_require_link(chat_id)")))
+check("the deploy timer re-checks",
+      "if not telegram_link.user_for_chat(chat_id)" in src)
+check("callbacks are gated",
+      "if telegram_link.user_for_chat(cb_chat):" in src)
+check("an unknown slash command gets the same reply as a gated one",
+      'elif text.startswith("/"):\n                        _send(chat_id, UNKNOWN_REPLY)' in src)
+check("no command besides /start, /link and /unlink runs unlinked",
+      src.count("UNKNOWN_REPLY") >= 4, str(src.count("UNKNOWN_REPLY")))
+
+print(f"\ntest_telegram_link: {PASS} passed, {FAIL} failed")
+sys.exit(1 if FAIL else 0)

@@ -1137,6 +1137,19 @@
           <button class="btn-secondary block left" id="btn2FA" onclick="manage2FA()">Manage 2FA</button>
         </div>
 
+        <!-- Telegram -->
+        <div class="profile-card set-group">
+          <div class="set-row">
+            <div class="set-ic"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4.5 3.5 11l4.8 1.7L19 6.5l-8 7.4v4.3l2.6-3.1 4.2 3z"/></svg></div>
+            <div class="set-tx">
+              <h3>Telegram <span class="chip" id="tgChip">—</span></h3>
+              <p>Deploy and manage your apps from a chat. The bot only answers a connected account.</p>
+              <p class="set-meta" id="tgMeta"></p>
+            </div>
+          </div>
+          <button class="btn-secondary block left" id="btnTelegram" onclick="manageTelegram()">Connect Telegram</button>
+        </div>
+
         <!-- Active sessions -->
         <div class="profile-card set-group">
           <div class="set-row">
@@ -1277,6 +1290,17 @@
       <label class="field hidden" id="cpTotpRow"><span>Authenticator code (2FA)</span><input type="text" id="cp_totp" class="input-text" inputmode="numeric" maxlength="6" placeholder="6-digit code"></label>
       <button class="btn-primary block" id="cpSubmit" onclick="submitChangePassword()">Update password</button>
     </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: TELEGRAM LINK ============ -->
+<div class="ah-modal hidden" id="tgModal">
+  <div class="ah-modal-card">
+    <div class="ah-modal-head">
+      <h3 id="tgModalTitle">Connect Telegram</h3>
+      <button class="ah-x" data-close>✕</button>
+    </div>
+    <div id="tgModalBody"></div>
   </div>
 </div>
 

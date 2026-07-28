@@ -14,6 +14,10 @@ import requests
 from collections import defaultdict
 
 BOT_TOKEN = os.getenv("TELEGRAM_PING_BOT_TOKEN", "").strip()
+# Every command that DOES something is gated on this: the chat must be bound
+# to a CodeNest account. Before it existed, an unknown chat could deploy code
+# — reproduced, a stranger's os.system('whoami') ran on the server.
+from services import telegram_link  # noqa: E402
 RUNNER_SECRET = os.getenv("RUNNER_SERVICE_SECRET", "")
 SITE_BASE = os.getenv("SITE_BASE_URL", "https://ahadorg.onrender.com").rstrip("/")
 
@@ -76,6 +80,116 @@ def _send(chat_id, text, reply_markup=None):
     _tg("sendMessage", **data)
 
 
+# ==================== IDENTITY ====================
+# An unlinked chat gets the SAME reply as an unknown command. Saying "you need
+# to link first" confirms the bot is attached to something worth attacking;
+# saying nothing useful costs a legitimate user one visit to /start, which
+# does explain the link step — but only to a chat that asked for help, not to
+# one probing for a deploy endpoint.
+UNKNOWN_REPLY = "🤔 Unknown command. Send /start to see what I can do."
+
+
+def _require_link(chat_id):
+    """The account this chat speaks for, or None (and the chat is answered).
+
+    Returns None for unlinked AND for suspended accounts, so a suspension
+    closes the Telegram door too — otherwise suspending someone on the web
+    would leave them a second way in.
+    """
+    user = telegram_link.user_for_chat(chat_id)
+    if not user:
+        _send(chat_id, UNKNOWN_REPLY)
+        return None
+    return user
+
+
+def handle_link(chat_id, text):
+    """/link 123456 — redeem a code issued by the website."""
+    parts = (text or "").split()
+    if len(parts) < 2:
+        _send(chat_id,
+              "🔗 *Connect your account*\n\n"
+              "1. Open your CodeNest dashboard → Settings\n"
+              "2. Tap *Connect Telegram* to get a 6-digit code\n"
+              "3. Send it here as  `/link 123456`")
+        return
+
+    already = telegram_link.user_for_chat(chat_id)
+    if already:
+        _send(chat_id, f"✅ This chat is already connected to *{already['username']}*.")
+        return
+
+    # A 6-digit code is a million wide; without a per-chat cap the bot itself
+    # becomes the brute-force tool.
+    guard = _link_rate_ok(chat_id)
+    if not guard:
+        _send(chat_id, "⏳ Too many attempts. Wait a few minutes and try again.")
+        return
+
+    res = telegram_link.redeem_code(parts[1], chat_id)
+    if res.get("ok"):
+        _send(chat_id,
+              f"✅ Connected to *{res['username']}*.\n\n"
+              "Send /start to see what you can do.")
+        return
+
+    telegram_link.note_failed_attempt(parts[1])
+    reason = res.get("reason")
+    if reason == "chat_already_linked":
+        _send(chat_id, "❌ This Telegram account is already connected to another CodeNest account.")
+    elif reason == "expired":
+        _send(chat_id, "⌛ That code has expired. Generate a new one on the site.")
+    elif reason == "suspended":
+        _send(chat_id, "❌ That account is suspended.")
+    else:
+        # "unknown" and "malformed" get one message on purpose: telling a
+        # guesser that a code was well-formed but wrong is a hint.
+        _send(chat_id, "❌ That code is not valid. Generate a fresh one on the site.")
+
+
+def handle_start(chat_id, first_name):
+    """The one place the link step IS explained — to a chat that asked."""
+    user = telegram_link.user_for_chat(chat_id)
+    if user:
+        _send(chat_id,
+              f"👋 Hi *{user['username']}*!\n\n"
+              "`/code`  — deploy code, any size\n"
+              "`/ping`  — check a URL\n"
+              "`/unlink` — disconnect this chat")
+        return
+    _send(chat_id,
+          f"👋 Hi {first_name}!\n\n"
+          "Connect your CodeNest account to use this bot:\n\n"
+          "1. Open your dashboard → Settings\n"
+          "2. Tap *Connect Telegram* for a 6-digit code\n"
+          "3. Send it here as  `/link 123456`")
+
+
+def handle_unlink(chat_id):
+    user = telegram_link.user_for_chat(chat_id)
+    if not user:
+        _send(chat_id, UNKNOWN_REPLY)
+        return
+    telegram_link.unlink(user["id"])
+    # Anything mid-flight belongs to the account that just left.
+    waiting_for_code.pop(chat_id, None)
+    code_buffer.pop(chat_id, None)
+    _send(chat_id, "🔌 Disconnected. This chat can no longer deploy.")
+
+
+_link_attempts = defaultdict(list)
+LINK_TRIES_PER_HOUR = int(os.getenv("TELEGRAM_LINK_TRIES_PER_HOUR", "8"))
+
+
+def _link_rate_ok(chat_id):
+    now = time.time()
+    _link_attempts[chat_id] = [t for t in _link_attempts[chat_id] if now - t < 3600]
+    if len(_link_attempts[chat_id]) >= LINK_TRIES_PER_HOUR:
+        return False
+    _link_attempts[chat_id].append(now)
+    return True
+
+
 # ==================== /ping ====================
 def handle_ping(chat_id, text):
     target = text.split()[1] if len(text.split()) > 1 else "https://ahadorg.onrender.com"
@@ -101,6 +215,13 @@ def flush_code(chat_id, first_name):
     waiting_for_code.pop(chat_id, None)
     if not code.strip():
         _send(chat_id, "❌ Kono code paini. Abar /code likhun.")
+        return
+    # Re-checked HERE too, not only at /code. This runs on a 5s timer thread,
+    # so the account can be suspended or unlinked between the last chunk
+    # arriving and the deploy firing — and the deploy is the part that spends
+    # real memory.
+    if not telegram_link.user_for_chat(chat_id):
+        _send(chat_id, UNKNOWN_REPLY)
         return
     deploy_code(code, chat_id, first_name)
 
@@ -274,26 +395,52 @@ def poll_loop():
                     text = msg.get("text", "") or ""
                     first_name = msg.get("from", {}).get("first_name", "user")
 
+                    # /start and /link are the only commands an UNLINKED
+                    # chat may use. Everything else needs an account, because
+                    # everything else spends the platform's memory.
                     if text.startswith("/start"):
-                        _send(chat_id, f"👋 Hi {first_name}!\n\nUse /ping or /code")
+                        handle_start(chat_id, first_name)
+
+                    elif text.startswith("/link"):
+                        handle_link(chat_id, text)
+
+                    elif text.startswith("/unlink"):
+                        handle_unlink(chat_id)
 
                     elif text.startswith("/ping"):
-                        handle_ping(chat_id, text)
+                        if _require_link(chat_id):
+                            handle_ping(chat_id, text)
 
                     elif text.startswith("/code"):
-                        waiting_for_code[chat_id] = True
-                        code_buffer.pop(chat_id, None)
-                        _send(chat_id, "✅ Send your code (any size)")
+                        if _require_link(chat_id):
+                            waiting_for_code[chat_id] = True
+                            code_buffer.pop(chat_id, None)
+                            _send(chat_id, "✅ Send your code (any size)")
 
                     elif chat_id in waiting_for_code:
-                        # Keep the flag set: long files arrive as SEVERAL
-                        # messages and every one of them must land in the
-                        # buffer. flush_code() clears it after deploying.
-                        collect_code(chat_id, text, first_name)
+                        # Re-checked on every chunk, not only at /code: a
+                        # suspension landing mid-upload must stop the deploy,
+                        # and the flag survives across messages by design.
+                        if _require_link(chat_id):
+                            # Keep the flag set: long files arrive as SEVERAL
+                            # messages and every one of them must land in the
+                            # buffer. flush_code() clears it after deploying.
+                            collect_code(chat_id, text, first_name)
+                        else:
+                            waiting_for_code.pop(chat_id, None)
+                            code_buffer.pop(chat_id, None)
+
+                    elif text.startswith("/"):
+                        _send(chat_id, UNKNOWN_REPLY)
 
                 elif "callback_query" in upd:
+                    # Buttons are as powerful as commands — Restart and
+                    # Download DB both act on a real job — and callback_data
+                    # is attacker-supplied, so the same gate applies here.
                     cb = upd["callback_query"]
-                    handle_callback(cb["message"]["chat"]["id"], cb["data"])
+                    cb_chat = cb["message"]["chat"]["id"]
+                    if telegram_link.user_for_chat(cb_chat):
+                        handle_callback(cb_chat, cb["data"])
                     _tg("answerCallbackQuery", callback_query_id=cb["id"])
 
         except Exception as e:

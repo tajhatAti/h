@@ -283,3 +283,51 @@ def log_activity(payload: ActivityLogEntry, authorization: Optional[str] = Heade
         return {"message": "Activity logged"}
     finally:
         conn.close()
+
+
+# ---------------------------------------------------------------------------
+# TELEGRAM ACCOUNT LINKING
+# ---------------------------------------------------------------------------
+# The bot had no identity check at all — reproduced with an unknown chat id, a
+# stranger's `os.system('whoami')` deployed successfully. These three routes
+# are the site half of the fix: a logged-in user asks for a code here, and the
+# bot redeems it. The code is never issued to the chat, because a code the bot
+# could request is a code an attacker could request.
+from services import telegram_link  # noqa: E402
+
+
+@router.get("/profile/telegram")
+def telegram_link_status(authorization: Optional[str] = Header(None)):
+    user, _ = get_current_user_and_session(authorization)
+    tg = user["telegram_id"] if "telegram_id" in user.keys() else None
+    return {
+        "linked": bool(tg),
+        # The chat id is shown so the owner can tell WHICH Telegram account is
+        # bound without having to unlink to find out.
+        "telegram_id": tg,
+        "bot_username": os.getenv("TELEGRAM_BOT_USERNAME", "").strip(),
+    }
+
+
+@router.post("/profile/telegram/code")
+def telegram_link_code(request: Request, authorization: Optional[str] = Header(None)):
+    """Issue a short-lived code for the bot's /link command."""
+    user, _ = get_current_user_and_session(authorization)
+    # Codes are cheap to issue and each one replaces the last, but a loop
+    # would still churn the table and spam the account with live codes.
+    rate_limit_custom(f"{user['id']}:tglink", 3600, 10,
+                      "Too many link codes requested. Try again later.")
+    out = telegram_link.issue_code(user["id"])
+    return {
+        "code": out["code"],
+        "expires_in_min": out["ttl_min"],
+        "bot_username": os.getenv("TELEGRAM_BOT_USERNAME", "").strip(),
+        "instructions": f"Send  /link {out['code']}  to the bot on Telegram.",
+    }
+
+
+@router.post("/profile/telegram/unlink")
+def telegram_unlink(authorization: Optional[str] = Header(None)):
+    user, _ = get_current_user_and_session(authorization)
+    telegram_link.unlink(user["id"])
+    return {"message": "Telegram disconnected."}

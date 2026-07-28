@@ -1453,6 +1453,16 @@ body.ed-full { overflow: hidden !important; }
 }
 .tos-check b { color: var(--ink-2); font-weight: 600; }
 
+/* The link code, big enough to read off a phone screen and retype into
+   Telegram without squinting. */
+.tg-code {
+  font-family: var(--mono); font-size: 30px; font-weight: 700;
+  letter-spacing: .22em; text-align: center; color: var(--ink);
+  background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: var(--r-sm); padding: 16px 12px; margin: 14px 0 10px;
+  user-select: all;
+}
+
 /* ---------- admin console ---------- */
 .adm-stats {
   display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 18px;

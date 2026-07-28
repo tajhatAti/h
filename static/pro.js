@@ -2059,6 +2059,115 @@ async function refreshSecurityPanel() {
     const when = _lastProfile.password_changed_at || _lastProfile.created_at;
     if (when) pw.textContent = "Last changed: " + new Date(when).toLocaleDateString();
   }
+  refreshTelegramCard();
+}
+
+/* ==================== TELEGRAM LINK ==================== */
+/* The bot refuses every chat that is not bound to an account — before this
+   existed a stranger could deploy code to the server. The code is issued
+   HERE, to a logged-in session, and never to the chat, because a code the bot
+   could hand out is a code an attacker could ask for. */
+async function refreshTelegramCard() {
+  const chip = document.getElementById("tgChip");
+  if (!chip) return;
+  try {
+    const st = await api("/profile/telegram", "GET", null, true);
+    chip.textContent = st.linked ? "Connected" : "Not connected";
+    chip.className = "chip" + (st.linked ? " on" : "");
+    const btn = document.getElementById("btnTelegram");
+    if (btn) btn.textContent = st.linked ? "Manage Telegram" : "Connect Telegram";
+    const meta = document.getElementById("tgMeta");
+    if (meta) {
+      meta.textContent = st.linked
+        ? `Chat ID ${st.telegram_id}`
+        : "Not connected — the bot will ignore you until you link.";
+    }
+  } catch (e) { /* not signed in yet */ }
+}
+
+async function manageTelegram() {
+  const body = document.getElementById("tgModalBody");
+  if (!body) return;
+  body.textContent = "";
+  openModal("tgModal");
+  let st;
+  try {
+    st = await api("/profile/telegram", "GET", null, true);
+  } catch (e) { toast(e.message, "error"); return; }
+
+  if (st.linked) {
+    document.getElementById("tgModalTitle").textContent = "Telegram connected";
+    const p = document.createElement("p");
+    p.className = "auth-hint";
+    p.textContent = `This account answers Telegram chat ${st.telegram_id}. ` +
+      "Disconnecting stops the bot from deploying anything on your behalf.";
+    const btn = document.createElement("button");
+    btn.className = "btn-danger block";
+    btn.textContent = "Disconnect Telegram";
+    btn.onclick = async () => {
+      setLoading(btn, true);
+      try {
+        await api("/profile/telegram/unlink", "POST", {}, true);
+        toast("Telegram disconnected.", "success");
+        closeModal("tgModal");
+        refreshTelegramCard();
+      } catch (e) { toast(e.message, "error"); }
+      finally { setLoading(btn, false); }
+    };
+    body.append(p, btn);
+    return;
+  }
+
+  document.getElementById("tgModalTitle").textContent = "Connect Telegram";
+  const intro = document.createElement("p");
+  intro.className = "auth-hint";
+  intro.textContent = "Send this code to the bot to prove the chat is yours.";
+  const codeBox = document.createElement("div");
+  codeBox.className = "tg-code";
+  codeBox.textContent = "······";
+  const step = document.createElement("p");
+  step.className = "auth-hint";
+  const go = document.createElement("button");
+  go.className = "btn-primary block";
+  go.textContent = "Get my code";
+  go.onclick = async () => {
+    setLoading(go, true);
+    try {
+      const r = await api("/profile/telegram/code", "POST", {}, true);
+      codeBox.textContent = r.code;
+      // textContent, not innerHTML — the bot username comes from an env var
+      // and has no business being parsed as markup.
+      step.textContent = r.bot_username
+        ? `Open @${r.bot_username} and send:  /link ${r.code}  (expires in ${r.expires_in_min} min)`
+        : `Send  /link ${r.code}  to the bot (expires in ${r.expires_in_min} min)`;
+      go.textContent = "Get a new code";
+      // The card only flips once the BOT redeems it, so keep checking while
+      // the user is switching apps.
+      _tgPoll();
+    } catch (e) { toast(e.message, "error"); }
+    finally { setLoading(go, false); }
+  };
+  body.append(intro, codeBox, step, go);
+}
+
+let _tgPollTimer = null;
+function _tgPoll() {
+  if (_tgPollTimer) clearInterval(_tgPollTimer);
+  let ticks = 0;
+  _tgPollTimer = setInterval(async () => {
+    // Bounded: a code lives 10 minutes, so 60 checks at 5s covers it and then
+    // stops rather than polling this account forever.
+    if (++ticks > 60) { clearInterval(_tgPollTimer); _tgPollTimer = null; return; }
+    try {
+      const st = await api("/profile/telegram", "GET", null, true);
+      if (st.linked) {
+        clearInterval(_tgPollTimer); _tgPollTimer = null;
+        closeModal("tgModal");
+        toast("Telegram connected.", "success");
+        refreshTelegramCard();
+      }
+    } catch (e) { /* keep waiting */ }
+  }, 5000);
 }
 let _lastProfile = null;
 
