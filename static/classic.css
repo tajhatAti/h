@@ -634,8 +634,8 @@ svg.ic { width: 1em; height: 1em; display: inline-block; vertical-align: -.14em;
   font-family: var(--mono) !important; font-size: 10px !important;
   letter-spacing: .1em !important;
 }
-.ah-term-badge.ok  { background: rgba(30, 122, 60, .22) !important; color: #7bd79a !important; }
-.ah-term-badge.bad { background: rgba(179, 38, 30, .25) !important; color: #ff9d94 !important; }
+.ah-term-badge.ok  { background: rgba(30, 122, 60, .22) !important; color: var(--st-ok, #3fb950) !important; }
+.ah-term-badge.bad { background: rgba(179, 38, 30, .25) !important; color: var(--st-danger, #f85149) !important; }
 
 /* ================= 13. JOBS TAB ===================================== */
 .job-form-head {
@@ -1671,4 +1671,136 @@ html[data-theme="dark"] {
     padding-bottom: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom) + 32px) !important;
     scroll-padding-bottom: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom) + 32px);
   }
+}
+
+/* ============================================================================
+   §18 · SITE-WIDE DESIGN SYSTEM  —  Job Detail Page as the reference
+   ----------------------------------------------------------------------------
+   §16 unified BUTTON colour. This section finishes the job by unifying the two
+   remaining component patterns — PILLS and TABS — across every screen, so the
+   whole app looks designed in one sitting rather than page by page.
+
+   MEASURED BEFORE: 37 different hex values expressed just four meanings
+   (11 greens, 16 reds, 3 ambers, 7 blues), and 14 separate badge classes
+   (.ah-term-badge .jd-badge .rs-chip .rs-badge .job-pill .cs-pill .chip
+   .adm-pill .wb-badge …) each with their own shape and colour. Near-duplicates
+   like #4ade80 / #34d399 / #3fb950 all meant "running".
+
+   THE SYSTEM (identical to the Job Detail Page):
+     ACCENT   var(--accent) — the ONE hue. Active tab + primary button only.
+     STATUS   --st-ok green · --st-warn amber · --st-danger red. Meaning only.
+     NEUTRAL  everything else.
+     PILL     rounded-full, hairline border, dot + WORD (never a bare dot).
+     TAB      rounded-full; active = accent fill; inactive = no fill at all.
+
+   Syntax highlighting and terminal ANSI are deliberately untouched — code
+   colour carries information and is not UI chrome.
+   ========================================================================= */
+
+/* The accent lived only inside #tab-jobs, so every other screen fell back to
+   the hardcoded literal in the var() defaults above. Promote it to :root so
+   the entire product genuinely reads from ONE declaration. */
+:root {
+  --accent: #58a6ff;
+}
+html[data-theme="light"] {
+  /* Same hue, darkened for contrast on white (#58a6ff on white is 2.2:1). */
+  --accent: #0969da;
+}
+
+/* ---- PILL / BADGE: one shape everywhere -------------------------------- */
+.badge, .chip, .rs-badge, .rs-chip, .job-pill, .cs-pill, .adm-pill,
+.wb-badge, .ah-term-badge, .session-chip, .pin-badge, .slot-badge {
+  display: inline-flex !important;
+  align-items: center; gap: 6px;
+  height: 22px; padding: 0 10px;
+  border-radius: 999px !important;
+  border: 1px solid var(--line-2, #30363d);
+  background: transparent;
+  color: var(--muted, #7d8590);
+  font-size: 11px; font-weight: 500; line-height: 1;
+  letter-spacing: 0; text-transform: capitalize;
+  white-space: nowrap;
+}
+/* Status meaning — the dot is generated, so a badge can never be a bare dot. */
+.badge.ok,     .chip.ok,     .rs-badge.ok,     .job-pill.running,
+.ah-term-badge.ok,  .wb-badge.ok,  .adm-pill.ok,  .cs-pill.ok,
+.badge.running, .chip.running {
+  color: var(--st-ok) !important;
+  border-color: color-mix(in srgb, var(--st-ok) 40%, transparent) !important;
+  background: var(--st-ok-bg) !important;
+}
+.badge.warn,   .chip.warn,   .rs-badge.warn,   .job-pill.starting,
+.wb-badge.warn, .adm-pill.warn, .cs-pill.warn, .badge.pending {
+  color: var(--st-warn) !important;
+  border-color: color-mix(in srgb, var(--st-warn) 40%, transparent) !important;
+  background: var(--st-warn-bg) !important;
+}
+.badge.bad,    .chip.bad,    .rs-badge.bad,    .job-pill.crashed,
+.ah-term-badge.bad, .wb-badge.err, .adm-pill.bad, .cs-pill.err,
+.badge.err,    .badge.danger {
+  color: var(--st-danger) !important;
+  border-color: color-mix(in srgb, var(--st-danger) 40%, transparent) !important;
+  background: var(--st-danger-bg) !important;
+}
+.badge::before, .chip::before, .rs-badge::before, .job-pill::before,
+.ah-term-badge::before, .wb-badge::before, .adm-pill::before {
+  content: ""; width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor; flex-shrink: 0;
+}
+
+/* ---- TABS: pill row, exactly one accent-filled ------------------------- */
+.dash-tab, .tab-secondary, .cs-tab {
+  padding: 0 14px !important;
+  height: 30px;
+  display: inline-flex !important; align-items: center;
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  border-radius: 999px !important;
+  color: var(--muted, #7d8590) !important;
+  font-family: inherit; font-size: 13px; font-weight: 500;
+  white-space: nowrap; cursor: pointer;
+}
+.dash-tab:hover, .tab-secondary:hover, .cs-tab:hover {
+  background: var(--paper-2) !important;
+  color: var(--ink) !important;
+}
+/* The single accent-filled element in any given tab row. */
+.dash-tab.active, .tab-secondary.active, .cs-tab.active {
+  background: var(--accent, #58a6ff) !important;
+  background-image: none !important;
+  border-color: var(--accent, #58a6ff) !important;
+  color: #0d1117 !important;
+  font-weight: 600;
+}
+html[data-theme="light"] .dash-tab.active,
+html[data-theme="light"] .tab-secondary.active { color: #ffffff !important; }
+/* The jobs tab was singled out with its own colour treatment; it is a tab
+   like any other and must not advertise itself. */
+.dash-tab[data-tab="jobs"],
+.dash-tab[data-tab="jobs"]:hover,
+.dash-tab[data-tab="jobs"].active { background-image: none !important; }
+.dash-tab[data-tab="jobs"].active {
+  background: var(--accent, #58a6ff) !important;
+  border-color: var(--accent, #58a6ff) !important;
+}
+.dash-tab[data-tab="jobs"]::after,
+.dash-tab[data-tab="jobs"].active::after { display: none !important; }
+
+/* ---- BOTTOM NAV: active item uses the accent, not a brand gradient ----- */
+.bn-item.active { color: var(--accent, #58a6ff) !important; }
+.bn-item.active .bn-ic {
+  background: transparent !important;
+  color: var(--accent, #58a6ff) !important;
+}
+
+/* ---- LINKS: one interactive colour ------------------------------------- */
+a:not(.btn-primary):not(.btn-secondary):not(.btn-ghost):not(.jd-btn):not(.link):not(.auth-switch a) {
+  color: var(--accent, #58a6ff);
+}
+
+/* ---- FOCUS: one ring, everywhere --------------------------------------- */
+:focus-visible {
+  outline: 2px solid var(--accent, #58a6ff) !important;
+  outline-offset: 2px;
 }

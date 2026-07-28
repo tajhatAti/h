@@ -43,7 +43,7 @@ body.no-such-legacy-scope #tab-jobs * { all: revert; }
 }
 .wb-lights { display: inline-flex; gap: 5px; margin: 0 4px; }
 .wb-lights span { width: 8px; height: 8px; border-radius: 50%; background: #2d3542; }
-.wb-lights .pulse { background: #4ade80; animation: wb-pulse 2s ease-in-out infinite; }
+.wb-lights .pulse { background: var(--st-ok, #3fb950); animation: wb-pulse 2s ease-in-out infinite; }
 @keyframes wb-pulse { 0%,100%{opacity:1;} 50%{opacity:.35;} }
 @keyframes wb-spin { to { transform: rotate(360deg); } }
 
@@ -85,7 +85,7 @@ body.no-such-legacy-scope #tab-jobs * { all: revert; }
 #btnNew:hover .btn-svg, #btnNewEmpty:hover .btn-svg { transform: rotate(90deg); }
 #btnImportGh:hover .btn-svg { transform: translateY(2px); }
 #jobLogBottom:hover .btn-svg { transform: translateY(2px); }
-.wb-btn.danger:hover .btn-svg { color:#ff8b8b; }
+.wb-btn.danger:hover .btn-svg { color:var(--st-danger, #f85149); }
 #btnDeselect:hover .btn-svg, .cs-close-prev:hover .btn-svg,
 .ah-x:hover .btn-svg, .ap-close:hover .btn-svg,
 .ah-term-close:hover .btn-svg, #activityClose:hover .btn-svg { transform: rotate(90deg); }
@@ -93,7 +93,7 @@ body.no-such-legacy-scope #tab-jobs * { all: revert; }
 .wb-log-btn.is-spinning .btn-svg { animation: wb-spin .7s linear; }
 /* Check mark pop-in (copy feedback) */
 .i-check { display:inline-flex; align-items:center; justify-content:center; position:absolute; }
-.i-check .btn-svg { color:#4ade80; transform: scale(0); animation: wb-pop .25s cubic-bezier(.2,1.6,.4,1) forwards; }
+.i-check .btn-svg { color:var(--st-ok, #3fb950); transform: scale(0); animation: wb-pop .25s cubic-bezier(.2,1.6,.4,1) forwards; }
 @keyframes wb-pop { to { transform: scale(1); } }
 
 .wb-menu {
@@ -127,12 +127,12 @@ body.no-such-legacy-scope #tab-jobs * { all: revert; }
 }
 #wbRunnerLabel { display: none; }
 .wb-stat .dot { width: 8px; height: 8px; border-radius: 50%; background: #454f5e; }
-.wb-stat.ok { color: #4ade80; border-color: rgba(74,222,128,.2); background: rgba(74,222,128,.08); }
-.wb-stat.ok .dot { background: #4ade80; }
+.wb-stat.ok { color: var(--st-ok, #3fb950); border-color: rgba(74,222,128,.2); background: rgba(74,222,128,.08); }
+.wb-stat.ok .dot { background: var(--st-ok, #3fb950); }
 .wb-stat.wait { color: #d29922; }
 .wb-stat.wait .dot { background: #d29922; }
-.wb-stat.err { color: #ef5b5b; }
-.wb-stat.err .dot { background: #ef5b5b; }
+.wb-stat.err { color: var(--st-danger, #f85149); }
+.wb-stat.err .dot { background: var(--st-danger, #f85149); }
 
 /* ───── Sidebar ───── */
 .wb-side {
@@ -206,11 +206,11 @@ body.no-such-legacy-scope #tab-jobs * { all: revert; }
   margin-top: 6px; flex-shrink: 0;
   background: #454f5e;
 }
-.wb-item-dot.running  { background: #4ade80; box-shadow: 0 0 0 3px rgba(74,222,128,.15); }
+.wb-item-dot.running  { background: var(--st-ok, #3fb950); box-shadow: 0 0 0 3px rgba(74,222,128,.15); }
 .wb-item-dot.starting,
 .wb-item-dot.installing { background: #d29922; animation: wb-pulse 1.2s infinite; }
 .wb-item-dot.crashed,
-.wb-item-dot.install_failed { background: #ef5b5b; box-shadow: 0 0 0 3px rgba(239,91,91,.15); }
+.wb-item-dot.install_failed { background: var(--st-danger, #f85149); box-shadow: 0 0 0 3px rgba(239,91,91,.15); }
 .wb-item-dot.stopped { background: #454f5e; }
 .wb-item-dot.offline { background: #d29922; }
 .wb-item-info { min-width: 0; flex: 1; }
@@ -236,9 +236,9 @@ body.no-such-legacy-scope #tab-jobs * { all: revert; }
   font-family: ui-monospace, "JetBrains Mono", Consolas, monospace;
   letter-spacing: 0;
 }
-.wb-item-meta .ok   { color: #4ade80; }
+.wb-item-meta .ok   { color: var(--st-ok, #3fb950); }
 .wb-item-meta .warn { color: #d29922; }
-.wb-item-meta .err  { color: #ef5b5b; }
+.wb-item-meta .err  { color: var(--st-danger, #f85149); }
 
 .wb-side-empty { padding: 24px 14px; color: #6b7687; font-size: 12px; line-height: 1.6; }
 .wb-side-empty b { color: #a6b0bd; font-weight: 600; display: block; font-size: 13px; margin-bottom: 4px; }
@@ -295,11 +295,11 @@ body.no-such-legacy-scope #tab-jobs * { all: revert; }
   background: #6b7687; flex-shrink: 0;
   box-shadow: 0 0 0 3px rgba(107,118,135,.15);
 }
-.ws-dot.running, .ws-dot.ok { background: #4ade80; box-shadow: 0 0 0 3px rgba(74,222,128,.18); animation: wb-pulse 2s ease-in-out infinite; }
+.ws-dot.running, .ws-dot.ok { background: var(--st-ok, #3fb950); box-shadow: 0 0 0 3px rgba(74,222,128,.18); animation: wb-pulse 2s ease-in-out infinite; }
 .ws-dot.starting, .ws-dot.installing, .ws-dot.offline, .ws-dot.wait { background: #d29922; box-shadow: 0 0 0 3px rgba(210,153,34,.18); animation: wb-pulse 1.2s ease-in-out infinite; }
-.ws-dot.crashed, .ws-dot.install_failed, .ws-dot.error, .ws-dot.err { background: #ef5b5b; box-shadow: 0 0 0 3px rgba(239,91,91,.18); }
+.ws-dot.crashed, .ws-dot.install_failed, .ws-dot.error, .ws-dot.err { background: var(--st-danger, #f85149); box-shadow: 0 0 0 3px rgba(239,91,91,.18); }
 .ws-dot.stopped { background: #6b7687; box-shadow: 0 0 0 3px rgba(107,118,135,.15); }
-.ws-dot.pub { background: #4ade80; box-shadow: 0 0 0 3px rgba(74,222,128,.18); }
+.ws-dot.pub { background: var(--st-ok, #3fb950); box-shadow: 0 0 0 3px rgba(74,222,128,.18); }
 .ws-dot.priv { background: #d29922; box-shadow: 0 0 0 3px rgba(210,153,34,.18); }
 /* keep .wb-badge as dot alias so existing JS class toggles still work */
 .wb-badge { display: none; }
@@ -329,8 +329,8 @@ body.no-such-legacy-scope #tab-jobs * { all: revert; }
 }
 .wb-btn.primary .btn-svg { stroke: #111113; stroke-width: 1.9; width: 19px; height: 19px; }
 .wb-btn.primary:hover { background: linear-gradient(180deg, #f2f2f5, #d8d8de); color: #111113; }
-.wb-btn.danger { color: #c87474; }
-.wb-btn.danger:hover { background: rgba(239,91,91,.08); color: #ff8b8b; }
+.wb-btn.danger { color: var(--st-danger, #f85149); }
+.wb-btn.danger:hover { background: rgba(239,91,91,.08); color: var(--st-danger, #f85149); }
 .wb-btn.ghost { background: transparent; }
 .wb-btn:disabled { opacity: .4; cursor: not-allowed; pointer-events: none; }
 .wb-btn.loading { color: transparent !important; position: relative; pointer-events: none; }
@@ -529,7 +529,7 @@ body.no-such-legacy-scope #tab-jobs * { all: revert; }
   display: inline-block;
 }
 .wb-log-head .log-dot.live {
-  background: #4ade80; box-shadow: 0 0 0 3px rgba(74,222,128,.18);
+  background: var(--st-ok, #3fb950); box-shadow: 0 0 0 3px rgba(74,222,128,.18);
   animation: wb-pulse 2s ease-in-out infinite;
 }
 .wb-log-head .log-dot.sleep {
@@ -563,10 +563,10 @@ body.no-such-legacy-scope #tab-jobs * { all: revert; }
 .log-line { display: block; white-space: pre-wrap; word-break: break-all; }
 .log-ts { color: #454f5e; }
 .log-lvl { font-weight: 700; padding: 0 4px; border-radius: 3px; margin: 0 2px; font-size: 10px; }
-.log-lvl.info { color: #7cc4ff; background: rgba(124,196,255,.08); }
+.log-lvl.info { color: var(--accent, #58a6ff); background: rgba(124,196,255,.08); }
 .log-lvl.warn { color: #d29922; background: rgba(210,153,34,.1); }
-.log-lvl.err, .log-lvl.error { color: #ef5b5b; background: rgba(239,91,91,.1); }
-.log-lvl.ok, .log-lvl.success { color: #4ade80; background: rgba(74,222,128,.1); }
+.log-lvl.err, .log-lvl.error { color: var(--st-danger, #f85149); background: rgba(239,91,91,.1); }
+.log-lvl.ok, .log-lvl.success { color: var(--st-ok, #3fb950); background: rgba(74,222,128,.1); }
 .log-url { color: #e6e6ea; }
 .log-code { font-weight: 700; padding: 0 3px; }
 .log-code.c2xx { color: #4ade80; }

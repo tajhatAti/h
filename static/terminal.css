@@ -206,7 +206,7 @@
   font-size: 11px;
   padding-left: 2px;
 }
-.wb-term-slots .slot-tab .slot-x:active { color: #ff8080; }
+.wb-term-slots .slot-tab .slot-x:active { color: var(--st-danger, #f85149); }
 body.term-fullscreen .wb-term-slots { display: flex; }
 #tab-jobs .wb-term-slots { display: none; }  /* no slots in docked RunSpace pane */
 
@@ -254,7 +254,7 @@ body.term-fullscreen .wb-term-slots { display: flex; }
   font-size: 10px;
 }
 .wb-term-kbd button.kbd-ok { background: #1f4d2a !important; color: #8affa0 !important; border-color:#2f6a3a !important; }
-.wb-term-kbd button.kbd-err { background: #4d1f1f !important; color: #ff8a8a !important; border-color:#6a2f2f !important; }
+.wb-term-kbd button.kbd-err { background: #4d1f1f !important; color: var(--st-danger, #f85149) !important; border-color:#6a2f2f !important; }
 .wb-term-kbd .k-sp { display: none; }
 
 #tab-jobs.term-open .wb-form,
@@ -341,7 +341,7 @@ body.term-fullscreen .wb-term-slots { display: flex; }
   display: flex; align-items: center; gap: 10px;
 }
 .term-ctx button:active { background: #2c2c2e; }
-.term-ctx button.ctx-close { border-top: 1px solid #333; color: #ff6b6b; margin-top: 2px; }
+.term-ctx button.ctx-close { border-top: 1px solid #333; color: var(--st-danger, #f85149); margin-top: 2px; }
 .term-ctx { animation: ctx-pop .12s ease-out; }
 @keyframes ctx-pop {
   from { transform: scale(.92); opacity: 0; }

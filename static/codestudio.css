@@ -81,7 +81,7 @@ body.code-active .dash-tab-content.code-studio {
 }
 .code-studio .cs-name::placeholder { color: #6e7681 !important; }
 .code-studio .cs-name:hover { background: #21262d !important; border-color: #30363d !important; }
-.code-studio .cs-name:focus { background: #0d1117 !important; border-color: #388bfd !important; }
+.code-studio .cs-name:focus { background: #0d1117 !important; border-color: var(--accent, #58a6ff) !important; }
 .code-studio .cs-pill { display: none !important; }
 .code-studio .cs-lang {
   height: 24px !important;
@@ -381,7 +381,7 @@ body.code-active .dash-tab-content.code-studio {
   padding: 6px 10px !important; font-family: ui-monospace, monospace !important;
   font-size: 11.5px !important; line-height: 1.5 !important; color: #c9d1d9 !important;
 }
-.code-studio .cs-con-body .err { color: #ff7b72 !important; }
+.code-studio .cs-con-body .err { color: var(--st-danger, #f85149) !important; }
 .code-studio .cs-con-body .info { color: #3fb950 !important; }
 .code-studio .cs-close-prev {
   background: transparent !important; border: none !important;
@@ -436,7 +436,7 @@ body.code-active .dash-tab-content.code-studio {
   font-weight: 600 !important;
 }
 .code-studio .ah-term-badge.ok { background: rgba(63,185,80,.15) !important; color: #3fb950 !important; }
-.code-studio .ah-term-badge.bad { background: rgba(248,81,73,.15) !important; color: #ff7b72 !important; }
+.code-studio .ah-term-badge.bad { background: rgba(248,81,73,.15) !important; color: var(--st-danger, #f85149) !important; }
 .code-studio .ah-term-close {
   background: transparent !important; border: none !important;
   color: #7d8590 !important; font-size: 12px !important;
@@ -460,14 +460,19 @@ body.code-active .dash-tab-content.code-studio {
 .code-studio .ah-term-body .t-prompt { color: #58a6ff !important; }
 .code-studio .ah-term-body .t-err    { color: #ff7b72 !important; }
 .code-studio .ah-term-body .t-foot.ok  { color: #3fb950 !important; }
-.code-studio .ah-term-body .t-foot.bad { color: #ff7b72 !important; }
+.code-studio .ah-term-body .t-foot.bad { color: var(--st-danger, #f85149) !important; }
 
 /* ---------------- STATUS BAR (tiny footer: ln:col · language · spaces · UTF-8) ---------------- */
 .code-studio .cs-status {
   flex: 0 0 22px !important;
   height: 22px !important;
-  background: #238636 !important;   /* GitHub-style blue/green, use primary green */
-  color: #fff !important;
+  /* A whole status BAR filled with status-green was decorative use of a
+     meaning colour, and #fff on it measured 2.54:1 (unreadable). The bar is
+     chrome; it goes neutral. Individual status words inside it may still be
+     coloured, because there the colour reports something. */
+  background: var(--bg-2, #161b22) !important;
+  border-top: 1px solid var(--line, #21262d) !important;
+  color: var(--fg-3, #7d8590) !important;
   font-family: ui-monospace, monospace !important;
   font-size: 11px !important;
   padding: 0 12px !important;
@@ -547,7 +552,7 @@ body.ed-full { overflow: hidden !important; }
   border: 1px solid #30363d !important;
 }
 .code-studio .cs-name:hover { border-color: #484f58 !important; background: #0d1117 !important; }
-.code-studio .cs-name:focus { border-color: #388bfd !important; background: #0d1117 !important; box-shadow: 0 0 0 2px rgba(56,139,253,.2) !important; }
+.code-studio .cs-name:focus { border-color: var(--accent, #58a6ff) !important; background: #0d1117 !important; box-shadow: 0 0 0 2px rgba(56,139,253,.2) !important; }
 .code-studio .cs-name::placeholder { color: #6e7681 !important; font-style: italic !important; }
 .code-studio .cs-lang {
   font-weight: 500 !important;
@@ -712,7 +717,7 @@ body.ed-full { overflow: hidden !important; }
   color: #3fb950 !important;
   border-color: rgba(63,185,80,.3) !important;
 }
-.cs-act.is-published:hover { background: rgba(63,185,80,.25) !important; color: #56d364 !important; }
+.cs-act.is-published:hover { background: rgba(63,185,80,.25) !important; color: var(--st-ok, #3fb950) !important; }
 
 /* Status bar error/publish */
 .code-studio #csStatusErr a { color: #3fb950 !important; text-decoration: none !important; }
