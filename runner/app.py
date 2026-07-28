@@ -192,21 +192,27 @@ def health():
         except Exception:
             running += 1                          # counted, memory unknown
 
-    capacity = MAX_BG_JOBS
-    free = max(0, capacity - running)
+    # Load is a MEMORY fraction now. A worker holding 20 idle bots at 30MB is
+    # emptier than one holding 4 heavy bots at 120MB, and only memory says so.
+    safe = MEM_SAFE_MB
+    free_mb = max(0.0, safe - mem_mb)
     return {
         "status": "ok",
         "languages": sorted(LANGS.keys()),
         # Routing inputs.
         "jobs": running,
-        "capacity": capacity,
-        "free": free,
-        "full": free == 0,
         "mem_mb": round(mem_mb, 1),
-        # Lets the dispatcher compare unequal workers on one scale.
-        # Clamped: adopted jobs after a redeploy can briefly exceed capacity,
-        # and a load of 2.0 would sort nonsensically against other workers.
-        "load": round(min(running / capacity, 1.0), 3) if capacity else 1.0,
+        "safe_mb": safe,
+        "total_mb": MEM_TOTAL_MB,
+        "free_mb": round(free_mb, 1),
+        "full": not _admission()["admit"],
+        # Clamped: measurement noise or jobs adopted after a redeploy can push
+        # usage past the threshold, and a load above 1.0 sorts nonsensically.
+        "load": round(min(mem_mb / safe, 1.0), 3) if safe else 1.0,
+        # Kept so an older control plane still parses this payload. "free" is
+        # now how many TYPICAL jobs would fit, not a slot count.
+        "capacity": MAX_BG_JOBS_HARD,
+        "free": int(free_mb // MEM_ASSUMED_JOB_MB),
     }
 
 
@@ -356,7 +362,113 @@ def execute_piston(req: ExecuteRequest, authorization: Optional[str] = Header(No
 # the site held 5 jobs in total, so a brand-new account with zero jobs could
 # not create its first one. Five bots is roughly what 512MB holds; add another
 # runner service to add capacity rather than raising this past the RAM.
+# Legacy. Admission is decided by memory (see _admission below); this only
+# survives so an older control plane still finds a "capacity" number.
 MAX_BG_JOBS = int(os.getenv("MAX_BG_JOBS", "12"))
+
+# ---------------------------------------------------------------------------
+# ADMISSION CONTROL: measure memory, do not count jobs
+# ---------------------------------------------------------------------------
+# A fixed job count assumed every bot would use its worst-case ceiling. In
+# practice an idle Telegram bot sits around 25-45MB, so 20+ of them coexist
+# happily on a box that a count-based limit declared "full" at 12. Counting
+# jobs answers the wrong question; what matters is how much RAM is actually
+# committed right now.
+#
+# This is SEPARATE from MAX_MEMORY_MB (the per-job RLIMIT). That one stops a
+# single runaway process eating the box and is unchanged. This one decides
+# whether there is room for one more.
+#
+# MEM_TOTAL_MB: the container's RAM. Read from the cgroup when possible —
+# /proc/meminfo reports the HOST's memory, which on a 512MB Render instance
+# would wildly overestimate the budget.
+def _container_total_mb() -> int:
+    override = os.getenv("MEM_TOTAL_MB", "").strip()
+    if override:
+        try:
+            return max(64, int(override))
+        except ValueError:
+            pass
+    for path in ("/sys/fs/cgroup/memory.max",                      # cgroup v2
+                 "/sys/fs/cgroup/memory/memory.limit_in_bytes"):   # cgroup v1
+        try:
+            with open(path) as fh:
+                raw = fh.read().strip()
+            if raw and raw != "max":
+                val = int(raw)
+                # v1 reports a sentinel near 2^63 when unlimited.
+                if 0 < val < (1 << 62):
+                    return max(64, val // (1024 * 1024))
+        except Exception:
+            pass
+    try:
+        with open("/proc/meminfo") as fh:
+            for line in fh:
+                if line.startswith("MemTotal:"):
+                    return max(64, int(line.split()[1]) // 1024)
+    except Exception:
+        pass
+    return 512                                    # Render free tier default
+
+
+MEM_TOTAL_MB = _container_total_mb()
+# Admit while committed memory stays under this share of the box. The headroom
+# absorbs the new job's own startup cost plus the runner process itself.
+MEM_SAFE_PCT = float(os.getenv("MEM_SAFE_PCT", "0.82"))
+MEM_SAFE_MB = int(MEM_TOTAL_MB * MEM_SAFE_PCT)
+# What to reserve for a job that cannot be measured yet (it is still starting,
+# so its RSS is meaningless). MEASURED on this codebase: a bare python loop is
+# 7.7MB RSS; pyTelegramBotAPI/aiogram plus a requests session lands around
+# 25-35MB idle. 30 is the honest middle. Over-reserving here would quietly
+# reintroduce the pessimism that made the count-based cap wrong in the first
+# place — it only affects the moment of admission, since a running job is then
+# measured for real.
+MEM_ASSUMED_JOB_MB = int(os.getenv("MEM_ASSUMED_JOB_MB", "30"))
+# A hard ceiling on job COUNT still exists, but only as a runaway guard for
+# pathological cases (hundreds of near-zero-memory processes exhausting PIDs
+# or file descriptors). It is far above anything memory would allow.
+MAX_BG_JOBS_HARD = int(os.getenv("MAX_BG_JOBS_HARD", "60"))
+
+
+def _used_mem_mb() -> float:
+    """Total RSS of every live job on this worker, measured now."""
+    total = 0.0
+    try:
+        with _jobs_lock:
+            procs = [j.get("proc") for j in _jobs.values()]
+    except Exception:
+        return 0.0
+    for proc in procs:
+        try:
+            if not proc or proc.poll() is not None:
+                continue
+            total += (_proc_stats(proc) or {}).get("mem_mb", 0.0) or 0.0
+        except Exception:
+            # Unmeasurable but alive: assume the typical footprint rather than
+            # zero, so a worker cannot look emptier than it is.
+            total += MEM_ASSUMED_JOB_MB
+    return total
+
+
+def _admission() -> dict:
+    """Is there room for one more job? Measured, not counted."""
+    used = _used_mem_mb()
+    running = 0
+    try:
+        with _jobs_lock:
+            running = sum(1 for j in _jobs.values()
+                          if j.get("proc") and j["proc"].poll() is None)
+    except Exception:
+        pass
+    projected = used + MEM_ASSUMED_JOB_MB
+    return {
+        "used_mb": round(used, 1),
+        "safe_mb": MEM_SAFE_MB,
+        "total_mb": MEM_TOTAL_MB,
+        "running": running,
+        "free_mb": round(max(0.0, MEM_SAFE_MB - used), 1),
+        "admit": projected <= MEM_SAFE_MB and running < MAX_BG_JOBS_HARD,
+    }
 JOB_LOG_LINES = 2000                                # ring buffer per job (full history)
 JOB_RESTART_LIMIT = 3                               # auto-restart attempts
 JOB_RESTART_DELAY_S = 5
@@ -1431,6 +1543,33 @@ def _spawn(j: dict) -> None:
 
     def _supervisor():
         rc = proc.wait()
+        # Explain an OOM kill in the LOG only. Nothing is announced up front —
+        # users may attempt whatever they like — but a process that vanishes
+        # with no reason reads as "the platform is broken", so anyone who opens
+        # the log finds a plain sentence instead of a mystery.
+        #
+        # RLIMIT_AS makes the allocation fail rather than signalling, so Python
+        # usually dies with MemoryError (rc=1) and CPython prints the traceback
+        # to stderr, which is already in this log. A kernel OOM kill arrives as
+        # SIGKILL, i.e. rc == -9.
+        oom = False
+        if rc == -9:
+            oom = True
+        elif rc not in (0, None):
+            try:
+                tail = "\n".join(list(j["log"])[-25:])
+                oom = ("MemoryError" in tail
+                       or "Cannot allocate memory" in tail
+                       or "OutOfMemoryError" in tail
+                       or "JavaScript heap out of memory" in tail)
+            except Exception:
+                oom = False
+        if oom:
+            j["log"].append(
+                f"[system] Process stopped: exceeded memory limit "
+                f"({MAX_MEM_MB}MB)."
+            )
+            j["oom"] = True
         j["log"].append(f"[system] exited with code {rc}")
         if j.get("stop_requested"):
             j["status"] = "stopped"
@@ -1460,17 +1599,19 @@ def job_start(req: JobStartRequest, authorization: Optional[str] = Header(None))
     if not code.strip():
         raise HTTPException(400, detail="Code is empty.")
 
-    with _jobs_lock:
-        active = sum(1 for j in _jobs.values() if j["proc"] and j["proc"].poll() is None)
-    if active >= MAX_BG_JOBS:
-        # 503, not 429: this is the SERVER being full, not the caller doing
-        # anything wrong. The main site uses the distinction to try the next
-        # runner in the pool instead of blaming the user. The wording must
-        # never suggest the user should stop one of THEIR jobs — the jobs
-        # filling this runner usually belong to other people.
+    # Admission by MEASURED memory, not by job count. Counting assumed every
+    # bot would use its worst-case ceiling; real idle bots sit near 45MB, so a
+    # count-based cap called the box full while most of the RAM was free.
+    adm = _admission()
+    if not adm["admit"]:
+        # 503, not 429: the SERVER is out of room, the caller did nothing
+        # wrong. The main site reads the distinction and tries the next worker
+        # in the pool. The wording must never suggest the user stop one of
+        # THEIR jobs — what fills a worker is usually other people's bots.
         raise HTTPException(
             503,
-            detail=f"This runner is full ({active}/{MAX_BG_JOBS} bots).",
+            detail=(f"This runner is full "
+                    f"({adm['used_mb']:.0f}MB / {adm['safe_mb']}MB in use)."),
             headers={"X-Runner-Full": "1"},
         )
 
@@ -1602,7 +1743,7 @@ def job_start(req: JobStartRequest, authorization: Optional[str] = Header(None))
 def job_list(authorization: Optional[str] = Header(None)):
     _check_secret(authorization)
     with _jobs_lock:
-        return {"jobs": [_job_public(j) for j in _jobs.values()], "capacity": MAX_BG_JOBS}
+        return {"jobs": [_job_public(j) for j in _jobs.values()], "capacity": MAX_BG_JOBS_HARD}
 
 
 @app.get("/internal/jobs/{job_id}")

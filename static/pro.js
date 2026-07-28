@@ -4901,11 +4901,27 @@ function renderAdminStats(ov) {
     chip("verified", ov.verified ?? 0) +
     chip("suspended", ov.suspended ?? 0, ov.suspended ? "warn" : "") +
     chip("apps live", ov.jobs_deployed ?? 0) +
-    chip("capacity used", `${ov.jobs_deployed ?? 0}/${ov.capacity_max ?? 0}`);
+    chip("memory", ov.mem_safe_mb != null
+        ? `${Math.round(ov.mem_used_mb ?? 0)}MB / ${ov.mem_safe_mb}MB`
+        : "—",
+      (ov.mem_pct ?? 0) >= 90 ? "warn" : "");
   const cap = document.getElementById("admCap");
-  if (cap) cap.textContent =
-    `capacity: ${ov.jobs_deployed ?? 0} of ${ov.capacity_max ?? 0} slots used (max ${ov.jobs_max_per_user ?? 3}/user)` +
-    (ov.runner_capacity != null ? ` · runner: ${ov.runner_running ?? 0}/${ov.runner_capacity} busy` : "");
+  if (cap) {
+    // Capacity is MEMORY, not slots. 20 idle bots and 3 heavy ones can occupy
+    // the same RAM, so a slot count never predicted whether the next job fits.
+    if (ov.mem_safe_mb != null) {
+      const jobs = ov.runner_running ?? 0;
+      let txt = `${Math.round(ov.mem_used_mb ?? 0)}MB / ${ov.mem_safe_mb}MB`
+              + ` (${ov.mem_pct ?? 0}%) — ${jobs} job${jobs === 1 ? "" : "s"} running`;
+      if (ov.mem_total_mb) txt += ` · ${ov.mem_total_mb}MB total`;
+      if ((ov.workers || []).length > 1) {
+        txt += ` · ${ov.workers_online ?? 0}/${ov.workers.length} workers online`;
+      }
+      cap.textContent = txt;
+    } else {
+      cap.textContent = "capacity: runner unreachable";
+    }
+  }
 }
 
 function renderAdminSpark(ov) {

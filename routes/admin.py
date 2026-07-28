@@ -92,16 +92,54 @@ def admin_overview_route(authorization: Optional[str] = Header(None)):
         }
     finally:
         conn.close()
-    # Runner-wide picture (best-effort): how many slots the worker fleet has.
+    # Fleet capacity, reported as MEMORY rather than slots. A slot count was
+    # misleading: 20 idle bots and 3 heavy ones can occupy the same RAM, so the
+    # number that predicts whether the next job fits is megabytes, not jobs.
+    workers = []
+    used_mb = safe_mb = total_mb = 0.0
+    running_total = 0
     try:
-        resp = runner_client._runner_http("GET", "/internal/jobs")
-        payload = resp.json() if resp is not None else None
-        if payload:
-            out["runner_capacity"] = payload.get("capacity")
-            out["runner_running"] = sum(
-                1 for j in (payload.get("jobs") or []) if j.get("status") == "running")
+        for url, h in (runner_client.worker_health(refresh=True) or {}).items():
+            workers.append({
+                "url": url,
+                "online": bool(h.get("online")),
+                "jobs": h.get("jobs", 0),
+                "mem_mb": h.get("mem_mb", 0.0),
+                "safe_mb": h.get("safe_mb", 0),
+                "total_mb": h.get("total_mb", 0),
+                "full": bool(h.get("full")),
+            })
+            if h.get("online"):
+                used_mb += float(h.get("mem_mb") or 0)
+                safe_mb += float(h.get("safe_mb") or 0)
+                total_mb += float(h.get("total_mb") or 0)
+                running_total += int(h.get("jobs") or 0)
     except Exception:
         pass
+    if not workers:
+        # Embedded single-service mode: no pool to poll, so ask the in-process
+        # runner directly.
+        try:
+            r = runner_client._runner_http("GET", "/health")
+            h = r.json() if r is not None else {}
+            used_mb = float(h.get("mem_mb") or 0)
+            safe_mb = float(h.get("safe_mb") or 0)
+            total_mb = float(h.get("total_mb") or 0)
+            running_total = int(h.get("jobs") or 0)
+            workers.append({"url": "embedded", "online": True,
+                            "jobs": running_total, "mem_mb": used_mb,
+                            "safe_mb": safe_mb, "total_mb": total_mb,
+                            "full": bool(h.get("full"))})
+        except Exception:
+            pass
+    if safe_mb:
+        out["mem_used_mb"] = round(used_mb, 1)
+        out["mem_safe_mb"] = round(safe_mb)
+        out["mem_total_mb"] = round(total_mb)
+        out["mem_pct"] = round(min(used_mb / safe_mb, 1.0) * 100)
+        out["runner_running"] = running_total
+        out["workers"] = workers
+        out["workers_online"] = sum(1 for w in workers if w["online"])
     return out
 
 

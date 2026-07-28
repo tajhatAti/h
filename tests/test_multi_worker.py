@@ -181,17 +181,28 @@ check("/health needs no auth (it must answer when the secret is wrong)",
       h.get("status") == "ok")
 for field in ("jobs", "capacity", "free", "full", "load", "mem_mb"):
     check(f"/health exposes {field}", field in h, str(sorted(h)))
-check("empty worker is not full", h["full"] is False and h["free"] == R.MAX_BG_JOBS)
+check("empty worker is not full", h["full"] is False and h["free_mb"] > 0, str(h))
 
+# Capacity is MEASURED MEMORY now, not a job count, so saturate by memory.
+class HeavyProc:
+    def __init__(self, mb):
+        self.mb = mb
+        self.pid = 1
+
+    def poll(self):
+        return None
+
+
+_saved_stats = R._proc_stats
+R._proc_stats = lambda p: {"mem_mb": getattr(p, "mb", 0.0)}
 R._jobs.clear()
-R._jobs.update({f"j{i}": {"proc": FakeProc()} for i in range(R.MAX_BG_JOBS)})
+R._jobs["heavy"] = {"proc": HeavyProc(R.MEM_SAFE_MB + 100)}
 h = R.health()
-check("a saturated worker reports full", h["full"] is True, str(h))
-check("free hits zero", h["free"] == 0, str(h))
-check("load hits 1.0", h["load"] == 1.0, str(h))
-check("load is clamped even if adopted jobs exceed capacity",
-      R.health()["load"] <= 1.0, str(R.health()["load"]))
+check("a memory-saturated worker reports full", h["full"] is True, str(h))
+check("no headroom is advertised", h["free_mb"] == 0, str(h))
+check("load is clamped at 1.0 even when over budget", h["load"] == 1.0, str(h))
 R._jobs.clear()
+R._proc_stats = _saved_stats
 
 # It must never leak what is running, only how much.
 h = R.health()
