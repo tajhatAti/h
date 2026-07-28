@@ -3771,6 +3771,51 @@ function _initWbWiring() {
       if (!_isPhone()) document.body.classList.remove("rs-side-open");
       _syncMenuBtn();
     });
+
+    // Explicit close button inside the drawer. The toggle and the backdrop
+    // both already worked, but neither was discoverable: the toggle is a
+    // small icon in the header, and the backdrop starts BELOW the header so
+    // it does not read as tappable. Reported three times as the jobs panel
+    // being permanently open over the editor.
+    const sideClose = document.getElementById("btnSideClose");
+    if (sideClose) {
+      sideClose.addEventListener("click", (e) => {
+        e.preventDefault(); e.stopPropagation();
+        document.body.classList.remove("rs-side-open");
+        _syncMenuBtn();
+      });
+    }
+
+    // Escape closes the drawer — but only if nothing more modal is on top.
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      if (!document.body.classList.contains("rs-side-open")) return;
+      if (document.body.classList.contains("rs-detail-open")) return;
+      document.body.classList.remove("rs-side-open");
+      _syncMenuBtn();
+    });
+
+    // Swipe left to dismiss. On a phone the drawer sits over the editor, so
+    // the gesture people already expect from a nav drawer should work.
+    const sideEl = document.getElementById("wbSide");
+    if (sideEl) {
+      let x0 = null, y0 = null;
+      sideEl.addEventListener("touchstart", (ev) => {
+        if (!_isPhone() || ev.touches.length !== 1) { x0 = null; return; }
+        x0 = ev.touches[0].clientX; y0 = ev.touches[0].clientY;
+      }, { passive: true });
+      sideEl.addEventListener("touchend", (ev) => {
+        if (x0 === null) return;
+        const t = ev.changedTouches[0];
+        const dx = t.clientX - x0, dy = t.clientY - y0;
+        x0 = null;
+        // Horizontal intent only, or scrolling the job list would close it.
+        if (dx < -48 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+          document.body.classList.remove("rs-side-open");
+          _syncMenuBtn();
+        }
+      }, { passive: true });
+    }
     _syncMenuBtn();
   }
   // Inspector toggle — one control, two presentations (column / sheet).

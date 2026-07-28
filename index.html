@@ -660,6 +660,14 @@
             <button type="button" class="rs-ghost-btn rs-sq rs-side-new" id="btnNew" title="New job (Ctrl+N)" aria-label="New job">
               <svg viewBox="0 0 16 16" class="rs-ic-sm" fill="currentColor" aria-hidden="true"><path d="M7.25 2.75a.75.75 0 0 1 1.5 0v4.5h4.5a.75.75 0 0 1 0 1.5h-4.5v4.5a.75.75 0 0 1-1.5 0v-4.5h-4.5a.75.75 0 0 1 0-1.5h4.5v-4.5Z"/></svg>
             </button>
+            <!-- Mobile only. The drawer covers the editor, and the header
+                 toggle + backdrop were not obvious enough as a way out —
+                 reported three times as "the jobs panel is always open and I
+                 cannot see or type in the editor". CSS hides this on desktop,
+                 where the rail collapses instead. -->
+            <button type="button" class="rs-side-close" id="btnSideClose" title="Close jobs panel" aria-label="Close jobs panel">
+              <svg viewBox="0 0 16 16" class="rs-ic-sm" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 4 4 12"/><path d="m4 4 8 8"/></svg>
+            </button>
           </div>
           <div class="rs-list" id="jobsList"></div>
         </aside>

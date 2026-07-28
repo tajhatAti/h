@@ -1852,3 +1852,99 @@ body.rs-detail-open #tab-jobs .rs-insp { display: none !important; }
   font-family: var(--mono, ui-monospace, monospace);
   font-size: .95em;
 }
+
+/* ============================================================
+   RUNSPACE IS ALWAYS DARK  ·  no light mode, ever
+   ------------------------------------------------------------
+   RunSpace is an IDE: its surfaces are hardcoded dark
+   and never consult data-theme. But the site-wide component
+   rules in classic.css §18 (.badge/.chip/.rs-chip/.job-pill,
+   links, focus) resolve --line-2 / --muted / --panel, which DO
+   flip with the theme. Measured in light mode those become
+   a light --line-2 and --muted — light borders and text
+   painted onto a dark panel.
+
+   Pinning the shared tokens inside #tab-jobs makes the whole
+   subtree theme-proof: the site can switch freely, RunSpace
+   cannot follow it. Declared AFTER §18 loads, and scoped to the
+   subtree, so it wins on specificity rather than by luck.
+   ============================================================ */
+#tab-jobs,
+#tab-jobs .jd,
+html[data-theme="light"] #tab-jobs,
+html[data-theme="light"] #tab-jobs .jd {
+  --paper:    var(--bg);
+  --paper-2:  var(--bg-2);
+  --panel:    var(--bg-2);
+  --ink:      var(--fg);
+  --ink-2:    var(--fg-2);
+  --muted:    var(--fg-3);
+  --line:     var(--line);
+  --line-2:   var(--line-2);
+  --btn:      var(--accent);
+  --btn-fg:   var(--bg);
+  --btn-hover: var(--accent);
+  --band:     var(--bg-2);
+  --cream:    var(--fg);
+  /* Alias RunSpace's own status tokens (defined at the top of this file)
+     rather than restating the hexes — one source of truth per colour. */
+  --st-ok:     var(--ok);
+  --st-warn:   var(--warn);
+  --st-danger: var(--danger);
+  --st-ok-bg:     rgba(63, 185, 80, .14);
+  --st-warn-bg:   rgba(210, 153, 34, .14);
+  --st-danger-bg: rgba(248, 81, 73, .14);
+  color-scheme: dark;
+}
+
+/* ---- Focus ring: the blue glow, kept and made consistent -------------- */
+#tab-jobs :focus-visible {
+  outline: 2px solid var(--accent) !important;
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+/* Inputs read better with a ring than an outline offset off their border. */
+#tab-jobs .rs-inp:focus,
+#tab-jobs .rs-sel:focus,
+#tab-jobs .jd-env input:focus {
+  outline: none !important;
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px rgba(88, 166, 255, .25) !important;
+}
+
+/* ============================================================
+   DESKTOP: more room for the editor
+   The rail was 250px of a 3-column layout. 210px is still wide
+   enough for a job name at this font size and hands ~40px back
+   to the code, which is the only pane doing real work.
+   ============================================================ */
+@media (min-width: 761px) {
+  #tab-jobs .rs-side { flex: 0 0 210px; width: 210px; }
+  #tab-jobs { --rs-meta-h: 34px; }
+}
+
+/* ============================================================
+   MOBILE: the jobs drawer must be closable
+   REPORTED THREE TIMES. The drawer slides correctly, but there
+   was NO close control inside it — the only dismiss affordances
+   were the header toggle (easy to miss) and the backdrop, which
+   starts BELOW the header and so is not obviously tappable.
+   With the panel open over the editor you could neither read
+   nor type. An explicit ✕ removes the guesswork.
+   ============================================================ */
+#tab-jobs .rs-side-close { display: none; }
+@media (max-width: 760px) {
+  #tab-jobs .rs-side-close {
+    display: grid; place-items: center;
+    width: 30px; height: 30px; flex-shrink: 0;
+    background: transparent; border: 0; padding: 0;
+    color: var(--fg-3); cursor: pointer;
+    border-radius: var(--r-sm) !important;
+  }
+  #tab-jobs .rs-side-close:hover,
+  #tab-jobs .rs-side-close:active { background: var(--bg-3); color: var(--fg); }
+  /* Keep the panel header tall enough for two 30px tap targets. */
+  #tab-jobs .rs-side-head { flex-basis: 44px; height: 44px; }
+  /* Swiping the drawer away should feel available, not just tapping. */
+  #tab-jobs .rs-side { touch-action: pan-y; }
+}
