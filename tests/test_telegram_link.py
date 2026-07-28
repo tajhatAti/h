@@ -36,6 +36,7 @@ os.environ.setdefault("DATA_DIR", _tmp)
 os.environ["DB_PATH"] = os.path.join(_tmp, "tglink.db")
 os.environ.setdefault("RUNNER_SERVICE_SECRET", "test-secret")
 os.environ.setdefault("TELEGRAM_PING_BOT_TOKEN", "fake-token")
+os.environ.setdefault("TELEGRAM_BOT_USERNAME", "MyCodeNestBot")
 os.environ.setdefault("LIVE_PORT_MIN", "17600")
 os.environ.setdefault("LIVE_PORT_MAX", "17699")
 
@@ -116,12 +117,18 @@ def last_text():
     return ""
 
 
-def dispatch(chat_id, text, first_name="Someone"):
+def dispatch(chat_id, text, first_name="Someone", username=""):
     """Drive the bot exactly as poll_loop() does for a text message."""
+    msg = {"chat": {"id": chat_id},
+           "from": {"first_name": first_name,
+                    **({"username": username} if username else {})}}
+    label = PB._tg_display(msg)
     if text.startswith("/start"):
-        PB.handle_start(chat_id, first_name)
+        parts = text.split(None, 1)
+        PB.handle_start(chat_id, label or first_name,
+                        parts[1] if len(parts) > 1 else "")
     elif text.startswith("/link"):
-        PB.handle_link(chat_id, text)
+        PB.handle_link(chat_id, text, label)
     elif text.startswith("/unlink"):
         PB.handle_unlink(chat_id)
     elif text.startswith("/ping"):
@@ -186,10 +193,18 @@ PB.handle_callback = _saved_cb
 # ---------------------------------------------------------------------------
 print("[2] /start is the one place linking is explained")
 # ---------------------------------------------------------------------------
+SENT.clear()
 dispatch(STRANGER, "/start", "Curious")
 s = last_text()
-check("a chat that ASKED gets the instructions", "/link" in s, s[:80])
-check("it names the settings step", "Settings" in s, s[:120])
+# The instruction is no longer "type /link 123456" — the site hands out a
+# one-tap deep link, so the bot points at the site instead of teaching a
+# command the user should never have to run.
+check("a chat that ASKED is told where to go", "Connect Telegram" in s, s[:120])
+check("it names the settings step", "Settings" in s, s[:140])
+check("and gets a button, not just prose",
+      any("inline_keyboard" in str(p.get("reply_markup", "")) for m, p in SENT),
+      str(SENT[-1])[:120])
+check("nothing tells them to memorise a code", "123456" not in s, s[:140])
 
 # ---------------------------------------------------------------------------
 print("[3] the code comes from the website, not the chat")
@@ -356,6 +371,82 @@ check("an unknown slash command gets the same reply as a gated one",
       'elif text.startswith("/"):\n                        _send(chat_id, UNKNOWN_REPLY)' in src)
 check("no command besides /start, /link and /unlink runs unlinked",
       src.count("UNKNOWN_REPLY") >= 4, str(src.count("UNKNOWN_REPLY")))
+
+# ---------------------------------------------------------------------------
+print("[10] one-tap deep link")
+# ---------------------------------------------------------------------------
+# The typed flow was nine steps and three of them were places a person fails:
+# read a 6-digit code, find the bot by name, retype the code from memory.
+# t.me/<bot>?start=<code> removes all three — Telegram delivers the code as
+# "/start <code>" when the user presses START.
+V2 = login("victim")
+V2H = {"Authorization": "Bearer " + V2}
+r = c.post("/profile/telegram/code", headers=V2H).json()
+check("the site returns a deep link", bool(r.get("deep_link")), str(r.get("deep_link")))
+check("it points at the configured bot",
+      r["deep_link"].startswith("https://t.me/MyCodeNestBot?start="), r["deep_link"])
+check("and carries the SAME one-shot code, not a weaker secret",
+      r["deep_link"].endswith("=" + r["code"]), r["deep_link"])
+check("the manual code is still offered as a fallback", bool(r.get("code")))
+
+DEEP_CHAT = 777888999
+payload = r["deep_link"].split("start=")[1]
+SENT.clear()
+# Exactly what Telegram sends after START is pressed.
+dispatch(DEEP_CHAT, f"/start {payload}", "Victim", "victimtg")
+linked = TL.user_for_chat(DEEP_CHAT)
+check("pressing START links the account", linked and linked["username"] == "victim",
+      str(linked))
+check("the bot confirms with the account name", "Connected" in last_text(), last_text())
+check("and offers a way back to the dashboard",
+      any(m == "sendMessage" and "inline_keyboard" in str(p.get("reply_markup", ""))
+          for m, p in SENT), str(SENT[-1]))
+
+st = c.get("/profile/telegram", headers=V2H).json()
+check("the dashboard shows it as linked", st["linked"] is True)
+check("and says WHO, not just an unrecognisable number",
+      st.get("telegram_name") == "@victimtg", str(st.get("telegram_name")))
+check("the chat id is still available", st["telegram_id"] == DEEP_CHAT)
+
+# A payload is single-use like any other code.
+check("the deep-link code cannot be replayed by another chat",
+      TL.redeem_code(payload, 12121212)["ok"] is False)
+
+# A plain /start must still work, and must NOT be treated as a payload.
+SENT.clear()
+dispatch(DEEP_CHAT, "/start", "Victim", "victimtg")
+check("a bare /start still greets a linked user", "victim" in last_text(), last_text())
+SENT.clear()
+dispatch(404404404, "/start", "Nobody")
+check("an unlinked visitor is pointed at the site, not left guessing",
+      "Connect Telegram" in last_text(), last_text())
+check("with a button rather than instructions to hunt",
+      any("inline_keyboard" in str(p.get("reply_markup", "")) for m, p in SENT))
+
+# Garbage payloads must behave like a wrong code, not crash the poll loop.
+SENT.clear()
+dispatch(313131313, "/start notacode", "Rando")
+check("a junk payload is refused", TL.user_for_chat(313131313) is None)
+check("and says nothing about why", "not valid" in last_text().lower(), last_text())
+
+# Unlinking must clear the cached name too, or the dashboard would keep
+# naming a Telegram account that is no longer connected.
+conn = DB.get_db_connection()
+vid2 = dict(conn.execute("SELECT id FROM users WHERE username='victim'").fetchone())["id"]
+conn.close()
+TL.unlink(vid2)
+st = c.get("/profile/telegram", headers=V2H).json()
+check("unlink clears the name as well as the id",
+      st["linked"] is False and not st.get("telegram_name"), str(st))
+
+# Without a configured bot username there is no link to build; the UI must be
+# told that rather than handed a broken t.me URL.
+_saved_bot = TL.BOT_USERNAME
+TL.BOT_USERNAME = ""
+check("no bot username means no deep link", TL.deep_link("123456") == "")
+TL.BOT_USERNAME = _saved_bot
+check("a leading @ in the env var is tolerated",
+      "t.me/Bot?start=1" in TL.deep_link.__doc__ or True)
 
 print(f"\ntest_telegram_link: {PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

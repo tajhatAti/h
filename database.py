@@ -519,6 +519,7 @@ _SCHEMA_TABLES = [
         custom_code TEXT,
         links TEXT,
         telegram_id INTEGER UNIQUE,
+        telegram_name TEXT,
         fingerprint TEXT,
         last_ip TEXT,
         created_at TEXT NOT NULL,
@@ -775,6 +776,11 @@ def init_db():
                 )
             except Exception as exc:  # pragma: no cover - index is best effort
                 logger.warning("telegram_id unique index: %s", exc)
+        # Who the linked Telegram account IS, cached at link time. A bare
+        # numeric chat id cannot be recognised by the person reading it, so
+        # the dashboard could confirm "connected" but not "connected to whom".
+        if not _column_exists(conn, "users", "telegram_name"):
+            conn.execute("ALTER TABLE users ADD COLUMN telegram_name TEXT")
         if not _column_exists(conn, "users", "fingerprint"):
             conn.execute("ALTER TABLE users ADD COLUMN fingerprint TEXT")
         if not _column_exists(conn, "users", "last_ip"):

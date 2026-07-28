@@ -1463,6 +1463,19 @@ body.ed-full { overflow: hidden !important; }
   user-select: all;
 }
 
+.tg-open { text-align: center; text-decoration: none; display: block; }
+/* The manual code is a fallback now, not the main path — folded away so the
+   one-tap button is the obvious thing to press. */
+.tg-fallback { margin-top: 14px; }
+.tg-fallback > summary {
+  cursor: pointer; font-size: 12.5px; color: var(--muted);
+  list-style: none; padding: 6px 0;
+}
+.tg-fallback > summary::-webkit-details-marker { display: none; }
+.tg-fallback > summary::before { content: "▸ "; }
+.tg-fallback[open] > summary::before { content: "▾ "; }
+.tg-waiting { text-align: center; min-height: 18px; margin-top: 10px; }
+
 /* ---------- admin console ---------- */
 .adm-stats {
   display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 18px;

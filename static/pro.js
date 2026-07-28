@@ -2078,8 +2078,12 @@ async function refreshTelegramCard() {
     if (btn) btn.textContent = st.linked ? "Manage Telegram" : "Connect Telegram";
     const meta = document.getElementById("tgMeta");
     if (meta) {
+      // Name first: a bare chat id is not something a person recognises, so
+      // "connected" without a WHO cannot be checked by the account owner.
       meta.textContent = st.linked
-        ? `Chat ID ${st.telegram_id}`
+        ? (st.telegram_name
+            ? `${st.telegram_name} · ID ${st.telegram_id}`
+            : `Chat ID ${st.telegram_id}`)
         : "Not connected — the bot will ignore you until you link.";
     }
   } catch (e) { /* not signed in yet */ }
@@ -2099,7 +2103,9 @@ async function manageTelegram() {
     document.getElementById("tgModalTitle").textContent = "Telegram connected";
     const p = document.createElement("p");
     p.className = "auth-hint";
-    p.textContent = `This account answers Telegram chat ${st.telegram_id}. ` +
+    p.textContent = (st.telegram_name
+        ? `This account answers ${st.telegram_name} (ID ${st.telegram_id}). `
+        : `This account answers Telegram chat ${st.telegram_id}. `) +
       "Disconnecting stops the bot from deploying anything on your behalf.";
     const btn = document.createElement("button");
     btn.className = "btn-danger block";
@@ -2118,36 +2124,80 @@ async function manageTelegram() {
     return;
   }
 
+  /* ONE TAP.
+     The old flow was nine steps and three of them were places a person could
+     fail: read a 6-digit code off the screen, find the bot by name, retype
+     the code from memory. Telegram's own answer is a deep link —
+     t.me/<bot>?start=<code> shows a START button, and pressing it delivers
+     the code as a message. So the code still exists and still expires; the
+     user just never has to see it. The manual code stays visible as a
+     fallback, because a deep link cannot work on a desktop with no Telegram
+     installed, and because TELEGRAM_BOT_USERNAME may be unset. */
   document.getElementById("tgModalTitle").textContent = "Connect Telegram";
   const intro = document.createElement("p");
   intro.className = "auth-hint";
-  intro.textContent = "Send this code to the bot to prove the chat is yours.";
+  intro.textContent = "Tap below. Telegram opens, you press START, and you are connected.";
+
+  const openBtn = document.createElement("a");
+  openBtn.className = "btn-primary block tg-open";
+  openBtn.textContent = "🤖 Connect bot to account";
+  openBtn.target = "_blank";
+  openBtn.rel = "noopener";
+
+  const fallback = document.createElement("details");
+  fallback.className = "tg-fallback";
+  const sum = document.createElement("summary");
+  sum.textContent = "Telegram not installed here?";
   const codeBox = document.createElement("div");
   codeBox.className = "tg-code";
   codeBox.textContent = "······";
   const step = document.createElement("p");
   step.className = "auth-hint";
-  const go = document.createElement("button");
-  go.className = "btn-primary block";
-  go.textContent = "Get my code";
-  go.onclick = async () => {
-    setLoading(go, true);
+  fallback.append(sum, codeBox, step);
+
+  const status = document.createElement("p");
+  status.className = "auth-hint tg-waiting";
+
+  async function issue() {
+    const r = await api("/profile/telegram/code", "POST", {}, true);
+    codeBox.textContent = r.code;
+    // textContent, not innerHTML — the bot username comes from an env var and
+    // has no business being parsed as markup.
+    step.textContent = r.bot_username
+      ? `Open @${r.bot_username} and send:  /link ${r.code}  (expires in ${r.expires_in_min} min)`
+      : `Send  /link ${r.code}  to the bot (expires in ${r.expires_in_min} min)`;
+    return r;
+  }
+
+  openBtn.onclick = async (e) => {
+    // The href is only known AFTER the code is issued, so the first tap has
+    // to fetch and then navigate. Minting the code on modal-open instead
+    // would kill a code the user is already part-way through using, since
+    // each new code replaces the last.
+    if (openBtn.dataset.ready === "1") { _tgPoll(); return; }
+    e.preventDefault();
+    setLoading(openBtn, true);
     try {
-      const r = await api("/profile/telegram/code", "POST", {}, true);
-      codeBox.textContent = r.code;
-      // textContent, not innerHTML — the bot username comes from an env var
-      // and has no business being parsed as markup.
-      step.textContent = r.bot_username
-        ? `Open @${r.bot_username} and send:  /link ${r.code}  (expires in ${r.expires_in_min} min)`
-        : `Send  /link ${r.code}  to the bot (expires in ${r.expires_in_min} min)`;
-      go.textContent = "Get a new code";
-      // The card only flips once the BOT redeems it, so keep checking while
-      // the user is switching apps.
+      const r = await issue();
+      if (!r.deep_link) {
+        // No bot username configured — the deep link cannot be built, so say
+        // so plainly instead of opening a broken t.me URL.
+        openBtn.remove();
+        fallback.open = true;
+        status.textContent = "Use the code below to connect.";
+        _tgPoll();
+        return;
+      }
+      openBtn.href = r.deep_link;
+      openBtn.dataset.ready = "1";
+      status.textContent = "Waiting for you to press START in Telegram…";
       _tgPoll();
-    } catch (e) { toast(e.message, "error"); }
-    finally { setLoading(go, false); }
+      window.open(r.deep_link, "_blank", "noopener");
+    } catch (err) { toast(err.message, "error"); }
+    finally { setLoading(openBtn, false); }
   };
-  body.append(intro, codeBox, step, go);
+
+  body.append(intro, openBtn, status, fallback);
 }
 
 let _tgPollTimer = null;

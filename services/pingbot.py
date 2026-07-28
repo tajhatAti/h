@@ -103,15 +103,16 @@ def _require_link(chat_id):
     return user
 
 
-def handle_link(chat_id, text):
+def handle_link(chat_id, text, display_name=""):
     """/link 123456 — redeem a code issued by the website."""
     parts = (text or "").split()
     if len(parts) < 2:
         _send(chat_id,
               "🔗 *Connect your account*\n\n"
-              "1. Open your CodeNest dashboard → Settings\n"
-              "2. Tap *Connect Telegram* to get a 6-digit code\n"
-              "3. Send it here as  `/link 123456`")
+              "Open your CodeNest dashboard → Settings → *Connect Telegram* "
+              "and tap the button. It brings you back here and connects you "
+              "automatically — nothing to type.",
+              reply_markup=_menu_buttons())
         return
 
     already = telegram_link.user_for_chat(chat_id)
@@ -126,11 +127,19 @@ def handle_link(chat_id, text):
         _send(chat_id, "⏳ Too many attempts. Wait a few minutes and try again.")
         return
 
-    res = telegram_link.redeem_code(parts[1], chat_id)
+    res = telegram_link.redeem_code(parts[1], chat_id, display_name)
     if res.get("ok"):
+        # A button back, because the user arrived here FROM the dashboard and
+        # the dashboard is where the connection now shows up. Telling them to
+        # "go back" without a link is how a two-tap flow becomes a hunt again.
+        rows = [[{"text": "📦 Open dashboard", "url": f"{SITE_BASE}/dashboard"}]] \
+            if SITE_BASE else []
         _send(chat_id,
               f"✅ Connected to *{res['username']}*.\n\n"
-              "Send /start to see what you can do.")
+              "`/code`  — deploy code, any size\n"
+              "`/ping`  — check a URL\n"
+              "`/unlink` — disconnect this chat",
+              reply_markup={"inline_keyboard": rows} if rows else None)
         return
 
     telegram_link.note_failed_attempt(parts[1])
@@ -147,8 +156,48 @@ def handle_link(chat_id, text):
         _send(chat_id, "❌ That code is not valid. Generate a fresh one on the site.")
 
 
-def handle_start(chat_id, first_name):
-    """The one place the link step IS explained — to a chat that asked."""
+def _tg_display(msg):
+    """A human label for whoever sent this message.
+
+    Prefers @username because that is what a person recognises; falls back to
+    the first name, which Telegram always provides.
+    """
+    frm = (msg or {}).get("from") or {}
+    uname = (frm.get("username") or "").strip()
+    if uname:
+        return "@" + uname
+    return (frm.get("first_name") or "").strip()
+
+
+def _menu_buttons():
+    """Buttons an unlinked visitor sees, so the next step is a tap not a hunt."""
+    rows = []
+    if SITE_BASE:
+        rows.append([{"text": "🔗 Connect my account", "url": f"{SITE_BASE}/dashboard"}])
+    return {"inline_keyboard": rows} if rows else None
+
+
+def handle_start(chat_id, first_name, payload=""):
+    """/start, with or without a deep-link payload.
+
+    Telegram delivers "t.me/<bot>?start=CODE" as the literal message
+    "/start CODE" once the user taps START. Handling that payload is what
+    turns the old nine-step flow — read a code, leave the site, find the bot,
+    retype the code from memory — into two taps. The three steps a human could
+    get wrong are exactly the three this removes.
+
+    The payload is redeemed through the SAME redeem_code() the typed command
+    uses. A shortcut that took a different path would be a second front door
+    with its own rules to get wrong.
+    """
+    payload = (payload or "").strip()
+    if payload:
+        # Deliberately BEFORE the already-linked check: someone re-linking a
+        # chat should hear that it is already connected, which handle_link
+        # says, rather than have their tap silently ignored.
+        handle_link(chat_id, f"/link {payload}", first_name)
+        return
+
     user = telegram_link.user_for_chat(chat_id)
     if user:
         _send(chat_id,
@@ -159,10 +208,11 @@ def handle_start(chat_id, first_name):
         return
     _send(chat_id,
           f"👋 Hi {first_name}!\n\n"
-          "Connect your CodeNest account to use this bot:\n\n"
-          "1. Open your dashboard → Settings\n"
-          "2. Tap *Connect Telegram* for a 6-digit code\n"
-          "3. Send it here as  `/link 123456`")
+          "This bot works with a CodeNest account.\n\n"
+          "Open your dashboard → Settings → *Connect Telegram*, "
+          "then tap the button there. It brings you straight back here "
+          "and connects you automatically.",
+          reply_markup=_menu_buttons())
 
 
 def handle_unlink(chat_id):
@@ -399,10 +449,15 @@ def poll_loop():
                     # chat may use. Everything else needs an account, because
                     # everything else spends the platform's memory.
                     if text.startswith("/start"):
-                        handle_start(chat_id, first_name)
+                        # "/start 482913" from a t.me deep link. split(None, 1)
+                        # so a payload is taken whole and extra spaces do not
+                        # produce a stray empty argument.
+                        _parts = text.split(None, 1)
+                        handle_start(chat_id, _tg_display(msg) or first_name,
+                                     _parts[1] if len(_parts) > 1 else "")
 
                     elif text.startswith("/link"):
-                        handle_link(chat_id, text)
+                        handle_link(chat_id, text, _tg_display(msg))
 
                     elif text.startswith("/unlink"):
                         handle_unlink(chat_id)

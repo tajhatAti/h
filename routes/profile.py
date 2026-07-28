@@ -300,13 +300,20 @@ from services import telegram_link  # noqa: E402
 def telegram_link_status(authorization: Optional[str] = Header(None)):
     user, _ = get_current_user_and_session(authorization)
     tg = user["telegram_id"] if "telegram_id" in user.keys() else None
-    return {
+    out = {
         "linked": bool(tg),
         # The chat id is shown so the owner can tell WHICH Telegram account is
         # bound without having to unlink to find out.
         "telegram_id": tg,
-        "bot_username": os.getenv("TELEGRAM_BOT_USERNAME", "").strip(),
+        "bot_username": telegram_link.BOT_USERNAME,
     }
+    if tg:
+        # WHO is connected, not just that something is. A bare numeric id
+        # cannot be recognised — if two phones have used this account, the id
+        # alone does not say which one is bound. The name comes from Telegram
+        # itself and is cached at link time.
+        out.update(telegram_link.chat_profile(tg))
+    return out
 
 
 @router.post("/profile/telegram/code")
@@ -321,7 +328,13 @@ def telegram_link_code(request: Request, authorization: Optional[str] = Header(N
     return {
         "code": out["code"],
         "expires_in_min": out["ttl_min"],
-        "bot_username": os.getenv("TELEGRAM_BOT_USERNAME", "").strip(),
+        "bot_username": telegram_link.BOT_USERNAME,
+        # The whole point of this route now. Tapping it opens the bot with the
+        # code already loaded, so the user never reads or retypes it — the
+        # three steps of the old flow where a person could actually fail.
+        # Empty when TELEGRAM_BOT_USERNAME is unset; the UI then falls back to
+        # showing the code to type.
+        "deep_link": out["deep_link"],
         "instructions": f"Send  /link {out['code']}  to the bot on Telegram.",
     }
 

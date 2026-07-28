@@ -44,6 +44,10 @@ logger = logging.getLogger("codenest-app")
 # screen is not a standing key to the account.
 LINK_CODE_TTL_MIN = int(os.getenv("TELEGRAM_LINK_TTL_MIN", "10"))
 LINK_CODE_DIGITS = 6
+# Telegram's own handle for the bot, e.g. "MyCodeNestBot" (no @). Needed to
+# build a t.me deep link; without it the site falls back to telling the user
+# to find the bot themselves.
+BOT_USERNAME = os.getenv("TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
 # A 6-digit code is 1e6 wide; without a cap a bot could walk it in minutes.
 MAX_ATTEMPTS = int(os.getenv("TELEGRAM_LINK_MAX_ATTEMPTS", "5"))
 
@@ -68,10 +72,29 @@ def issue_code(user_id: int) -> dict:
         conn.commit()
     finally:
         conn.close()
-    return {"code": code, "expires_at": expires, "ttl_min": LINK_CODE_TTL_MIN}
+    return {"code": code, "expires_at": expires, "ttl_min": LINK_CODE_TTL_MIN,
+            "deep_link": deep_link(code)}
 
 
-def redeem_code(code: str, telegram_id: int) -> dict:
+def deep_link(code: str) -> str:
+    """A t.me link that opens the bot and sends the code for the user.
+
+    Telegram's documented mechanism: t.me/<bot>?start=<payload> shows a START
+    button, and pressing it delivers "/start <payload>" as a normal message.
+    The user never reads, remembers or retypes the code — which removes the
+    three steps of the old flow where a person could actually fail.
+
+    The payload is the same one-shot code the typed /link command uses, so
+    this adds a shortcut, not a second way in with weaker rules. Telegram
+    allows A-Z a-z 0-9 _ - in a start payload; the code is digits only, so it
+    passes through untouched.
+    """
+    if not BOT_USERNAME or not code:
+        return ""
+    return f"https://t.me/{BOT_USERNAME}?start={code}"
+
+
+def redeem_code(code: str, telegram_id: int, display_name: str = "") -> dict:
     """Bind a Telegram chat to whichever account issued this code.
 
     Returns {"ok": True, "username": ...} or {"ok": False, "reason": ...}.
@@ -126,8 +149,13 @@ def redeem_code(code: str, telegram_id: int) -> dict:
         if user.get("is_suspended"):
             return {"ok": False, "reason": "suspended"}
 
-        conn.execute("UPDATE users SET telegram_id = ?, updated_at = ? WHERE id = ?",
-                     (telegram_id, now_utc_str(), user["id"]))
+        # Cache who this is. The dashboard can then say "connected to @ahad"
+        # rather than "connected to 111222333", which nobody recognises.
+        conn.execute(
+            "UPDATE users SET telegram_id = ?, telegram_name = ?, updated_at = ? "
+            "WHERE id = ?",
+            (telegram_id, (display_name or "").strip()[:80] or None,
+             now_utc_str(), user["id"]))
         conn.execute("DELETE FROM telegram_link_codes WHERE user_id = ?", (user["id"],))
         conn.commit()
     finally:
@@ -178,12 +206,32 @@ def user_for_chat(telegram_id: int) -> dict:
     return u
 
 
+def chat_profile(telegram_id: int) -> dict:
+    """The cached display name for a linked chat, for the dashboard card."""
+    conn = get_db_connection()
+    try:
+        row = conn.execute(
+            "SELECT telegram_name, updated_at FROM users WHERE telegram_id = ?",
+            (telegram_id,)
+        ).fetchone()
+    finally:
+        conn.close()
+    if not row:
+        return {}
+    r = dict(row)
+    return {
+        "telegram_name": r.get("telegram_name"),
+        "linked_at": r.get("updated_at"),
+    }
+
+
 def unlink(user_id: int) -> None:
     """Drop the binding. Used from account settings and on suspension."""
     conn = get_db_connection()
     try:
-        conn.execute("UPDATE users SET telegram_id = NULL, updated_at = ? WHERE id = ?",
-                     (now_utc_str(), user_id))
+        conn.execute(
+            "UPDATE users SET telegram_id = NULL, telegram_name = NULL, "
+            "updated_at = ? WHERE id = ?", (now_utc_str(), user_id))
         conn.execute("DELETE FROM telegram_link_codes WHERE user_id = ?", (user_id,))
         conn.commit()
     finally:

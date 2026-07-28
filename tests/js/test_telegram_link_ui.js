@@ -43,7 +43,9 @@ function extract(name) {
 const src = [
   'const calls = []; const toasts = []; let STATE = {linked:false};',
   'const CODE = {code:"482913", expires_in_min:10, bot_username:"CodeNestBot",' +
+  ' deep_link:"https://t.me/CodeNestBot?start=482913",' +
   ' instructions:"Send /link 482913"};',
+  'const openedUrls = []; window.open = (u) => { openedUrls.push(u); };',
   'function api(p, m){ calls.push([m||"GET", p]);' +
   '  if (p === "/profile/telegram") return Promise.resolve(STATE);' +
   '  if (p === "/profile/telegram/code") return Promise.resolve(CODE);' +
@@ -59,7 +61,8 @@ const src = [
   extract('manageTelegram'),
   extract('_tgPoll'),
   'return {refreshTelegramCard, manageTelegram, calls, toasts, opened, closed,' +
-  ' setState:v=>{STATE=v;}, getState:()=>STATE};',
+  ' openedUrls, setState:v=>{STATE=v;}, getState:()=>STATE,' +
+  ' setCode:v=>{Object.assign(CODE,v);}};',
 ].join('\n');
 const app = new dom.window.Function(src)();
 
@@ -110,23 +113,58 @@ ok('merely opening the modal does not issue one',
    !app.calls.some(([m, p]) => p === '/profile/telegram/code'),
    JSON.stringify(app.calls));
 
-const getBtn = [...body.querySelectorAll('button')].find(b => /Get my code/.test(b.textContent));
-ok('there is a button to ask for one', !!getBtn);
-await getBtn.onclick();
+// ONE TAP is the whole change: the old flow made the user read a 6-digit
+// code, find the bot by name, and retype the code from memory. Those were the
+// three steps a person could actually fail.
+const openBtn = body.querySelector('a.tg-open');
+ok('the primary action is a single Connect button', !!openBtn,
+   body.innerHTML.slice(0, 120));
+ok('it says what it does', /Connect bot to account/.test(openBtn.textContent),
+   openBtn.textContent);
+ok('the manual code is demoted to a fallback, not the main path',
+   !!body.querySelector('details.tg-fallback'));
+ok('and that fallback starts closed',
+   body.querySelector('details.tg-fallback').open !== true);
+
+await openBtn.onclick({ preventDefault() {} });
 ok('the code is requested with POST, not GET',
    app.calls.some(([m, p]) => p === '/profile/telegram/code' && m === 'POST'),
    JSON.stringify(app.calls));
-ok('the code is displayed', d.querySelector('.tg-code').textContent === '482913');
-ok('the exact command to send is spelled out',
-   /\/link 482913/.test(body.textContent), body.textContent.slice(0, 200));
+ok('the button now points at the t.me deep link',
+   openBtn.href === 'https://t.me/CodeNestBot?start=482913', openBtn.href);
+ok('the link carries the SAME code, not a second weaker secret',
+   openBtn.href.endsWith('=482913'));
+ok('Telegram is actually opened for the user',
+   app.openedUrls.includes('https://t.me/CodeNestBot?start=482913'),
+   JSON.stringify(app.openedUrls));
+ok('it opens in a new tab so the dashboard stays put',
+   openBtn.target === '_blank' && /noopener/.test(openBtn.rel));
+ok('the user is told what happens next',
+   /Waiting for you to press START/.test(body.textContent),
+   body.textContent.slice(0, 200));
+
+// The fallback still has to work for a desktop with no Telegram installed.
+ok('the code is available in the fallback',
+   d.querySelector('.tg-code').textContent === '482913');
+ok('the exact command is spelled out there',
+   /\/link 482913/.test(body.textContent), body.textContent.slice(0, 260));
 ok('the bot handle is named', /@CodeNestBot/.test(body.textContent));
 ok('and so is the expiry, so a stale code is not a mystery',
    /10 min/.test(body.textContent));
-ok('the button offers a fresh one', /Get a new code/.test(getBtn.textContent));
+
+// A second tap must NOT mint a new code — that would invalidate the one the
+// user is already looking at in Telegram.
+const before = app.calls.filter(([m, p]) => p === '/profile/telegram/code').length;
+await openBtn.onclick({ preventDefault() {} });
+ok('tapping again reuses the issued code',
+   app.calls.filter(([m, p]) => p === '/profile/telegram/code').length === before,
+   String(before));
 
 // The bot username comes from an env var; it must not be parsed as markup.
 ok('the instruction line is built with textContent',
    /step\.textContent =/.test(extract('manageTelegram')));
+ok('the deep link is assigned to href, never interpolated into HTML',
+   /openBtn\.href = r\.deep_link/.test(extract('manageTelegram')));
 ok('the code element is too',
    /codeBox\.textContent = r\.code/.test(extract('manageTelegram')));
 
@@ -162,6 +200,43 @@ ok('and the card goes back to not connected',
    d.getElementById('tgChip').textContent === 'Not connected');
 
 // ── 5. the server contract this UI depends on ───────────────────────────
+console.log('[4b] the card names WHO is connected');
+// A bare chat id is not something a person recognises. "Connected" without a
+// who cannot be checked by the account owner at all.
+app.setState({ linked: true, telegram_id: 111222333, telegram_name: '@ahadxyz' });
+await app.refreshTelegramCard();
+ok('the Telegram handle is shown',
+   /@ahadxyz/.test(d.getElementById('tgMeta').textContent),
+   d.getElementById('tgMeta').textContent);
+ok('the id is still there for the ambiguous case',
+   /111222333/.test(d.getElementById('tgMeta').textContent));
+await app.manageTelegram();
+ok('and the manage view names it too',
+   /@ahadxyz/.test(d.getElementById('tgModalBody').textContent),
+   d.getElementById('tgModalBody').textContent.slice(0, 120));
+// An older link made before the name column existed must still render.
+app.setState({ linked: true, telegram_id: 111222333 });
+await app.refreshTelegramCard();
+ok('a link with no cached name falls back to the id',
+   /Chat ID 111222333/.test(d.getElementById('tgMeta').textContent),
+   d.getElementById('tgMeta').textContent);
+
+console.log('[4c] no bot username configured');
+// TELEGRAM_BOT_USERNAME unset means no t.me link can be built. Handing the
+// user a broken URL would be worse than saying so.
+app.setState({ linked: false });
+app.setCode({ deep_link: '' });
+await app.manageTelegram();
+const b3 = d.getElementById('tgModalBody');
+await b3.querySelector('a.tg-open').onclick({ preventDefault() {} });
+ok('the dead button is removed rather than left to fail',
+   !b3.querySelector('a.tg-open'));
+ok('the code fallback is opened automatically',
+   b3.querySelector('details.tg-fallback').open === true);
+ok('and the user is told to use it',
+   /Use the code below/.test(b3.textContent), b3.textContent.slice(0, 160));
+app.setCode({ deep_link: 'https://t.me/CodeNestBot?start=482913' });
+
 console.log('[5] the routes behind it');
 ok('status route exists', /@router\.get\("\/profile\/telegram"\)/.test(PROFILE));
 ok('code route exists', /@router\.post\("\/profile\/telegram\/code"\)/.test(PROFILE));
@@ -177,6 +252,21 @@ ok('the code is issued for the SESSION user, not an id from the request',
 // The whole point: the bot cannot mint its own code.
 ok('the bot never calls issue_code', !/issue_code/.test(PINGBOT));
 ok('the bot only ever REDEEMS', /redeem_code/.test(PINGBOT));
+
+// The deep link must go through the same redeem path as the typed command,
+// or it is a second front door with its own rules to get wrong.
+ok('a /start payload is handed to the same handler as /link',
+   /handle_link\(chat_id, f"\/link \{payload\}", first_name\)/.test(PINGBOT),
+   'handle_start payload branch');
+ok('the payload is split off with split(None, 1)',
+   /text\.split\(None, 1\)/.test(PINGBOT));
+const TLPY = fs.readFileSync(path.join(ROOT, 'services/telegram_link.py'), 'utf8');
+ok('the deep link is built from the issued code, not a new secret',
+   /f"https:\/\/t\.me\/\{BOT_USERNAME\}\?start=\{code\}"/.test(TLPY));
+ok('an unset bot username yields no link at all',
+   /if not BOT_USERNAME or not code:\s*\n\s*return ""/.test(TLPY));
+ok('a leading @ in the env var is stripped',
+   /\.lstrip\("@"\)/.test(TLPY));
 
 console.log(`\ntest_telegram_link_ui: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
