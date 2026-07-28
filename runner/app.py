@@ -304,7 +304,15 @@ def execute_piston(req: ExecuteRequest, authorization: Optional[str] = Header(No
 # Jobs live in THIS process's memory, so a runner redeploy/restart clears
 # them — the main site keeps the job definitions and can re-spawn them.
 # ---------------------------------------------------------------------------
-MAX_BG_JOBS = int(os.getenv("MAX_BG_JOBS", "5"))   # free plan = 512MB RAM!
+# Capacity of THIS runner process, sized by its RAM. It is a HARDWARE limit —
+# how many bots this container can hold — not a fairness rule. The per-account
+# limit is enforced separately by the main site (MAX_JOBS_PER_USER).
+#
+# BUG THIS CAUSED: at 5 it read "Runner at capacity (5/5)" to EVERY user once
+# the site held 5 jobs in total, so a brand-new account with zero jobs could
+# not create its first one. Five bots is roughly what 512MB holds; add another
+# runner service to add capacity rather than raising this past the RAM.
+MAX_BG_JOBS = int(os.getenv("MAX_BG_JOBS", "12"))
 JOB_LOG_LINES = 2000                                # ring buffer per job (full history)
 JOB_RESTART_LIMIT = 3                               # auto-restart attempts
 JOB_RESTART_DELAY_S = 5
@@ -1411,7 +1419,16 @@ def job_start(req: JobStartRequest, authorization: Optional[str] = Header(None))
     with _jobs_lock:
         active = sum(1 for j in _jobs.values() if j["proc"] and j["proc"].poll() is None)
     if active >= MAX_BG_JOBS:
-        raise HTTPException(429, detail=f"Runner at capacity ({active}/{MAX_BG_JOBS} jobs). Stop one first.")
+        # 503, not 429: this is the SERVER being full, not the caller doing
+        # anything wrong. The main site uses the distinction to try the next
+        # runner in the pool instead of blaming the user. The wording must
+        # never suggest the user should stop one of THEIR jobs — the jobs
+        # filling this runner usually belong to other people.
+        raise HTTPException(
+            503,
+            detail=f"This runner is full ({active}/{MAX_BG_JOBS} bots).",
+            headers={"X-Runner-Full": "1"},
+        )
 
     job_id = uuid.uuid4().hex[:12]
     # Persistent workspace — bot's cwd. Same directory reused across

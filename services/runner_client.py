@@ -20,18 +20,49 @@ from fastapi import HTTPException
 
 logger = logging.getLogger("codenest-app")
 
-MAX_JOBS_PER_USER = 3  # free tier guardrail
+# Per-ACCOUNT fairness limit, enforced by the main site. Distinct from the
+# runner's MAX_BG_JOBS, which is a per-container RAM limit. Env-tunable so the
+# ceiling can move with capacity without a code change.
+MAX_JOBS_PER_USER = int(os.getenv("MAX_JOBS_PER_USER", "3"))
+
+
+def runner_pool() -> list:
+    """Every runner this site can place jobs on, in preference order.
+
+    Capacity scales by ADDING SERVICES, not by raising a limit past the RAM a
+    container actually has. Each Render free instance is 512MB and holds
+    ~MAX_BG_JOBS bots; a second URL doubles the ceiling, a third triples it.
+
+        RUNNER_SERVICE_URL   = https://runner-a.onrender.com
+        RUNNER_SERVICE_URLS  = https://runner-b.onrender.com,https://runner-c...
+
+    Both are read so existing single-runner deployments keep working
+    untouched. Order is stable and duplicates are dropped, so a job lands on
+    the first runner with room rather than bouncing between them.
+    """
+    urls = []
+    primary = os.getenv("RUNNER_SERVICE_URL", "").strip().rstrip("/")
+    if primary:
+        urls.append(primary)
+    for raw in os.getenv("RUNNER_SERVICE_URLS", "").replace(" ", ",").split(","):
+        u = raw.strip().rstrip("/")
+        if u and u not in urls:
+            urls.append(u)
+    return urls
 
 
 def runner_cfg():
-    url = os.getenv("RUNNER_SERVICE_URL", "").strip().rstrip("/")
+    """The PRIMARY runner (url, secret). Kept for callers that address one
+    runner; placement across the pool goes through _runner_http."""
+    pool = runner_pool()
+    url = pool[0] if pool else ""
     secret = os.getenv("RUNNER_SERVICE_SECRET", "").strip()
     return url, secret
 
 
 def embedded_mode() -> bool:
     """Single-service deployment → the runner runs in-process."""
-    return not os.getenv("RUNNER_SERVICE_URL", "").strip()
+    return not runner_pool()
 
 
 def public_base_url() -> str:
@@ -83,20 +114,47 @@ def _runner_http(method: str, path: str, json_body=None):
             logger.exception("embedded runner call failed: %s %s", method, path)
             raise HTTPException(status_code=503, detail=f"Job engine error — please try again. ({type(exc).__name__})")
 
-    runner_url, runner_secret = runner_cfg()
-    if not runner_url or not runner_secret:
+    pool = runner_pool()
+    runner_secret = os.getenv("RUNNER_SERVICE_SECRET", "").strip()
+    if not pool or not runner_secret:
         raise HTTPException(status_code=503, detail="Jobs are not configured. Set RUNNER_SERVICE_URL and RUNNER_SERVICE_SECRET.")
-    try:
+
+    def _call(base):
         return requests.request(
-            method, runner_url + path,
+            method, base + path,
             json=json_body,
             headers={"Authorization": "Bearer " + runner_secret},
             timeout=20,
         )
-    except requests.ConnectionError:
-        raise HTTPException(status_code=503, detail="Waking up your RunSpace... this can take up to a minute on the free tier.")
-    except requests.Timeout:
+
+    # Creating a job is the only PLACEMENT decision — every other call targets
+    # a job that already lives on a specific runner, so it must not roam.
+    creating = method.upper() == "POST" and path == "/internal/jobs"
+    targets = pool if creating else pool[:1]
+
+    last_exc = None
+    last_full = None
+    for i, base in enumerate(targets):
+        try:
+            resp = _call(base)
+        except (requests.ConnectionError, requests.Timeout) as exc:
+            last_exc = exc
+            continue                     # asleep or unreachable — try the next
+        # 503 + X-Runner-Full means that container is at its RAM ceiling.
+        # Roll to the next runner instead of telling the user the site is full.
+        if creating and resp.status_code == 503 and resp.headers.get("X-Runner-Full"):
+            last_full = resp
+            logger.info("runner %s full, trying next of %d", base, len(targets))
+            continue
+        if creating and i:
+            logger.info("job placed on overflow runner %s", base)
+        return resp
+
+    if last_full is not None:
+        return last_full                 # every runner full — report it honestly
+    if isinstance(last_exc, requests.Timeout):
         raise HTTPException(status_code=504, detail="Waking up your RunSpace... this can take up to a minute on the free tier.")
+    raise HTTPException(status_code=503, detail="Waking up your RunSpace... this can take up to a minute on the free tier.")
 
 
 def _job_web_fields(info: dict) -> dict:
