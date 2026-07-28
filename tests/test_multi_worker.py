@@ -27,7 +27,10 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 os.chdir(ROOT)
 
-os.environ.setdefault("DATA_DIR", tempfile.mkdtemp())
+_tmp = tempfile.mkdtemp()
+os.environ.setdefault("DATA_DIR", _tmp)
+# Never let an import touch the repo's real database.db.
+os.environ.setdefault("DB_PATH", os.path.join(_tmp, "mw.db"))
 os.environ.setdefault("RUNNER_SERVICE_SECRET", "test-secret")
 os.environ.setdefault("LIVE_PORT_MIN", "14700")
 os.environ.setdefault("LIVE_PORT_MAX", "14799")
@@ -283,6 +286,67 @@ for _fn in [n for n in _ast.walk(_tree)
                 _unbound.append(f"{_fn.name}() uses _worker_of({node.args[0].id})")
 check("no _worker_of() call references an unbound name",
       not _unbound, "; ".join(_unbound))
+
+# ---------------------------------------------------------------------------
+print("[9] fleet-wide reads see EVERY worker")
+# ---------------------------------------------------------------------------
+# THE BUG: _runner_http("GET", "/internal/jobs") with no worker= falls back to
+# pool[:1]. That fallback is correct for a call addressing ONE legacy job, but
+# a fleet-wide READ has no single worker to address — so the admin console,
+# the library aggregation and the abuse limiter all saw worker #1 only. With
+# two workers the dashboard called half the running jobs dead.
+rc = fresh(RUNNER_SERVICE_URL=A, RUNNER_SERVICE_URLS=B)
+seen = []
+
+
+def two_workers(method, url, **kw):
+    seen.append(url)
+    if url.endswith("/internal/jobs") and method.upper() == "GET":
+        if url.startswith(A):
+            return Resp(200, {}, {"jobs": [{"id": "ja", "status": "running",
+                                            "mem_mb": 30.0, "libs": ["requests"]}]})
+        return Resp(200, {}, {"jobs": [{"id": "jb", "status": "running",
+                                        "mem_mb": 40.0, "libs": ["numpy"]}]})
+    return Resp(200, {}, {})
+
+
+rc.requests.request = two_workers
+fleet = rc.fleet_jobs()
+check("both workers were asked", len([u for u in seen if u.endswith("/internal/jobs")]) == 2,
+      str(seen))
+check("every running job is visible, not just worker #1's",
+      set(fleet) == {"ja", "jb"}, str(sorted(fleet)))
+check("each job is tagged with the worker that answered",
+      fleet["ja"]["worker"] == A and fleet["jb"]["worker"] == B)
+
+# One worker asleep must not blank out the other.
+def half_down(method, url, **kw):
+    if url.startswith(A):
+        raise rc.requests.ConnectionError("asleep")
+    return Resp(200, {}, {"jobs": [{"id": "jb", "status": "running"}]})
+
+
+rc.requests.request = half_down
+check("an unreachable worker does not hide the reachable one",
+      set(rc.fleet_jobs()) == {"jb"}, str(sorted(rc.fleet_jobs())))
+
+# The memory fields the admin capacity panel sums must survive the probe.
+rc._health_cache.clear()
+rc.requests.get = lambda url, **k: Resp(200, {}, {
+    "status": "ok", "jobs": 1, "mem_mb": 30.0, "safe_mb": 419.0,
+    "total_mb": 512.0, "free_mb": 389.0, "load": 0.07, "free": 12, "full": False})
+h = rc.worker_health(refresh=True)[A]
+for f in ("safe_mb", "total_mb", "free_mb", "full"):
+    check(f"worker_health keeps {f}", f in h, str(sorted(h)))
+check("the capacity ceiling is not zeroed", h["safe_mb"] == 419.0, str(h.get("safe_mb")))
+
+ad = open(os.path.join(ROOT, "routes/admin.py"), encoding="utf-8").read()
+check("the admin console reads the whole fleet",
+      ad.count("fleet_jobs()") >= 4, str(ad.count("fleet_jobs()")))
+check("no admin route asks a single worker for the job list",
+      '_runner_http("GET", "/internal/jobs")' not in ad)
+lm = open(os.path.join(ROOT, "services/limits.py"), encoding="utf-8").read()
+check("the abuse limiter counts jobs on every worker", "fleet_jobs()" in lm)
 
 print(f"\ntest_multi_worker: {PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

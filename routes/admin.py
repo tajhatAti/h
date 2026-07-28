@@ -192,8 +192,7 @@ def admin_overview_route(authorization: Optional[str] = Header(None)):
     # whether it is running, and a count of rows would call a crashed bot
     # "deployed".
     try:
-        r = runner_client._runner_http("GET", "/internal/jobs")
-        jl = (r.json() or {}).get("jobs") or []
+        jl = list(runner_client.fleet_jobs().values())
         by = {}
         for j in jl:
             by[j.get("status") or "unknown"] = by.get(j.get("status") or "unknown", 0) + 1
@@ -274,13 +273,7 @@ def admin_user_detail_route(user_id: int, authorization: Optional[str] = Header(
         conn.close()
 
     # Live resource usage for this user's jobs.
-    live = {}
-    try:
-        resp = runner_client._runner_http("GET", "/internal/jobs")
-        for j in ((resp.json() or {}).get("jobs") or []):
-            live[j.get("id")] = j
-    except Exception:
-        pass
+    live = runner_client.fleet_jobs()
     total_mem = 0.0
     for j in jobs:
         info = live.get(j.get("runner_job_id")) or {}
@@ -323,14 +316,7 @@ def admin_jobs_route(authorization: Optional[str] = Header(None)):
         conn.close()
     # Enrich with the runner's live view (status/uptime). Best-effort: if the
     # runner is asleep or unreachable the metadata list still answers.
-    live = {}
-    try:
-        resp = runner_client._runner_http("GET", "/internal/jobs")
-        payload = resp.json() if resp is not None else None
-        for j in (payload or {}).get("jobs", []) or []:
-            live[j.get("id")] = j
-    except Exception:
-        live = {}
+    live = runner_client.fleet_jobs()
     for row in jobs:
         info = live.get(row.get("runner_job_id")) or {}
         row["live_status"] = info.get("status")
@@ -391,13 +377,7 @@ def admin_libraries_route(authorization: Optional[str] = Header(None)):
     finally:
         conn.close()
 
-    live = {}
-    try:
-        resp = runner_client._runner_http("GET", "/internal/jobs")
-        for j in ((resp.json() or {}).get("jobs") or []):
-            live[j.get("id")] = j
-    except Exception:
-        pass
+    live = runner_client.fleet_jobs()
 
     counts = {}
     for rid, j in live.items():

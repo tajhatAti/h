@@ -201,6 +201,99 @@ check("package names are set via textContent", "name.textContent = r.library" in
 check("the review flag says review, not abuse",
       'r.watch ? "review" : "heavy"' in js)
 
+# ---------------------------------------------------------------------------
+print("[8] the numbers stay true across a MULTI-WORKER fleet")
+# ---------------------------------------------------------------------------
+# Everything above ran embedded (one in-process runner), which is the one
+# topology where asking "the" runner happens to be right. The live deployment
+# runs two services. Reproduced before the fix, with one running job on each
+# worker: overview said 1 running, /admin/jobs called the worker-B job dead,
+# libraries sampled 1 job, and the whole memory panel was absent because the
+# health probe dropped safe_mb/total_mb.
+import services.runner_client as RC  # noqa: E402
+
+conn = DB.get_db_connection()
+conn.execute("INSERT INTO jobs (user_id,name,language,code,runner_job_id,worker_url,"
+             "created_at,updated_at) VALUES (1,'onB','python','x','jb',?,?,?)",
+             ("https://worker-b.test", now_utc_str(), now_utc_str()))
+conn.commit()
+conn.close()
+
+_A, _B = "https://worker-a.test", "https://worker-b.test"
+os.environ["RUNNER_SERVICE_URL"] = _A
+os.environ["RUNNER_SERVICE_URLS"] = _B
+RC._health_cache.clear()
+
+
+class _Resp:
+    def __init__(self, code, body=None):
+        self.status_code, self._b, self.headers = code, body or {}, {}
+
+    def json(self):
+        return self._b
+
+
+_real_job = list(R._jobs.values())[0]
+_rid_a = _real_job["id"]
+_mem_a = (R._proc_stats(_real_job.get("proc")) or {}).get("mem_mb", 0.0)
+
+
+def _fleet(method, url, **kw):
+    """worker-A mirrors the REAL in-process job; worker-B adds a second."""
+    if url.endswith("/internal/jobs") and method.upper() == "GET":
+        if url.startswith(_A):
+            return _Resp(200, {"jobs": [R._job_public(_real_job)]})
+        return _Resp(200, {"jobs": [{"id": "jb", "status": "running",
+                                     "mem_mb": 40.0, "peak_mem_mb": 41.0,
+                                     "cpu_pct": 2.0, "uptime_s": 9,
+                                     "libs": ["numpy", "requests"]}]})
+    return _Resp(200, {})
+
+
+def _health(url, **kw):
+    return _Resp(200, {"status": "ok", "jobs": 1,
+                       "mem_mb": _mem_a if url.startswith(_A) else 40.0,
+                       "safe_mb": 419.0, "total_mb": 512.0,
+                       "free_mb": 379.0, "load": 0.1, "free": 12, "full": False})
+
+
+_saved_req, _saved_get = RC.requests.request, RC.requests.get
+RC.requests.request, RC.requests.get = _fleet, _health
+try:
+    ov2 = c.get("/admin/overview", headers=AH).json()
+    check("both workers' running jobs are counted",
+          (ov2.get("jobs_by_status") or {}).get("running") == 2,
+          str(ov2.get("jobs_by_status")))
+    check("the memory panel survives the pool probe",
+          ov2.get("mem_safe_mb", 0) > 0, str(ov2.get("mem_safe_mb")))
+    check("platform memory sums BOTH workers",
+          ov2["mem_used_mb"] >= 40 + _mem_a - 1, str(ov2.get("mem_used_mb")))
+    check("both workers report online", ov2.get("workers_online") == 2,
+          str(ov2.get("workers_online")))
+
+    jobs2 = {j["name"]: j for j in c.get("/admin/jobs", headers=AH).json()["jobs"]}
+    check("a job on the overflow worker is NOT reported dead",
+          jobs2["onB"]["live_status"] == "running", str(jobs2["onB"].get("live_status")))
+    check("its memory is real, not null", (jobs2["onB"].get("mem_mb") or 0) > 0)
+    check("the first worker's job is still fine",
+          jobs2["realbot"]["live_status"] == "running")
+
+    lib2 = c.get("/admin/libraries", headers=AH).json()
+    check("libraries sample the whole fleet", lib2["jobs_sampled"] == 2,
+          str(lib2.get("jobs_sampled")))
+    check("a package used on both workers is counted twice",
+          next(e["count"] for e in lib2["libraries"] if e["library"] == "requests") == 2,
+          str([(e["library"], e["count"]) for e in lib2["libraries"]]))
+
+    d2 = c.get("/admin/users/1", headers=AH).json()
+    check("per-user totals span workers", d2["jobs_running"] == 2, str(d2.get("jobs_running")))
+    check("per-user memory sums both", d2["mem_used_mb"] >= 40, str(d2.get("mem_used_mb")))
+finally:
+    RC.requests.request, RC.requests.get = _saved_req, _saved_get
+    os.environ.pop("RUNNER_SERVICE_URL", None)
+    os.environ.pop("RUNNER_SERVICE_URLS", None)
+    RC._health_cache.clear()
+
 for j in list(R._jobs.values()):
     try:
         j["proc"].kill()

@@ -120,10 +120,23 @@ def _probe_worker(url: str) -> dict:
             "jobs": int(d.get("jobs", 0)),
             "capacity": int(d.get("capacity", 0)),
             "mem_mb": float(d.get("mem_mb", 0.0)),
+            # BUG THIS FIXES: the three MEMORY fields were dropped here, so the
+            # admin overview — which sums safe_mb/total_mb across the pool to
+            # decide whether to show the capacity panel at all — always summed
+            # zero and hid the panel. It only ever looked right in embedded
+            # mode, where the overview bypasses this cache and calls /health
+            # directly. On the real two-service deployment the whole memory
+            # section was silently blank.
+            "safe_mb": float(d.get("safe_mb", 0.0)),
+            "total_mb": float(d.get("total_mb", 0.0)),
+            "free_mb": float(d.get("free_mb", 0.0)),
+            "full": bool(d.get("full", False)),
         }
     except Exception:
         # Offline, asleep, or too old to expose /health load fields.
-        return {"online": False, "free": 0, "load": 1.0}
+        return {"online": False, "free": 0, "load": 1.0,
+                "jobs": 0, "mem_mb": 0.0, "safe_mb": 0.0,
+                "total_mb": 0.0, "free_mb": 0.0, "full": False}
 
 
 def worker_health(refresh: bool = False) -> dict:
@@ -158,6 +171,45 @@ def _placement_order() -> list:
         # Offline last; then most free slots; then pool order for stability.
         return (0 if h.get("online") else 1, -h.get("free", 0), pool.index(u))
     return sorted(pool, key=key)
+
+
+def fleet_jobs() -> dict:
+    """Every live job on EVERY worker, keyed by runner job id.
+
+    BUG THIS FIXES: `_runner_http("GET", "/internal/jobs")` with no worker=
+    falls back to pool[:1], because that fallback was written for calls that
+    address ONE job created before the worker_url column existed. But a
+    fleet-wide READ has no single worker to address, so the admin console, the
+    library aggregation and the abuse/limit checks all saw only worker #1.
+    With two workers the dashboard reported half the running jobs as dead —
+    exactly the failure mode the console exists to catch.
+
+    Each entry is tagged with the worker that answered, so callers can show
+    where a job actually lives. Best-effort per worker: one sleeping runner
+    must not blank out the others.
+    """
+    out = {}
+    pool = runner_pool()
+    if not pool:                                   # embedded single service
+        try:
+            resp = _runner_http("GET", "/internal/jobs")
+            for j in ((resp.json() or {}).get("jobs") or []):
+                j["worker"] = "embedded"
+                out[j.get("id")] = j
+        except Exception as exc:
+            logger.warning("fleet_jobs: embedded runner unreachable (%s)", exc)
+        return out
+    for base in pool:
+        try:
+            resp = _runner_http("GET", "/internal/jobs", worker=base)
+            if resp is None or resp.status_code != 200:
+                continue
+            for j in ((resp.json() or {}).get("jobs") or []):
+                j["worker"] = base
+                out[j.get("id")] = j
+        except Exception as exc:
+            logger.warning("fleet_jobs: %s unreachable (%s)", base, exc)
+    return out
 
 
 def _runner_http(method: str, path: str, json_body=None, worker: str = None):

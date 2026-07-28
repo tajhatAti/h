@@ -44,11 +44,11 @@ def running_runner_ids() -> set:
     """
     try:
         from services import runner_client
-        resp = runner_client._runner_http("GET", "/internal/jobs")
-        if resp.status_code != 200:
-            return set()
+        # Fleet-wide: asking only worker #1 would miss every job placed on an
+        # overflow worker, and an abuse limit that cannot see half the jobs is
+        # not a limit.
         return {
-            j["id"] for j in resp.json().get("jobs", [])
+            jid for jid, j in runner_client.fleet_jobs().items()
             if str(j.get("status", "")).lower() in _ACTIVE_STATES
         }
     except Exception as exc:  # noqa: BLE001
