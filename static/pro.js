@@ -3136,6 +3136,18 @@ function _reflectJobStatus(jobOrId) {
   _show(btnDet,  !!isSelected);
   _show(btnStop, isLive);
   _show(btnRest, isLive);
+
+  // Inspector: only meaningful with a job open. Hiding the toggle also
+  // closes the panel, so the third column can never be left stranded
+  // over an empty workspace.
+  const btnInsp = document.getElementById("btnInspector");
+  _show(btnInsp, !!isSelected);
+  if (!isSelected) {
+    document.body.classList.remove("rs-insp-open");
+    if (btnInsp) btnInsp.setAttribute("aria-expanded", "false");
+  } else if (document.body.classList.contains("rs-insp-open")) {
+    renderInspector();
+  }
   // The action group itself disappears when nothing is open, instead of
   // leaving an empty bordered shell in the header.
   const seg = document.getElementById("rsJobActions");
@@ -3181,6 +3193,110 @@ function _reflectJobStatus(jobOrId) {
     else if (stKey === "crashed" || stKey === "install_failed") dot.classList.add("crashed");
     else if (stKey === "starting" || stKey === "installing")   dot.classList.add("running"); // amber-ish via animation; keep pulse
     dot.title = st.label;
+  }
+}
+
+/* ============================================================
+   INSPECTOR  ·  desktop third column / mobile bottom sheet
+   Renders ONLY fields the runner actually returns from _job_public():
+   status, uptime_s, restarts, port, cpu_pct, mem_mb, env_keys,
+   web_slug, language. A field that is absent renders an em dash — it
+   never falls back to a plausible-looking number, because a made-up
+   metric is worse than a visibly missing one.
+   ============================================================ */
+function _fmtUptime(sec) {
+  sec = Number(sec) || 0;
+  if (sec <= 0) return "—";
+  const d = Math.floor(sec / 86400);
+  const h = Math.floor((sec % 86400) / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  if (d) return `${d}d ${h}h`;
+  if (h) return `${h}h ${m}m`;
+  if (m) return `${m}m ${sec % 60}s`;
+  return `${sec}s`;
+}
+
+function _inspSet(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = (value === undefined || value === null || value === "")
+    ? "—" : String(value);
+}
+
+/* Memory has no fixed ceiling we can trust, so the bar is scaled against a
+   512 MB reference (Render's free tier) purely for a sense of magnitude —
+   the exact MB is always printed next to it. */
+const _INSP_MEM_REF_MB = 512;
+
+function _inspMeter(barId, valId, value, unit, pct) {
+  const bar = document.getElementById(barId);
+  const val = document.getElementById(valId);
+  const has = typeof value === "number" && isFinite(value);
+  if (val) val.textContent = has ? `${value}${unit}` : "—";
+  if (!bar) return;
+  const w = has ? Math.max(0, Math.min(100, pct)) : 0;
+  bar.style.width = w + "%";
+  bar.classList.toggle("warn", has && w >= 70 && w < 90);
+  bar.classList.toggle("hot",  has && w >= 90);
+}
+
+function renderInspector() {
+  const panel = document.getElementById("wbInspector");
+  if (!panel) return;
+  const job = (window._lastJobs || []).find(j => String(j.id) === String(_selectedJobId));
+  if (!job) return;
+
+  const st = _fmtStatus(job.status);
+  const stKey = String(job.status || "offline").toLowerCase();
+
+  const chip = document.getElementById("inspState");
+  if (chip) {
+    // Sentence case: the map is SHOUTING for the old badges, which reads as
+    // an alert in a calm panel.
+    const label = st.label || stKey;
+    chip.textContent = label.charAt(0) + label.slice(1).toLowerCase();
+    chip.className = "rs-chip is-" + stKey.replace(/[^a-z]/g, "");
+  }
+  _inspSet("inspUptime",   _fmtUptime(job.uptime_s));
+  _inspSet("inspRestarts", (job.restarts === undefined || job.restarts === null) ? "—" : job.restarts);
+  _inspSet("inspPort",     job.port || "—");
+  _inspSet("inspLang",     job.language || "—");
+
+  _inspMeter("inspCpuBar", "inspCpuVal", job.cpu_pct, "%", job.cpu_pct);
+  _inspMeter("inspMemBar", "inspMemVal", job.mem_mb, " MB",
+             (Number(job.mem_mb) / _INSP_MEM_REF_MB) * 100);
+
+  const link = document.getElementById("inspUrl");
+  if (link) {
+    const url = job.web_url || (job.web_slug ? `/live/${job.web_slug}/` : "");
+    if (url && job.web) {
+      link.textContent = job.web_slug || url;
+      link.href = url;
+      link.removeAttribute("aria-disabled");
+    } else {
+      link.textContent = "—";
+      link.removeAttribute("href");
+      link.setAttribute("aria-disabled", "true");
+    }
+  }
+
+  const keys = Array.isArray(job.env_keys) ? job.env_keys : [];
+  const cnt = document.getElementById("inspEnvCount");
+  if (cnt) cnt.textContent = String(keys.length);
+  const list = document.getElementById("inspEnvList");
+  if (list) {
+    if (!keys.length) {
+      list.innerHTML = '<p class="rs-insp-none">No variables set.</p>';
+    } else {
+      // textContent per node — a key is user data and must never be parsed
+      // as HTML.
+      list.textContent = "";
+      keys.forEach(k => {
+        const s = document.createElement("span");
+        s.className = "rs-env-key";
+        s.textContent = k;
+        list.appendChild(s);
+      });
+    }
   }
 }
 
@@ -3316,6 +3432,10 @@ async function fetchJobDetail(id, opts) {
     // If the detail drawer is open, re-render it with the new job's data so
     // clicking a different job in the sidebar swaps the drawer content too.
     if (_jdOpen) { renderJobDetails(); }
+    // Same tick as the Details page: the inspector reads the very job
+    // object that was just refreshed, so its numbers can never lag the
+    // header's status chip.
+    if (document.body.classList.contains("rs-insp-open")) renderInspector();
   } catch (e) {
     if (!_selectedJobId) _showEmpty(false);
   }
@@ -3365,6 +3485,8 @@ function restartLogStream(id) {
         const job = window._lastJobs.find(x => String(x.id) === String(id));
         if (job) { job.status = d.status; job.uptime_s = d.uptime_s; job.restarts = d.restarts; _reflectJobStatus(job); }
         if (_jdOpen && String(_selectedJobId) === String(id)) renderJobDetails();
+        if (document.body.classList.contains("rs-insp-open")
+            && String(_selectedJobId) === String(id)) renderInspector();
         const it = document.querySelector('#jobsList .job-item[data-jid="' + String(id).replace(/"/g,'\\"') + '"]');
         if (it) {
           it.classList.remove("running","crashed");
@@ -3626,6 +3748,37 @@ function _initWbWiring() {
     });
     _syncMenuBtn();
   }
+  // Inspector toggle — one control, two presentations (column / sheet).
+  const inspBtn = document.getElementById("btnInspector");
+  const inspClose = document.getElementById("wbInspClose");
+  const _syncInsp = () => {
+    const open = document.body.classList.contains("rs-insp-open");
+    if (inspBtn) inspBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    if (open) renderInspector();
+  };
+  if (inspBtn) {
+    inspBtn.addEventListener("click", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      document.body.classList.toggle("rs-insp-open");
+      _syncInsp();
+    });
+  }
+  if (inspClose) {
+    inspClose.addEventListener("click", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      document.body.classList.remove("rs-insp-open");
+      _syncInsp();
+    });
+  }
+  // Escape closes the sheet before anything else claims the key.
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (!document.body.classList.contains("rs-insp-open")) return;
+    if (document.body.classList.contains("rs-detail-open")) return;
+    document.body.classList.remove("rs-insp-open");
+    _syncInsp();
+  });
+
   // Breadcrumb root returns to the job list (and, on a phone, opens it).
   const crumbRoot = document.getElementById("rsCrumbRoot");
   if (crumbRoot) {

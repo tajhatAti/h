@@ -636,8 +636,11 @@
             </button>
           </div>
 
-          <button class="rs-ghost-btn rs-sq" id="btnJobDetails" title="Job details" hidden>
-            <svg viewBox="0 0 16 16" class="rs-ic-sm" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="6.2"/><path d="M8 5.2v3.4l2 1.3"/></svg>
+          <!-- Toggles the third column on desktop, the bottom sheet on mobile.
+               Same control, same data — only the presentation differs. -->
+          <button class="rs-ghost-btn rs-sq" id="btnInspector" title="Toggle inspector"
+                  aria-label="Toggle inspector" aria-expanded="false" aria-controls="wbInspector" hidden>
+            <svg viewBox="0 0 16 16" class="rs-ic-sm" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="1.4" y="2.4" width="13.2" height="11.2" rx="2"/><path d="M10.2 2.4v11.2"/></svg>
           </button>
           <button class="rs-ghost-btn rs-sq" id="btnDeselect" title="Close job" hidden>
             <svg viewBox="0 0 16 16" class="rs-ic-sm" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 4 4 12"/><path d="m4 4 8 8"/></svg>
@@ -766,6 +769,15 @@
 
             
           </div>
+
+          <!-- ============================================================
+               INSPECTOR  ·  the third column (desktop) / a sheet (mobile)
+               Everything here is a REAL field returned by the runner's
+               _job_public(): status, uptime_s, restarts, port, cpu_pct,
+               mem_mb, env_keys, web_slug, language. Nothing is invented —
+               a row that has no data renders an em dash instead of a
+               plausible-looking number.
+               ============================================================ -->
 
 <!-- ============================================================
                  JOB DETAILS PAGE  ·  /runspace/{user}/{job}/page
@@ -904,6 +916,67 @@
               </div>
             </section>
         </main>
+        <aside class="rs-insp" id="wbInspector" aria-label="Job inspector">
+          <div class="rs-insp-head">
+            <span class="rs-insp-title">Inspector</span>
+            <button type="button" class="rs-ghost-btn rs-sq rs-insp-close" id="wbInspClose"
+                    aria-label="Close inspector">
+              <svg viewBox="0 0 16 16" class="rs-ic-sm" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 4 4 12"/><path d="m4 4 8 8"/></svg>
+            </button>
+          </div>
+
+          <div class="rs-insp-scroll">
+            <section class="rs-insp-sec">
+              <h4 class="rs-insp-h">Status</h4>
+              <dl class="rs-kv">
+                <dt>State</dt>    <dd><span class="rs-chip" id="inspState">—</span></dd>
+                <dt>Uptime</dt>   <dd id="inspUptime">—</dd>
+                <dt>Restarts</dt> <dd id="inspRestarts">—</dd>
+                <dt>Port</dt>     <dd id="inspPort">—</dd>
+              </dl>
+            </section>
+
+            <section class="rs-insp-sec">
+              <h4 class="rs-insp-h">Resources</h4>
+              <div class="rs-meter">
+                <div class="rs-meter-top"><span>CPU</span><span id="inspCpuVal">—</span></div>
+                <div class="rs-meter-track"><i class="rs-meter-fill" id="inspCpuBar" style="width:0%"></i></div>
+              </div>
+              <div class="rs-meter">
+                <div class="rs-meter-top"><span>Memory</span><span id="inspMemVal">—</span></div>
+                <div class="rs-meter-track"><i class="rs-meter-fill" id="inspMemBar" style="width:0%"></i></div>
+              </div>
+            </section>
+
+            <section class="rs-insp-sec">
+              <h4 class="rs-insp-h">Runtime</h4>
+              <dl class="rs-kv">
+                <dt>Language</dt> <dd id="inspLang">—</dd>
+                <dt>Public URL</dt>
+                <dd><a class="rs-insp-link" id="inspUrl" href="#" target="_blank" rel="noopener">—</a></dd>
+              </dl>
+            </section>
+
+            <section class="rs-insp-sec">
+              <h4 class="rs-insp-h">Environment <span class="rs-count" id="inspEnvCount">0</span></h4>
+              <!-- Keys only. Values can hold bot tokens and the API never
+                   returns them, so this must never pretend to show one. -->
+              <div class="rs-insp-envs" id="inspEnvList">
+                <p class="rs-insp-none">No variables set.</p>
+              </div>
+            </section>
+
+            <!-- The Details page is the full-screen view of exactly what this
+                 panel summarises, so its entry point belongs here — not as a
+                 fifth identical icon square in the header. -->
+            <section class="rs-insp-sec rs-insp-more">
+              <button type="button" class="rs-insp-btn" id="btnJobDetails">
+                <span>Open full details</span>
+                <svg viewBox="0 0 16 16" class="rs-ic-sm" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3.5 10.5 8 6 12.5"/></svg>
+              </button>
+            </section>
+          </div>
+        </aside>
       </div>
     </div>
 
