@@ -4962,11 +4962,26 @@ async function loadAdminPanel(force) {
   }
 }
 
-/* Installed packages across the platform, most common first. */
+/* Installed packages, heaviest first.
+ *
+ * This used to be a popularity list ordered by count, with the owners hidden
+ * in a title= tooltip — which does not exist on a phone, so on mobile the
+ * panel answered nothing at all. On a 512MB box the question is never "which
+ * package is popular", it is "what is eating the memory and whose is it".
+ */
 function renderAdminLibs(data) {
   const el = document.getElementById("admLibs");
   if (!el) return;
   const rows = (data && data.libraries) || [];
+  const hint = document.getElementById("admLibsHint");
+  if (hint) {
+    // A job importing numpy AND requests adds its whole RSS to both rows, so
+    // this column does not sum to the platform total. Saying so is the
+    // difference between a useful signal and a wrong number.
+    hint.textContent = data && data.mem_attributed
+      ? `attributed memory — a job counts toward every package it imports · ${data.jobs_sampled || 0} job${data.jobs_sampled === 1 ? "" : "s"} sampled`
+      : "across running jobs";
+  }
   if (!rows.length) {
     el.innerHTML = '<div class="adm-empty">No packages recorded yet.</div>';
     return;
@@ -4977,21 +4992,46 @@ function renderAdminLibs(data) {
   rows.slice(0, 60).forEach(r => {
     const row = document.createElement("div");
     row.className = "adm-lib";
+
+    const main = document.createElement("div");
+    main.className = "adm-lib-main";
     const name = document.createElement("span");
     name.className = "adm-lib-name";
     name.textContent = r.library;
-    const count = document.createElement("span");
-    count.className = "adm-lib-count";
-    count.textContent = `${r.count} job${r.count === 1 ? "" : "s"} · ${r.pct_of_jobs}%`;
-    row.append(name, count);
+    main.appendChild(name);
     if (r.heavy || r.watch) {
       const tag = document.createElement("span");
       tag.className = "adm-lib-tag " + (r.watch ? "watch" : "heavy");
       // "review", not "abuse" — a flag is a prompt to look, not a verdict.
       tag.textContent = r.watch ? "review" : "heavy";
-      row.appendChild(tag);
+      main.appendChild(tag);
     }
-    row.title = (r.jobs || []).map(j => `${j.owner}/${j.name}`).join(", ");
+
+    // The owners, ON the row rather than in a tooltip. Each one opens the app
+    // it belongs to, so "numpy is holding 240MB" leads somewhere.
+    const who = document.createElement("div");
+    who.className = "adm-lib-who";
+    (r.jobs || []).slice(0, 6).forEach((j, i) => {
+      if (i) who.append(document.createTextNode(", "));
+      const a = document.createElement("a");
+      a.className = "adm-link";
+      a.href = "#";
+      a.textContent = `${j.owner}/${j.name}`;
+      a.onclick = (e) => { e.preventDefault(); openAdminJob(j.job_id); };
+      who.appendChild(a);
+    });
+    if ((r.jobs || []).length > 6) {
+      who.append(document.createTextNode(` +${r.jobs.length - 6} more`));
+    }
+    main.appendChild(who);
+
+    const count = document.createElement("span");
+    count.className = "adm-lib-count";
+    count.textContent = r.mem_mb != null
+      ? `${Math.round(r.mem_mb)}MB · ${r.count} job${r.count === 1 ? "" : "s"}`
+      : `${r.count} job${r.count === 1 ? "" : "s"} · ${r.pct_of_jobs}%`;
+
+    row.append(main, count);
     el.appendChild(row);
   });
 }
@@ -5169,10 +5209,15 @@ function renderAdminJobDetail(d) {
     s.textContent = "suspended";
     ownerCell.append(" ", s);
   }
-  const count = document.createElement("span");
-  count.className = "adm-hint";
-  count.textContent = `${j.owner_job_count || 0} app${j.owner_job_count === 1 ? "" : "s"} on this account`;
-  ownerCell.append(document.createElement("br"), count);
+  // Now that the per-account view exists, this is a way through to it: "one
+  // heavy app" and "this account is the load" are different findings and the
+  // console should let you tell them apart in one click.
+  const link = document.createElement("a");
+  link.className = "adm-link";
+  link.href = "#";
+  link.textContent = `${j.owner_job_count || 0} app${j.owner_job_count === 1 ? "" : "s"} on this account →`;
+  link.onclick = (e) => { e.preventDefault(); closeModal("admJobModal"); openAdminUser(j.user_id); };
+  ownerCell.append(document.createElement("br"), link);
 
   t.append(
     _admRow("Owner", ownerCell),
@@ -5228,10 +5273,198 @@ function renderAdminUsers(users) {
       const act = isMe
         ? '<span class="adm-hint">you</span>'
         : `<button class="adm-act${u.is_suspended ? " ok" : ""}" onclick="askSuspend(${u.id}, ${u.is_suspended ? 0 : 1}, this)">${u.is_suspended ? "Reactivate" : "Suspend"}</button>`;
-      return `<tr><td><b>${escapeHtml(u.username)}</b><small>${escapeHtml(u.email)}</small></td>` +
+      // The Suspend button lives inside the row, so its click must not also
+      // open the drill-down behind the confirm modal.
+      return `<tr tabindex="0" role="button" onclick="if(!event.target.closest('.adm-act'))openAdminUser(${u.id})" ` +
+        `onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAdminUser(${u.id});}">` +
+        `<td><b>${escapeHtml(u.username)}</b><small>${escapeHtml(u.email)}</small></td>` +
         `<td>${escapeHtml((u.created_at || "").slice(0, 10))}</td>` +
         `<td>${u.job_count}</td><td>${state}</td><td>${act}</td></tr>`;
     }).join("");
+}
+
+/* ---------- per-account drill-down ---------- */
+
+async function openAdminUser(userId) {
+  const body = document.getElementById("admUserBody");
+  if (!body) return;
+  document.getElementById("admUserTitle").textContent = "Loading…";
+  body.textContent = "";
+  openModal("admUserModal");
+  let d;
+  try {
+    d = await api("/admin/users/" + userId, "GET", null, true);
+  } catch (e) {
+    body.innerHTML = '<div class="adm-empty">Nothing here.</div>';
+    return;
+  }
+  renderAdminUserDetail(d);
+}
+
+function renderAdminUserDetail(d) {
+  const u = (d && d.user) || {};
+  const body = document.getElementById("admUserBody");
+  if (!body) return;
+  document.getElementById("admUserTitle").textContent = u.username || "Account";
+  body.textContent = "";
+
+  const head = document.createElement("div");
+  head.className = "adm-jd-head";
+  const pill = document.createElement("span");
+  pill.className = "adm-pill" + (u.is_suspended ? " warn" : (u.is_verified ? " ok" : ""));
+  pill.textContent = u.is_suspended ? "suspended" : (u.is_verified ? "active" : "unverified");
+  head.appendChild(pill);
+  if (u.is_admin) {
+    const a = document.createElement("span");
+    a.className = "adm-pill";
+    a.textContent = "admin";
+    head.appendChild(a);
+  }
+  body.appendChild(head);
+
+  const t = document.createElement("table");
+  t.className = "adm-table adm-jd-table";
+  t.append(
+    _admRow("Email", u.email),
+    // Inferred from which credential exists — there is no auth_method column,
+    // and presenting a guess as a recorded fact is how a console starts lying.
+    _admRow("Signed up via", u.auth_method
+      ? u.auth_method + (u.auth_method_inferred ? " (inferred)" : "") : "—"),
+    _admRow("Joined", (u.created_at || "").slice(0, 16)),
+    _admRow("Apps", `${(d.jobs || []).length} total · ${d.jobs_running || 0} running`),
+    _admRow("Memory", `${Math.round(d.mem_used_mb || 0)}MB across their running apps`),
+    _admRow("Devices seen", `${d.devices || 0} device${d.devices === 1 ? "" : "s"} · ${d.networks || 0} network${d.networks === 1 ? "" : "s"}`),
+    _admRow("Last IP", u.last_ip),
+  );
+  body.appendChild(t);
+
+  // ---- their apps, each openable ----
+  body.appendChild(_admSubhead("Apps", "tap one for its full detail"));
+  if (!(d.jobs || []).length) {
+    body.appendChild(_admEmpty("No apps on this account."));
+  } else {
+    const jt = document.createElement("table");
+    jt.className = "adm-table clickable";
+    jt.innerHTML = "<tr><th>App</th><th>Status</th><th>Memory</th></tr>";
+    d.jobs.forEach(j => {
+      const tr = document.createElement("tr");
+      tr.setAttribute("role", "button");
+      tr.tabIndex = 0;
+      const open = () => { closeModal("admUserModal"); openAdminJob(j.id); };
+      tr.onclick = open;
+      tr.onkeydown = (e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); }
+      };
+      const c1 = document.createElement("td");
+      const b = document.createElement("b");
+      b.textContent = j.name;
+      const sm = document.createElement("small");
+      sm.textContent = j.language || "";
+      c1.append(b, sm);
+      const st = (j.live_status || "stopped").toLowerCase();
+      const c2 = document.createElement("td");
+      const p = document.createElement("span");
+      p.className = "adm-pill" + (st === "running" ? " ok" : "");
+      p.textContent = st;
+      c2.appendChild(p);
+      const c3 = document.createElement("td");
+      c3.textContent = j.mem_mb != null ? `${Math.round(j.mem_mb)}MB` : "—";
+      tr.append(c1, c2, c3);
+      jt.appendChild(tr);
+    });
+    body.appendChild(jt);
+  }
+
+  // ---- other accounts on the same device/network ----
+  // The reason a per-user view exists on a free host: one person running six
+  // accounts is invisible in a user list and obvious here.
+  const linked = d.linked_accounts || [];
+  body.appendChild(_admSubhead(
+    `Linked accounts (${linked.length})`,
+    linked.length ? "same device or network" : ""));
+  if (!linked.length) {
+    body.appendChild(_admEmpty("No other account shares this device or IP."));
+  } else {
+    const note = document.createElement("div");
+    note.className = "adm-jd-why neutral";
+    // A shared IP is a household, an office or a mobile carrier as often as
+    // it is a farm. Stating that stops the panel reading as an accusation.
+    note.textContent = d.linked_note || "";
+    body.appendChild(note);
+    const lt = document.createElement("table");
+    lt.className = "adm-table clickable";
+    lt.innerHTML = "<tr><th>Account</th><th>Joined</th><th>Status</th></tr>";
+    linked.forEach(o => {
+      const tr = document.createElement("tr");
+      tr.setAttribute("role", "button");
+      tr.tabIndex = 0;
+      const open = () => openAdminUser(o.id);
+      tr.onclick = open;
+      tr.onkeydown = (e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); }
+      };
+      const c1 = document.createElement("td");
+      const b = document.createElement("b");
+      b.textContent = o.username;
+      const sm = document.createElement("small");
+      sm.textContent = o.email || "";
+      c1.append(b, sm);
+      const c2 = document.createElement("td");
+      c2.textContent = (o.created_at || "").slice(0, 10);
+      const c3 = document.createElement("td");
+      const p = document.createElement("span");
+      p.className = "adm-pill" + (o.is_suspended ? " warn" : "");
+      p.textContent = o.is_suspended ? "suspended" : "active";
+      c3.appendChild(p);
+      tr.append(c1, c2, c3);
+      lt.appendChild(tr);
+    });
+    body.appendChild(lt);
+  }
+
+  // ---- login history ----
+  body.appendChild(_admSubhead("Recent logins", "IP and device, newest first"));
+  const sessions = (d.sessions || []).slice(0, 12);
+  if (!sessions.length) {
+    body.appendChild(_admEmpty("No sessions recorded."));
+  } else {
+    const stb = document.createElement("table");
+    stb.className = "adm-table";
+    stb.innerHTML = "<tr><th>When</th><th>IP</th><th>Device</th></tr>";
+    sessions.forEach(sv => {
+      const tr = document.createElement("tr");
+      [(sv.created_at || "").slice(0, 16), sv.ip_address || "—",
+       sv.device_info || "—"].forEach(v => {
+        const td = document.createElement("td");
+        td.textContent = v;
+        tr.appendChild(td);
+      });
+      stb.appendChild(tr);
+    });
+    body.appendChild(stb);
+  }
+}
+
+function _admSubhead(title, hint) {
+  const h = document.createElement("div");
+  h.className = "adm-panel-head adm-jd-sub";
+  const t = document.createElement("h3");
+  t.textContent = title;
+  h.appendChild(t);
+  if (hint) {
+    const s = document.createElement("span");
+    s.className = "adm-hint";
+    s.textContent = hint;
+    h.appendChild(s);
+  }
+  return h;
+}
+
+function _admEmpty(text) {
+  const e = document.createElement("div");
+  e.className = "adm-empty";
+  e.textContent = text;
+  return e;
 }
 
 function renderAdminReports(reports) {

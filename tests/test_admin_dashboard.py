@@ -260,6 +260,73 @@ check("auth method is marked inferred", tg["user"]["auth_method_inferred"] is Tr
 check("a missing user is 404, not 500", c.get("/admin/users/9999", headers=AH).status_code == 404)
 
 # ---------------------------------------------------------------------------
+print("[5b] memory attribution + linked accounts, from real rows")
+# ---------------------------------------------------------------------------
+# Packages used to be ordered by COUNT, which on a 512MB box ranks trivia
+# above the thing holding the RAM.
+lib2 = c.get("/admin/libraries", headers=AH).json()
+check("the response flags memory as attributed", lib2.get("mem_attributed") is True)
+check("every package carries a memory figure",
+      all("mem_mb" in e for e in lib2["libraries"]), str(lib2["libraries"][:1]))
+check("the figure is the real measured RSS of the importing job",
+      all(e["mem_mb"] > 0 for e in lib2["libraries"]), str([e["mem_mb"] for e in lib2["libraries"]]))
+check("ordering is by memory, not by name or count",
+      [e["mem_mb"] for e in lib2["libraries"]] ==
+      sorted([e["mem_mb"] for e in lib2["libraries"]], reverse=True),
+      str([(e["library"], e["mem_mb"]) for e in lib2["libraries"]]))
+check("each entry names the jobs, with their memory",
+      all(e["jobs"] and "mem_mb" in e["jobs"][0] for e in lib2["libraries"]))
+# One job importing three packages contributes its whole RSS to all three, so
+# the column MUST over-sum. If it ever equalled the platform total, the
+# attribution would be silently wrong.
+attributed = sum(e["mem_mb"] for e in lib2["libraries"])
+one_job_mem = jb["mem_mb"]
+check("attributed memory over-sums, exactly as the label warns",
+      attributed > one_job_mem * 2, f"{attributed} vs {one_job_mem}")
+
+# A second account on the SAME device fingerprint — the thing this view exists
+# to surface. Written as real rows, then read back through the route.
+conn = DB.get_db_connection()
+conn.execute("UPDATE users SET fingerprint = ?, last_ip = ? WHERE id = 1",
+             ("fp-shared", "203.0.113.9"))
+conn.execute("INSERT INTO users (username,email,password,is_verified,fingerprint,"
+             "last_ip,created_at,updated_at) VALUES (?,?,?,1,?,?,?,?)",
+             ("twin", "twin@gmail.com", _h, "fp-shared", "203.0.113.9",
+              now_utc_str(), now_utc_str()))
+conn.execute("INSERT INTO users (username,email,password,is_verified,fingerprint,"
+             "last_ip,created_at,updated_at) VALUES (?,?,?,1,?,?,?,?)",
+             ("stranger", "stranger@gmail.com", _h, "fp-other", "198.51.100.4",
+              now_utc_str(), now_utc_str()))
+conn.commit()
+conn.close()
+
+dd = c.get("/admin/users/1", headers=AH).json()
+names = [a["username"] for a in dd.get("linked_accounts", [])]
+check("an account sharing the device fingerprint is surfaced", "twin" in names, str(names))
+check("an unrelated account is NOT", "stranger" not in names, str(names))
+check("the account never lists itself", "boss" not in names, str(names))
+check("the shared-network caveat travels with the data",
+      "prompt to look, not proof" in (dd.get("linked_note") or ""), str(dd.get("linked_note")))
+check("distinct devices are counted from real sessions",
+      dd.get("devices") is not None and dd.get("networks", 0) >= 1,
+      f"devices={dd.get('devices')} networks={dd.get('networks')}")
+# ids: 1 boss, 2 normie, 3 tguser, 4 twin, 5 stranger. Resolve by NAME — I
+# hardcoded 4 first and asserted "no links" against twin, which shares the
+# fingerprint on purpose, so the test was wrong rather than the route.
+conn = DB.get_db_connection()
+_sid = dict(conn.execute("SELECT id FROM users WHERE username='stranger'").fetchone())["id"]
+_tid = dict(conn.execute("SELECT id FROM users WHERE username='twin'").fetchone())["id"]
+conn.close()
+check("an unrelated account reports no links",
+      c.get(f"/admin/users/{_sid}", headers=AH).json().get("linked_accounts") == [],
+      str(c.get(f"/admin/users/{_sid}", headers=AH).json().get("linked_accounts")))
+check("the link is symmetric — twin sees boss too",
+      "boss" in [a["username"] for a in
+                 c.get(f"/admin/users/{_tid}", headers=AH).json().get("linked_accounts", [])])
+check("the drill-down is still 404 for a non-admin",
+      c.get("/admin/users/1", headers=NH).status_code == 404)
+
+# ---------------------------------------------------------------------------
 print("[6] live updates are bounded")
 # ---------------------------------------------------------------------------
 check("polling exists", "_admSetPolling" in js)

@@ -284,13 +284,53 @@ def admin_user_detail_route(user_id: int, authorization: Optional[str] = Header(
         j["libs"] = info.get("libs") or []
         total_mem += float(info.get("mem_mb") or 0)
 
+    # Distinct devices and networks this account has logged in from. The raw
+    # session list already carried these, but a 50-row table does not answer
+    # "is this one person or a farm" — a count does.
+    fps = {(sdict.get("fingerprint") or "").strip()
+           for sdict in sessions if (sdict.get("fingerprint") or "").strip()}
+    ips = {(sdict.get("ip_address") or "").strip()
+           for sdict in sessions if (sdict.get("ip_address") or "").strip()}
+
+    # OTHER accounts reachable from the same device or network. This is the
+    # whole point of a per-user view on a free host: one person with six
+    # accounts is invisible in a user list and obvious here.
+    siblings = []
+    try:
+        conn = get_db_connection()
+        try:
+            ids = limits.cluster_user_ids(
+                conn,
+                fingerprint=(user.get("fingerprint") or ""),
+                ip=(user.get("last_ip") or ""),
+            )
+            ids.discard(user_id)
+            for other in sorted(ids)[:20]:
+                r = conn.execute(
+                    "SELECT id, username, email, is_suspended, created_at FROM users WHERE id = ?",
+                    (other,),
+                ).fetchone()
+                if r:
+                    siblings.append(dict(r))
+        finally:
+            conn.close()
+    except Exception as exc:
+        logger.warning("admin user detail: cluster lookup failed for %s (%s)", user_id, exc)
+
     return {
         "user": user,
         "jobs": jobs,
         "jobs_running": sum(1 for j in jobs if j.get("live_status") == "running"),
         "mem_used_mb": round(total_mem, 1),
         "sessions": sessions,
+        "devices": len(fps),
+        "networks": len(ips),
         "events": events,
+        "linked_accounts": siblings,
+        # Shared IP is weak evidence on its own — a household, an office and a
+        # mobile carrier all look like this. Said here so the console can
+        # phrase it as a prompt to look rather than as a verdict.
+        "linked_note": "Same device fingerprint or IP. Shared networks are common; this is a prompt to look, not proof.",
     }
 
 
@@ -473,26 +513,44 @@ def admin_libraries_route(authorization: Optional[str] = Header(None)):
     counts = {}
     for rid, j in live.items():
         m = meta.get(rid) or {}
+        # RAM held by the jobs that imported this package. A count answers
+        # "how popular", which is trivia on a 512MB box; the question that
+        # actually decides anything is "what is eating the memory".
+        # ATTRIBUTED, NOT CAUSED: a job importing both numpy and requests adds
+        # its full RSS to both, so the column does not sum to the platform
+        # total and must never be presented as if it did.
+        mem = float(j.get("mem_mb") or 0.0)
         for lib in (j.get("libs") or []):
-            e = counts.setdefault(lib, {"library": lib, "count": 0, "jobs": []})
+            e = counts.setdefault(lib, {"library": lib, "count": 0,
+                                        "mem_mb": 0.0, "jobs": []})
             e["count"] += 1
+            e["mem_mb"] += mem
             e["jobs"].append({
                 "job_id": m.get("id"),
                 "name": m.get("name") or j.get("name"),
                 "owner": m.get("owner"),
+                "mem_mb": round(mem, 1),
+                "status": j.get("status"),
             })
 
-    out = sorted(counts.values(), key=lambda e: (-e["count"], e["library"]))
+    # Sorted by MEMORY, not by count: the top of this list should be the thing
+    # worth looking at, and a package in 6 tiny bots is not that.
+    out = sorted(counts.values(), key=lambda e: (-e["mem_mb"], -e["count"], e["library"]))
     for e in out:
         name = e["library"].lower()
         e["heavy"] = name in HEAVY
         e["watch"] = name in WATCH
+        e["mem_mb"] = round(e["mem_mb"], 1)
+        e["jobs"].sort(key=lambda x: -(x["mem_mb"] or 0))
     total_jobs = len(live) or 1
     for e in out:
         e["pct_of_jobs"] = round(e["count"] / total_jobs * 100)
     return {
         "libraries": out,
         "jobs_sampled": len(live),
+        # Named so the UI cannot accidentally present attributed memory as a
+        # breakdown that adds up.
+        "mem_attributed": True,
         # Stated plainly: only RUNNING jobs report their packages, because the
         # list lives on the runner's in-memory record. A stopped job's
         # libraries are not known, and pretending otherwise would make the

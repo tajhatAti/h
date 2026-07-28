@@ -1840,21 +1840,30 @@ a:not(.btn-primary):not(.btn-secondary):not(.btn-ghost):not(.jd-btn):not(.link):
 
 /* Admin · installed-package list. Neutral rows; only the review flag carries
    colour, because only it means something. */
+/* A package row now carries the owners inline instead of in a title= tooltip,
+   which does not exist on a phone — on mobile the panel used to answer
+   nothing at all. */
+.adm-jd-sub { margin: 18px 0 8px; }
+.adm-jd-why.neutral { border-left-color: var(--line-2); }
+
 .adm-libs { display: flex; flex-direction: column; }
 .adm-lib {
-  display: flex; align-items: center; gap: 10px;
-  padding: 7px 12px;
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 9px 12px;
   border-bottom: 1px solid var(--line);
   font-size: 12.5px;
 }
 .adm-lib:last-child { border-bottom: 0; }
+.adm-lib-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.adm-lib-who { font-size: 11.5px; color: var(--muted); line-height: 1.5; word-break: break-word; }
+.adm-lib-who .adm-link { font-size: 11.5px; }
 .adm-lib-name {
-  flex: 1; min-width: 0;
+  min-width: 0;
   font-family: var(--mono);
   color: var(--ink);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.adm-lib-count { color: var(--muted); white-space: nowrap; }
+.adm-lib-count { color: var(--muted); white-space: nowrap; align-self: flex-start; padding-top: 1px; }
 .adm-lib-tag {
   padding: 1px 8px; border-radius: 999px;
   font-size: 11px; font-weight: 500; white-space: nowrap;
