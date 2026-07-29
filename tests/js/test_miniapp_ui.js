@@ -175,19 +175,32 @@ const okFetch = (url, opts) => {
 
   // ── 5. the boot path in pro.js ────────────────────────────────────────
   console.log('[5] the app signs in before choosing a screen');
-  const bootSeg = PRO.slice(PRO.indexOf('window.__tgAutoLogin()'),
-                            PRO.indexOf('window.__tgAutoLogin()') + 1200);
+  // Slice the WHOLE branch. Anchoring on window.__tgAutoLogin() used to work
+  // when that call was the first line; it is now near the end, so the slice
+  // ran past the branch and into unrelated boot code.
+  const bootSeg = PRO.slice(PRO.indexOf('if (window.__inTelegram) {'),
+                            PRO.indexOf('// ---- Boot: decide the screen SYNCHRONOUSLY'));
   ok('success goes straight to the dashboard',
      /showScreen\("screen-dashboard"\)/.test(bootSeg));
-  ok('failure falls back to the normal login screen',
-     /showScreen\("screen-landing"\)/.test(bootSeg));
-  ok('a thrown error does too', bootSeg.split('screen-landing').length >= 3);
-  ok('the splash is cleared either way', /finally/.test(bootSeg));
+  // The old shape sent failures to screen-landing. That was the bug: a Mini
+  // App user must never be shown a way to log in, because they already are.
+  // Comments in the branch explain the old bug by name, so strip them before
+  // asserting that the CODE no longer does it.
+  const bootCode = bootSeg.replace(/\/\/.*$/gm, '');
+  ok('failure shows a retry instead of a login screen',
+     /_tgFatal\(/.test(bootCode) && !/showScreen\("screen-landing"\)/.test(bootCode),
+     (bootCode.match(/showScreen\([^)]*\)/g) || []).join(','));
+  ok('and the dashboard is what renders underneath',
+     /showScreen\("screen-dashboard"\)/.test(bootSeg));
+  ok('the splash is cleared on every path',
+     (bootSeg.match(/done\(\)/g) || []).length >= 3, bootSeg.slice(0, 120));
   ok('it runs BEFORE the synchronous screen decision',
      PRO.indexOf('window.__tgAutoLogin()') <
      PRO.indexOf('// ---- Boot: decide the screen SYNCHRONOUSLY'));
-  ok('and only when there is no session yet', /&& !authToken\)/.test(
-     PRO.slice(PRO.indexOf('window.__inTelegram'), PRO.indexOf('window.__tgAutoLogin()'))));
+  // An existing session must short-circuit: re-authenticating on every open
+  // would create a session row each time.
+  ok('an existing session skips the round-trip',
+     /if \(authToken\) \{ go\(\); done\(\); return; \}/.test(bootSeg), bootSeg.slice(-500));
 
   // ── 6. visual adaptation ──────────────────────────────────────────────
   console.log('[6] redundant browser chrome is hidden, nothing is rebuilt');
@@ -210,6 +223,107 @@ const okFetch = (url, opts) => {
      !/\/api\/jobs|\/internal\//.test(SRC));
   ok('the SDK is loaded from Telegram\'s own origin',
      /https:\/\/telegram\.org\/js\/telegram-web-app\.js/.test(HTML));
+
+  // ── 8. NO AUTH SCREEN INSIDE TELEGRAM, EVER ───────────────────────────
+  console.log('[8] a Mini App user never sees a login form');
+
+  // THE REPORTED BUG: the Mini App showed "Create Account". Two causes.
+  //   (a) telegram-web-app.js is fetched from telegram.org. When it is slow or
+  //       blocked, window.Telegram never exists, __inTelegram was false, and
+  //       boot fell through to routeFromUrl() on /dashboard — a PROTECTED
+  //       route — which redirects an unauthenticated visit to screen-signin.
+  //   (b) the failure branch itself called showScreen("screen-landing").
+  const DATA = 'user=%7B%22id%22%3A5%7D&auth_date=1&hash=x';
+
+  function bootPage({ sdk, hash }) {
+    const dd = new JSDOM(HTML, {
+      pretendToBeVisual: true, runScripts: 'dangerously',
+      url: 'https://ahadorg.onrender.com/dashboard' + (hash || ''),
+    });
+    const ww = dd.window;
+    if (sdk !== null) {
+      ww.Telegram = { WebApp: { initData: sdk, themeParams: {}, colorScheme: 'dark',
+        viewportStableHeight: 640, ready() {}, expand() {}, onEvent() {} } };
+    }
+    const style = ww.document.createElement('style');
+    style.textContent = CSS; ww.document.head.appendChild(style);
+    const sc = ww.document.createElement('script');
+    sc.textContent = SRC; ww.document.body.appendChild(sc);
+    return ww;
+  }
+
+  function signinReachable(ww) {
+    const e = ww.document.getElementById('screen-signin');
+    if (!e) return false;
+    e.classList.add('active');
+    e.style.display = 'block';
+    return ww.getComputedStyle(e).display !== 'none';
+  }
+
+  // Telegram appends #tgWebAppData to the webview URL itself — no third-party
+  // script involved — so this signal survives a blocked SDK.
+  const blocked = bootPage({ sdk: null, hash: '#tgWebAppData=' + encodeURIComponent(DATA) });
+  ok('a blocked SDK is still recognised as Telegram', blocked.__inTelegram === true);
+  ok('and the payload is read from the URL fragment',
+     blocked.__tgInitData === DATA, String(blocked.__tgInitData).slice(0, 40));
+  ok('auto-login is still available', typeof blocked.__tgAutoLogin === 'function');
+  ok('the sign-in screen is unreachable', !signinReachable(blocked));
+
+  const normal = bootPage({ sdk: DATA });
+  ok('with the SDK it is recognised too', normal.__inTelegram === true);
+  ok('and the sign-in screen is unreachable there as well', !signinReachable(normal));
+  ok('the document is marked so CSS can enforce it',
+     normal.document.documentElement.classList.contains('tg-no-auth'));
+
+  // Every auth surface, not just sign-in — a Create Account screen is the one
+  // that was actually reported.
+  ['screen-signup', 'screen-otp', 'screen-forgot1'].forEach((id) => {
+    const e = normal.document.getElementById(id);
+    if (!e) return;
+    e.classList.add('active'); e.style.display = 'block';
+    ok(`${id} is unreachable inside Telegram`,
+       normal.getComputedStyle(e).display === 'none');
+  });
+
+  // A normal browser must be completely unaffected.
+  const web = bootPage({ sdk: null });
+  ok('a plain browser is NOT treated as Telegram', web.__inTelegram === false);
+  ok('it is not marked tg-no-auth',
+     !web.document.documentElement.classList.contains('tg-no-auth'));
+  ok('and its sign-in screen still works', signinReachable(web));
+  const webSdk = bootPage({ sdk: '' });
+  ok('the SDK loading in a browser tab changes nothing',
+     webSdk.__inTelegram === false && signinReachable(webSdk));
+
+  console.log('[9] the boot branch cannot route to an auth screen');
+  const branch = PRO.slice(PRO.indexOf('if (window.__inTelegram) {'),
+                           PRO.indexOf('// ---- Boot: decide the screen SYNCHRONOUSLY'));
+  // Strip comments first: the branch DESCRIBES the bug it fixes, and matching
+  // that prose would fail on a correct implementation.
+  const branchCode = branch.replace(/\/\/.*$/gm, '');
+  ok('no auth screen is named anywhere in the actual code',
+     !/screen-(signin|signup|landing|otp|forgot)/.test(branchCode),
+     (branchCode.match(/screen-\w+/g) || []).join(','));
+  ok('routeFromUrl runs only once a token exists',
+     /if \(authToken\) \{ try \{ routeFromUrl\(\)/.test(branch));
+  ok('failure shows a retry, not a form', /_tgFatal\(/.test(branch));
+  ok('and the retry text offers to try again',
+     /Couldn't connect/.test(branch), branch.slice(-400));
+  ok('a missing miniapp.js still lands on the dashboard',
+     /typeof window\.__tgAutoLogin !== "function"/.test(branch));
+
+  // The website half must be untouched.
+  console.log('[10] the website keeps its own Sign in / Sign out');
+  const plain = new JSDOM(HTML).window.document;
+  const navBtns = [...plain.querySelectorAll('.nav-cta button')].map(b => b.textContent.trim());
+  ok('the navbar still has Sign in', navBtns.includes('Sign in'), navBtns.join(','));
+  ok('and Get started', navBtns.some(t => /Get started/i.test(t)), navBtns.join(','));
+  ok('the sign-out button still exists', !!plain.getElementById('btnLogout'));
+  ok('the e-mail sign-in form is still in the page',
+     !!plain.getElementById('formSignin'));
+  ok('so is the Telegram login slot', !!plain.getElementById('telegramLoginBtn'));
+  ok('sign-out is only hidden by the Telegram class, not deleted',
+     /html\.tg-hide-signout #btnLogout/.test(CSS));
 
   console.log(`\ntest_miniapp_ui: ${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

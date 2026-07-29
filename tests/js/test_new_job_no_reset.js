@@ -87,8 +87,18 @@ ok('_setJobsStatus still hides the workspace (so the guard matters)',
 
 // ── 2. no full-page reload anywhere on this path ────────────────────────
 console.log('[2] no page-reload triggers');
+// The bug this guards: a background poll reloading the page and wiping an
+// editor the user was typing in. So the rule is that every navigation must be
+// USER-INITIATED and accounted for by name, not that there are exactly two.
 const navCalls = [...SRC.matchAll(/location\.(reload|href|replace|assign)/g)].length;
-ok('codebase has only the 2 deliberate navigations', navCalls === 2, String(navCalls));
+ok('codebase has only the 3 deliberate navigations', navCalls === 3, String(navCalls));
+// 1. account deletion -> home. 2. the 401 double-fail recovery.
+// 3. the Mini App's "Try again" button, which is a click handler: it can only
+//    fire when the user presses it, never from a timer or a poll.
+ok('the third one is a click handler, not a timer',
+   /b\.onclick = \(\) => location\.reload\(\);/.test(SRC));
+ok('and it belongs to the Mini App retry, which replaces a login screen',
+   /_tgFatal[\s\S]{0,600}b\.onclick = \(\) => location\.reload\(\)/.test(SRC));
 ok('neither is inside loadJobs', !/location\.(reload|href)/.test(loadJobs));
 ok('none in the New-job handler',
    !/location\.(reload|href)/.test(extract('_initWbWiring') || ''));

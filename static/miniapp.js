@@ -14,13 +14,47 @@
 
   const TG = window.Telegram && window.Telegram.WebApp;
 
-  /* Presence of the SDK object is not enough: telegram-web-app.js defines
-   * window.Telegram.WebApp on ANY page that loads it, including a plain
-   * browser tab, where initData is an empty string. Treating that as "inside
-   * Telegram" would hide the login screen from a normal visitor and leave
-   * them staring at nothing. */
-  const inTelegram = !!(TG && typeof TG.initData === "string" && TG.initData.length > 0);
+  /* TWO INDEPENDENT SIGNALS, because relying on the SDK alone is what broke.
+   *
+   * 1. TG.initData — authoritative when telegram-web-app.js has loaded.
+   * 2. The URL Telegram itself appends: it adds #tgWebAppData=... (and
+   *    tgWebAppPlatform / tgWebAppVersion) to the webview URL. That is
+   *    present the instant the page starts parsing, with no third-party
+   *    script involved.
+   *
+   * THE BUG: only signal 1 existed. telegram-web-app.js is fetched from
+   * telegram.org, so when it is slow or blocked, __inTelegram was false, boot
+   * fell through to routeFromUrl() on /dashboard — a protected route — and the
+   * user got a Sign in / Create account screen INSIDE Telegram. Reproduced:
+   *
+   *     SDK loaded      -> {inTelegram:true}
+   *     SDK not loaded  -> {inTelegram:false}   <- auth screen appears
+   *
+   * Signal 2 cannot fail that way, so a Telegram webview is now recognised
+   * even when Telegram's own script never arrives.
+   */
+  function _hashInitData() {
+    // Telegram puts the signed payload in the fragment. Read it directly so a
+    // missing SDK cannot hide the fact that we are inside Telegram.
+    try {
+      const h = (window.location.hash || "").replace(/^#/, "");
+      if (!h) return "";
+      const p = new URLSearchParams(h);
+      return p.get("tgWebAppData") || "";
+    } catch (e) { return ""; }
+  }
+
+  const hashData = _hashInitData();
+  const sdkData = (TG && typeof TG.initData === "string") ? TG.initData : "";
+  const initData = sdkData || hashData;
+
+  /* Presence of the SDK object alone is NOT enough: telegram-web-app.js
+   * defines window.Telegram.WebApp on any page that loads it, including a
+   * plain browser tab, where initData is an empty string. Treating that as
+   * "inside Telegram" would hide the login screen from a normal visitor. */
+  const inTelegram = initData.length > 0;
   window.__inTelegram = inTelegram;
+  window.__tgInitData = initData;
 
   if (!inTelegram) {
     if (TG) {
@@ -31,7 +65,17 @@
     return;
   }
 
+  /* Mark the document immediately, BEFORE pro.js boots. Every auth screen is
+   * then unreachable by CSS as well as by logic — belt and braces, because a
+   * user inside Telegram must never see a login form no matter which code
+   * path runs. */
+  document.documentElement.classList.add("tg-no-auth");
+
   document.documentElement.classList.add("in-telegram");
+
+  // From here on the SDK may legitimately be absent (blocked script) while we
+  // are still genuinely inside Telegram. Guard every call.
+  const has = (fn) => !!(TG && typeof TG[fn] === "function");
 
   /* ---- 2. theme ------------------------------------------------------
    * Telegram hands over the colours of the user's OWN client theme. Mapping
@@ -40,7 +84,7 @@
    * this is a theming change, not a redesign: the same variables the site
    * already uses just take different values. */
   function applyTheme() {
-    const p = (TG.themeParams || {});
+    const p = ((TG && TG.themeParams) || {});
     const root = document.documentElement;
     const map = {
       bg_color: ["--bg", "--panel-0"],
@@ -62,18 +106,18 @@
     });
     // colorScheme is authoritative even when themeParams is sparse, and the
     // site already has a full dark palette keyed off this attribute.
-    if (TG.colorScheme) root.setAttribute("data-theme", TG.colorScheme);
+    if (TG && TG.colorScheme) root.setAttribute("data-theme", TG.colorScheme);
     return applied;
   }
 
   applyTheme();
-  try { TG.onEvent("themeChanged", applyTheme); } catch (e) {}
+  if (has("onEvent")) { try { TG.onEvent("themeChanged", applyTheme); } catch (e) {} }
 
   /* ---- 3. viewport --------------------------------------------------- */
-  try { TG.ready(); } catch (e) {}
-  try { TG.expand(); } catch (e) {}          // full height, not the small sheet
+  if (has("ready")) { try { TG.ready(); } catch (e) {} }
+  if (has("expand")) { try { TG.expand(); } catch (e) {} }   // full height
   try {
-    if (TG.setHeaderColor && TG.themeParams && TG.themeParams.bg_color) {
+    if (has("setHeaderColor") && TG.themeParams && TG.themeParams.bg_color) {
       TG.setHeaderColor(TG.themeParams.bg_color);
     }
   } catch (e) {}
@@ -81,11 +125,11 @@
   /* Telegram's viewport is not the window: the keyboard and the drag-to-close
    * gesture change it. Editors sized with 100vh overflow their container. */
   function syncViewport() {
-    const h = TG.viewportStableHeight || TG.viewportHeight;
+    const h = TG && (TG.viewportStableHeight || TG.viewportHeight);
     if (h) document.documentElement.style.setProperty("--tg-vh", h + "px");
   }
   syncViewport();
-  try { TG.onEvent("viewportChanged", syncViewport); } catch (e) {}
+  if (has("onEvent")) { try { TG.onEvent("viewportChanged", syncViewport); } catch (e) {} }
 
   /* ---- 1. auto-login -------------------------------------------------
    * The functional core. Without it the Mini App is just the website in a
@@ -102,7 +146,7 @@
     const res = await fetch(API + "/auth/telegram/miniapp", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ init_data: TG.initData, fingerprint: fp }),
+      body: JSON.stringify({ init_data: initData, fingerprint: fp }),
     });
     if (!res.ok) {
       // Verification failed — a stale initData, or the bot token on the

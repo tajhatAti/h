@@ -2653,28 +2653,47 @@ document.addEventListener("DOMContentLoaded", () => {
   // Deliberately ahead of the sync boot below. Deciding the screen first and
   // logging in after would flash the landing page inside Telegram on every
   // single open, which is exactly the friction a Mini App removes.
-  if (window.__inTelegram && typeof window.__tgAutoLogin === "function"
-      && !authToken) {
+  if (window.__inTelegram) {
     document.documentElement.classList.add("booting");
-    window.__tgAutoLogin().then((r) => {
-      if (r && r.ok) {
-        authToken = localStorage.getItem("ahad_token");
-        showScreen("screen-dashboard");
-        loadDashboard().catch(() => {});
-        routeFromUrl();
-      } else {
-        // Verification failed. Show the normal login rather than trapping the
-        // user on a blank screen with no way forward.
-        showScreen("screen-landing");
-      }
-    }).catch(() => {
-      showScreen("screen-landing");
-    }).finally(() => {
+
+    // NEVER an auth screen inside Telegram. A Mini App user has already
+    // proven who they are by opening it; asking them to sign in is the exact
+    // friction the Mini App exists to remove.
+    //
+    // THE BUG THIS FIXES: the failure branch called showScreen("screen-landing"),
+    // and the success branch called routeFromUrl() — which, on /dashboard
+    // (a protected route) with no token yet, redirects to screen-signin. Both
+    // paths could put a "Sign in / Create account" screen in front of someone
+    // who is already inside Telegram. Neither can now.
+    const done = () => {
       _bootOk = true;
       document.documentElement.classList.remove("booting");
       const sp = document.getElementById("bootSplash");
       if (sp) sp.style.display = "none";
-    });
+    };
+    const fail = () => {
+      // An error, not "no account" — a new Telegram id creates an account
+      // silently server-side. So this is a retry, never a login form.
+      showScreen("screen-dashboard");
+      _tgFatal("Couldn't connect. Pull down to retry, or reopen the app.");
+      done();
+    };
+
+    const go = () => {
+      authToken = localStorage.getItem("ahad_token");
+      showScreen("screen-dashboard");
+      loadDashboard().catch(() => {});
+      // routeFromUrl only AFTER the token exists, or it treats /dashboard as
+      // an unauthenticated hit on a protected route and bounces to sign-in.
+      if (authToken) { try { routeFromUrl(); } catch (e) {} }
+    };
+
+    if (authToken) { go(); done(); return; }
+
+    if (typeof window.__tgAutoLogin !== "function") { fail(); return; }
+    window.__tgAutoLogin()
+      .then((r) => { if (r && r.ok) { go(); done(); } else { fail(); } })
+      .catch(() => fail());
     return;
   }
 
@@ -2699,6 +2718,28 @@ document.addEventListener("DOMContentLoaded", () => {
   const splash = document.getElementById("bootSplash");
   if (splash) splash.style.display = "none";
 });
+
+/* The ONLY thing a Mini App user ever sees instead of the dashboard.
+   Not a login form — an error with a retry, because a new Telegram id is
+   supposed to create an account silently rather than fail. */
+function _tgFatal(message) {
+  let el = document.getElementById("tgFatal");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "tgFatal";
+    el.className = "tg-fatal";
+    const p = document.createElement("p");
+    p.id = "tgFatalMsg";
+    const b = document.createElement("button");
+    b.className = "btn-primary";
+    b.textContent = "Try again";
+    b.onclick = () => location.reload();
+    el.append(p, b);
+    document.body.appendChild(el);
+  }
+  document.getElementById("tgFatalMsg").textContent = message;
+  el.hidden = false;
+}
 
 /* Restore an in-progress verification screen from localStorage. */
 function restoreOtpScreen() {

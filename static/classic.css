@@ -1491,6 +1491,28 @@ html.tg-hide-signout #btnLogout { display: none !important; }
 html.in-telegram body { min-height: var(--tg-vh, 100vh); }
 html.in-telegram .dash-main { min-height: var(--tg-vh, 100vh); }
 
+/* NO AUTH SCREEN INSIDE TELEGRAM — a hard stop, independent of any JS path.
+   The user proved who they are by opening the Mini App; a Sign in or Create
+   account screen there is always a bug, so it is made unreachable by CSS as
+   well as by logic. If some future code path calls showScreen("screen-signin")
+   inside Telegram, nothing appears rather than the wrong thing. */
+html.tg-no-auth #screen-signin,
+html.tg-no-auth #screen-signup,
+html.tg-no-auth #screen-otp,
+html.tg-no-auth #screen-forgot1,
+html.tg-no-auth #screen-forgot2,
+html.tg-no-auth #screen-forgot3 { display: none !important; }
+
+/* The one thing shown instead: a retry, never a login form. */
+.tg-fatal {
+  position: fixed; inset: 0; z-index: 9999;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 16px; padding: 32px; text-align: center;
+  background: var(--bg); color: var(--ink);
+}
+.tg-fatal[hidden] { display: none !important; }
+.tg-fatal p { margin: 0; color: var(--ink-2); font-size: 15px; line-height: 1.6; max-width: 320px; }
+
 /* Telegram already draws a header with the app name and a close control, so
    the marketing navbar is a second one saying the same thing — and its
    "Sign in / Get started" buttons are meaningless when the user is already

@@ -345,7 +345,17 @@ _tags = _re.findall(r'<script src="/static/(miniapp|pro)\.js', html)
 check("miniapp.js loads BEFORE pro.js, which reads its globals",
       _tags[:2] == ["miniapp", "pro"], str(_tags))
 check("the SDK's mere presence is not treated as being inside Telegram",
-      "TG.initData.length > 0" in src_ma)
+      "const inTelegram = initData.length > 0;" in src_ma)
+# TWO signals now. telegram-web-app.js comes from telegram.org, so when it is
+# blocked the SDK never appears — and the app used to conclude it was NOT in
+# Telegram, fall through to routeFromUrl() on the protected /dashboard route,
+# and show a Create account screen inside the Mini App.
+check("a blocked SDK is covered by reading Telegram's own URL fragment",
+      "tgWebAppData" in src_ma)
+check("the SDK value is preferred when it exists",
+      "const initData = sdkData || hashData;" in src_ma)
+check("and every SDK call tolerates the script being absent",
+      'const has = (fn) => !!(TG && typeof TG[fn] === "function");' in src_ma)
 check("outside Telegram the module does nothing and returns early",
       "if (!inTelegram)" in src_ma and "return;" in src_ma)
 check("an existing session is reused rather than re-authenticated",
@@ -353,13 +363,21 @@ check("an existing session is reused rather than re-authenticated",
 _pro = open(os.path.join(ROOT, "static/pro.js"), encoding="utf-8").read()
 # The FIRST "__tgAutoLogin" is the `typeof` guard; the branch bodies come
 # after the call. Slice from the call itself.
-_boot = _pro[_pro.index("window.__tgAutoLogin()"):][:1200]
-check("a failed verification falls back to the normal login screen",
-      'showScreen("screen-landing")' in _boot, _boot[:200])
-check("a thrown error does too, rather than leaving a blank page",
-      _boot.count('showScreen("screen-landing")') >= 2, _boot[:400])
-check("and the boot splash is always cleared",
-      "bootSplash" in _boot and "finally" in _boot)
+_boot = _pro[_pro.index("if (window.__inTelegram) {"):
+             _pro.index("// ---- Boot: decide the screen SYNCHRONOUSLY")]
+# Comments in this branch name the bug they fix, so strip them before
+# asserting the CODE never routes to an auth screen.
+_boot_code = _re.sub(r"//.*", "", _boot)
+check("no auth screen is reachable from the Mini App boot",
+      not _re.search(r'screen-(signin|signup|landing|otp|forgot)', _boot_code),
+      str(_re.findall(r'screen-\w+', _boot_code)))
+check("a failure shows a retry, never a login form", "_tgFatal(" in _boot_code)
+check("the dashboard is what renders underneath",
+      'showScreen("screen-dashboard")' in _boot_code)
+check("routeFromUrl runs only once a token exists",
+      "if (authToken) { try { routeFromUrl()" in _boot_code)
+check("and the boot splash is cleared on every path",
+      _boot_code.count("done()") >= 3, str(_boot_code.count("done()")))
 check("theme colours are validated before being injected into CSS",
       "/^#[0-9a-f]{3,8}$/i" in src_ma)
 
