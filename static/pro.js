@@ -6157,13 +6157,31 @@ window.onTelegramAuth = async function (user) {
       show("telegramLogin", true);
       show("telegramSignup", true);
       show("telegramUnavailable", false);
+      show("telegramUnavailableSignup", false);
       show("emailAuthSignin", !tgOnly);
       show("emailAuthSignup", !tgOnly);
+      // SAFETY NET. telegram-widget.js is a third-party script: it can be
+      // blocked by an extension, blocked by a network, or simply slow. When it
+      // never renders its iframe the card showed the hint sentence and NOTHING
+      // else — a user who signed out could not get back into their account.
+      // Config cannot save them here, because the config is what hid the form,
+      // so this checks the DOM for a button that actually exists.
+      setTimeout(() => {
+        ["telegramLoginBtn", "telegramSignupBtn"].forEach((slotId) => {
+          const slot = document.getElementById(slotId);
+          if (!slot) return;
+          if (slot.querySelector("iframe")) return;     // widget is fine
+          const isSignin = slotId === "telegramLoginBtn";
+          show(isSignin ? "telegramUnavailable" : "telegramUnavailableSignup", true);
+          show(isSignin ? "emailAuthSignin" : "emailAuthSignup", true);
+        });
+      }, 4000);
     } else {
       // No bot configured: hide Telegram, reveal e-mail so users can still log in.
       show("telegramLogin", false);
       show("telegramSignup", false);
       show("telegramUnavailable", tgOnly);
+      show("telegramUnavailableSignup", tgOnly);
       show("emailAuthSignin", true);
       show("emailAuthSignup", true);
     }

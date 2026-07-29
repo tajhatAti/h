@@ -36,7 +36,20 @@ check("signup form is just the essentials",
     === "su_username,su_email,su_password,su_terms");
 
 // ---- filler copy gone ---------------------------------------------------
-check("deployment-detail message removed", !d.getElementById("telegramUnavailable"));
+// This USED to assert telegramUnavailable was deleted. It was deleted as
+// filler in c12f41b — but pro.js never stopped calling show("telegramUnavailable"),
+// so on the failure path the sign-in card rendered a hint sentence with no
+// button and no explanation, and a signed-out user could not get back in.
+// The element is back, and it must NOT be filler: it has to name the way
+// forward rather than describe the deployment.
+const _tgu = d.getElementById("telegramUnavailable");
+check("the fallback notice exists", !!_tgu);
+check("it is not deployment trivia",
+  _tgu && !/not configured|deployment/i.test(_tgu.textContent),
+  _tgu && _tgu.textContent.trim());
+check("it tells the user what to do instead",
+  _tgu && /email/i.test(_tgu.textContent), _tgu && _tgu.textContent.trim());
+check("and it starts hidden", _tgu && _tgu.hasAttribute("hidden"));
 check("'not configured on this deployment' gone", !/not configured on this deployment/i.test(html));
 check("'switch apps' reassurance gone", !/switch apps/i.test(js));
 check("terms line no longer recites the policy",

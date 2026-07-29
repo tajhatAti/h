@@ -314,10 +314,20 @@ def public_config():
     """
     return {
         "telegram_bot_username": os.getenv("TELEGRAM_BOT_USERNAME", "").strip().lstrip("@"),
-        # Telegram-only sign-in is the current scope. The e-mail+password flow
-        # stays fully implemented server-side; set TELEGRAM_ONLY_AUTH=0 to show
-        # its UI again.
-        "telegram_only": os.getenv("TELEGRAM_ONLY_AUTH", "1").strip().lower() not in ("0", "false", "no"),
+        # E-mail sign-in is shown by DEFAULT now.
+        #
+        # This used to default to "1", which HID the e-mail form whenever a bot
+        # username was configured. The Telegram widget then became the only way
+        # in — and if telegram-widget.js is slow, blocked by an extension, or
+        # unreachable, the sign-in card renders nothing but the sentence
+        # "One tap. No password to remember." with no button under it. A user
+        # who signs out is then locked out of their own account.
+        #
+        # A second sign-in method costs nothing (the whole e-mail flow is
+        # already implemented and tested server-side) and removes a
+        # single-point-of-failure on a third-party script. Set
+        # TELEGRAM_ONLY_AUTH=1 to go back to Telegram-only.
+        "telegram_only": os.getenv("TELEGRAM_ONLY_AUTH", "0").strip().lower() in ("1", "true", "yes"),
     }
 
 

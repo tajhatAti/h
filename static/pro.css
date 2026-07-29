@@ -273,6 +273,12 @@ html.booting .auth, html.booting .dashboard { display: none !important; }
 .check { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; cursor: pointer; }
 .link { color: var(--brand-3); cursor: pointer; font-size: 13px; font-weight: 600; }
 .link:hover { text-decoration: underline; }
+/* Shown when Telegram's widget script cannot load. Neutral, not an alarm:
+   nothing is broken for the user, there is just another way in below. */
+.auth-note {
+  text-align: center; margin: 10px 0 2px;
+  font-size: 13px; line-height: 1.5; color: var(--muted);
+}
 .auth-switch { text-align: center; margin-top: 18px; color: var(--muted); font-size: 13.5px; }
 .auth-switch a { color: inherit; font-weight: 600; cursor: pointer; text-decoration: underline; }
 .auth-hint { text-align: center; margin-top: 14px; font-size: 12px; color: var(--muted-2); line-height: 1.5; }

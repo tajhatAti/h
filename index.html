@@ -316,6 +316,9 @@
       <div id="telegramSignupBtn"></div>
       <p class="telegram-hint">One tap. No password to remember.</p>
     </div>
+    <div class="auth-note" id="telegramUnavailableSignup" hidden>
+      Telegram sign-up is unavailable right now — use your email below.
+    </div>
 
     <div id="emailAuthSignup" hidden>
       <div class="auth-or"><span>or use email</span></div>
@@ -349,6 +352,12 @@
     <div class="telegram-login primary" id="telegramLogin" hidden>
       <div id="telegramLoginBtn"></div>
       <p class="telegram-hint">One tap. No password to remember.</p>
+    </div>
+    <!-- Shown when Telegram's widget script cannot load (blocked, offline, or
+         no bot configured). Without this the card rendered the hint sentence
+         with NOTHING under it and the user simply could not sign in. -->
+    <div class="auth-note" id="telegramUnavailable" hidden>
+      Telegram sign-in is unavailable right now — use your email below.
     </div>
 
     <!-- Email + password kept in the DOM (backend still supported) but hidden
