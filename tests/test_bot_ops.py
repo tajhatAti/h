@@ -1,4 +1,13 @@
-"""The Telegram bot as a real control surface: deploy, manage, notify.
+"""The Telegram bot as a control surface for apps created in the Mini App.
+
+CODE NEVER ARRIVES THROUGH CHAT any more. The bot used to accept a pasted
+snippet; that path is removed because a Telegram message caps at ~4096
+characters and offers no editor, so it could only serve toy scripts while
+looking like a real way to work. Apps are created in the Mini App and the
+website — one UI, one create path. The bot manages what exists.
+
+So these tests create apps the way the product now does (POST /api/jobs, the
+web path the Mini App uses) and then drive the bot against them.
 
 WHAT WAS MEASURED BEFORE THIS
 -----------------------------
@@ -103,60 +112,69 @@ def kill_all():
 
 
 # ---------------------------------------------------------------------------
-print("\n[1] a bot deploy lands in the SAME place a web deploy does")
+print("\n[1] the bot sees apps created the way the product creates them")
 # ---------------------------------------------------------------------------
-PB.cmd_deploy(CHAT, BOSS, "My Bot")
-check("the bot asks for the code", "Send the code" in last_text(), last_text())
-check("and remembers the chosen name", PB.pending_name.get(CHAT) == "My-Bot",
-      str(PB.pending_name))
-
-PB.deploy_code(LOOP, CHAT, "boss")
+# The Mini App IS the website, so it posts to /api/jobs. Anything the bot can
+# see must come from there — there is no second create path left.
+r = c.post("/api/jobs", headers=AH,
+           json={"name": "My-Bot", "language": "python", "code": LOOP})
+check("the web/Mini App path creates the app", r.status_code in (200, 201),
+      str(r.status_code) + r.text[:100])
 time.sleep(3)
 
 conn = DB.get_db_connection()
 rows = [dict(r) for r in conn.execute("SELECT * FROM jobs").fetchall()]
 conn.close()
-check("the app is a real row in the jobs table", len(rows) == 1, str(len(rows)))
-check("it belongs to the linked account", rows and rows[0]["user_id"] == 1)
-check("the user's chosen name is used, not tg-<user>-<epoch>",
-      rows and rows[0]["name"] == "My-Bot", str(rows and rows[0]["name"]))
+check("it is a real row in the jobs table", len(rows) == 1, str(len(rows)))
+check("owned by the account", rows and rows[0]["user_id"] == 1)
+check("the chosen name is kept", rows and rows[0]["name"] == "My-Bot",
+      str(rows and rows[0]["name"]))
 check("the runner id is recorded", rows and rows[0]["runner_job_id"])
-check("the code is stored, so /update has something to replace",
-      rows and "while True" in (rows[0]["code"] or ""))
+
+apps = bot_ops.list_apps(1)
+check("the BOT can see the same app", len(apps) == 1 and apps[0]["name"] == "My-Bot",
+      str([a["name"] for a in apps]))
+check("with live status", apps and apps[0]["status"] == "running",
+      str(apps and apps[0]["status"]))
 
 admin_jobs = c.get("/admin/jobs", headers=AH).json()["jobs"]
-check("the admin console can see it", len(admin_jobs) == 1, str(len(admin_jobs)))
+check("the admin console sees it too", len(admin_jobs) == 1, str(len(admin_jobs)))
 check("with a live status from the runner",
       admin_jobs and admin_jobs[0]["live_status"] == "running",
       str(admin_jobs and admin_jobs[0].get("live_status")))
 check("and real measured memory", (admin_jobs[0].get("mem_mb") or 0) > 0)
 check("the owner is named", admin_jobs[0]["owner"] == "boss")
-check("it is marked as telegram-sourced", admin_jobs[0]["source"] == "telegram")
-check("and names the Telegram account", admin_jobs[0].get("owner_telegram_name") == "@bosstg",
+check("and their Telegram account is named",
+      admin_jobs[0].get("owner_telegram_name") == "@bosstg",
       str(admin_jobs[0].get("owner_telegram_name")))
 
 # ---------------------------------------------------------------------------
 print("[2] the per-account cap applies to the bot too")
 # ---------------------------------------------------------------------------
 check("one app counts as one", bot_ops.active_count(1) == 1, str(bot_ops.active_count(1)))
-made = []
+codes = []
 for i in range(bot_ops.MAX_JOBS_PER_USER + 2):
-    res = bot_ops.deploy(1, f"filler{i}", LOOP)
-    made.append(res)
-    if res.get("ok"):
+    rr = c.post("/api/jobs", headers=AH,
+                json={"name": f"filler{i}", "language": "python", "code": LOOP})
+    codes.append(rr.status_code)
+    if rr.status_code in (200, 201):
         time.sleep(1)
-oks = [m for m in made if m.get("ok")]
-refused = [m for m in made if not m.get("ok")]
-check("the cap stops the extras", bool(refused), str(len(oks)))
-check("and says how many are running, not just 'no'",
-      refused and str(bot_ops.MAX_JOBS_PER_USER) in refused[0]["error"],
-      str(refused and refused[0]["error"]))
+check("the cap refuses the extras", 429 in codes, str(codes))
 check("never more than the cap is alive",
       bot_ops.active_count(1) <= bot_ops.MAX_JOBS_PER_USER,
       str(bot_ops.active_count(1)))
+# The bot READS the same constant, so its "slots" line cannot drift from the
+# limit the create path actually enforces.
+check("the bot reports the same ceiling",
+      bot_ops.MAX_JOBS_PER_USER == __import__("services.runner_client",
+                                              fromlist=["x"]).MAX_JOBS_PER_USER)
 
-for m in oks:
-    bot_ops.delete(1, m["job"]["name"])
+conn = DB.get_db_connection()
+_fillers = [dict(x)["name"] for x in
+            conn.execute("SELECT name FROM jobs WHERE name LIKE 'filler%'").fetchall()]
+conn.close()
+for nm in _fillers:
+    bot_ops.delete(1, nm)
 runner_client._fleet_cache.update(at=0.0, jobs=None)
 
 # ---------------------------------------------------------------------------
@@ -191,34 +209,25 @@ check("the account summary counts apps", "Apps:" in t, t[:120])
 check("and totals their memory", "Memory in use" in t, t[:160])
 
 # ---------------------------------------------------------------------------
-print("[4] rename, and update-in-place")
+print("[4] rename works; editing code from chat does not exist")
 # ---------------------------------------------------------------------------
 SENT.clear()
 PB.cmd_rename(CHAT, BOSS, "My-Bot renamed-bot")
-check("rename reports both names", "My-Bot" in last_text() and "renamed-bot" in last_text(),
-      last_text())
+check("rename reports both names",
+      "My-Bot" in last_text() and "renamed-bot" in last_text(), last_text())
 check("the row really changed", bot_ops.find_app(1, "renamed-bot") is not None)
 
 conn = DB.get_db_connection()
-before_id = dict(conn.execute("SELECT id FROM jobs WHERE name='renamed-bot'").fetchone())["id"]
+before_id = dict(conn.execute(
+    "SELECT id FROM jobs WHERE name='renamed-bot'").fetchone())["id"]
 conn.close()
 
-SENT.clear()
-PB.cmd_update(CHAT, BOSS, "renamed-bot")
-check("update asks for the new code", "Send the new code" in last_text(), last_text())
-check("and says the files are kept", "saved files" in last_text().lower(), last_text())
-PB.deploy_code("import time\nprint('version two', flush=True)\nwhile True:\n    time.sleep(1)\n",
-               CHAT, "boss")
-time.sleep(2)
-check("the rebuild is confirmed", "rebuilt" in last_text().lower(), last_text())
-
-conn = DB.get_db_connection()
-after = [dict(r) for r in conn.execute("SELECT * FROM jobs").fetchall()]
-conn.close()
-check("it REBUILT rather than creating a second app", len(after) == 1, str(len(after)))
-check("the same row was updated, so its stored data is not orphaned",
-      after[0]["id"] == before_id, f"{after[0]['id']} vs {before_id}")
-check("the new code is saved", "version two" in (after[0]["code"] or ""))
+check("there is no /update command", not hasattr(PB, "cmd_update"))
+check("and no code-replacing helper behind it",
+      not hasattr(bot_ops, "update_code"))
+# Editing happens in the Mini App, which uses the site's own routes.
+check("the site still exposes the app for editing there",
+      c.get("/api/jobs", headers=AH).status_code == 200)
 
 # ---------------------------------------------------------------------------
 print("[5] one user cannot touch another's app")
@@ -309,8 +318,8 @@ t = last_text()
 check("the user is told the bot is disconnected", "Disconnected" in t, t[:120])
 check("and that their apps keep running — the scary part is answered",
       "keep running" in t.lower(), t[:160])
-check("any half-finished command is dropped with it",
-      CHAT not in PB.waiting_for_code and CHAT not in PB.pending_update)
+check("there is no half-finished code state left to leak",
+      not hasattr(PB, "waiting_for_code") and not hasattr(PB, "pending_update"))
 
 # ---------------------------------------------------------------------------
 print("[8] admin console carries the Telegram picture")
@@ -361,7 +370,7 @@ print("[10] every command is behind the account gate")
 # ---------------------------------------------------------------------------
 src = open(os.path.join(ROOT, "services/pingbot.py"), encoding="utf-8").read()
 for cmd in ("/apps", "/status", "/logs", "/restart", "/stop", "/delete",
-            "/rename", "/update", "/deploy"):
+            "/rename"):
     seg = src.split(f'text.startswith("{cmd}")', 1)
     check(f"{cmd} exists", len(seg) > 1)
     if len(seg) > 1:
@@ -370,9 +379,11 @@ for cmd in ("/apps", "/status", "/logs", "/restart", "/stop", "/delete",
 check("callbacks re-resolve the user before acting",
       "user = telegram_link.user_for_chat(chat_id)" in
       src.split("def handle_callback", 1)[1][:600])
-check("the bot no longer POSTs straight to the runner for a deploy",
-      '_runner_http("POST", "/internal/jobs"' not in src)
-check("deploys go through bot_ops", "bot_ops.deploy(" in src)
+check("the bot cannot create a job at all",
+      '"/internal/jobs"' not in src)
+check("nor can bot_ops",
+      '"/internal/jobs"' not in open(os.path.join(ROOT, "services/bot_ops.py"),
+                                     encoding="utf-8").read())
 
 kill_all()
 print(f"\ntest_bot_ops: {PASS} passed, {FAIL} failed")

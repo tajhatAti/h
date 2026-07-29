@@ -21,22 +21,22 @@ from services import telegram_link  # noqa: E402
 from services import bot_ops  # noqa: E402
 from services import runner_client  # noqa: E402
 
-# Chats mid-way through a two-step command.
-pending_name = {}      # chat_id -> the name given with /deploy <name>
-pending_update = {}    # chat_id -> the app whose code is being replaced
+# CODE NEVER ARRIVES THROUGH CHAT.
+#
+# The bot used to accept a pasted snippet and deploy it. That is removed: a
+# Telegram message caps at ~4096 characters, there is no editor, no syntax
+# help and no file tree, so it could only ever serve toy scripts while looking
+# like a real way to work. Writing, editing and deploying happen in the Mini
+# App and the website — which are the same UI.
+#
+# What the bot keeps is what a chat is actually good at: a launch button,
+# read-only status, and push notifications.
 RUNNER_SECRET = os.getenv("RUNNER_SERVICE_SECRET", "")
 SITE_BASE = os.getenv("SITE_BASE_URL", "https://ahadorg.onrender.com").rstrip("/")
 
 TG_API = f"https://api.telegram.org/bot{BOT_TOKEN}" if BOT_TOKEN else ""
 
-# Code collection buffer
-code_buffer = defaultdict(list)       # chat_id -> list of messages
-buffer_timer = {}                     # chat_id -> timer
 
-# Chats that ran /code and are now streaming their source in. Telegram splits
-# anything over ~4096 chars into SEPARATE messages, so the flag MUST survive
-# every chunk — it is cleared only when flush_code() actually deploys.
-waiting_for_code = {}                 # chat_id -> True
 
 
 def _tg(method, **params):
@@ -200,13 +200,15 @@ def _open_button(label="🚀 Open CodeNest"):
     return {"text": label, "url": f"{SITE_BASE}/dashboard"}
 
 
+def _open_kb(label="🚀 Open CodeNest"):
+    """A keyboard holding just the launch button, or None."""
+    btn = _open_button(label)
+    return {"inline_keyboard": [[btn]]} if btn else None
+
+
 def _menu_buttons():
-    """Buttons an unlinked visitor sees, so the next step is a tap not a hunt."""
-    rows = []
-    btn = _open_button("🔗 Connect my account")
-    if btn:
-        rows.append([btn])
-    return {"inline_keyboard": rows} if rows else None
+    """Kept as the name older call sites use; same single button."""
+    return _open_kb()
 
 
 def set_menu_button():
@@ -229,24 +231,24 @@ def set_menu_button():
 
 
 def _help_text(user):
+    """What the bot can do — which is no longer "write code".
+
+    Every command here is read-only or a lifecycle action on an app that
+    already exists. Creating and editing happens in the Mini App.
+    """
     return (
         f"👋 Hi *{user['username']}*!\n\n"
-        "*Deploy*\n"
-        "`/deploy <name>` — name it, then send the code\n"
-        "`/code` — send code, I pick a name\n"
-        "`/update <name>` — replace the code, keep its saved files\n\n"
-        "*Manage*\n"
+        "Tap *Open CodeNest* to write, edit and deploy — it opens right here "
+        "in Telegram and signs you in automatically.\n\n"
+        "*From chat you can also:*\n"
         "`/apps` — everything you have, with live status\n"
         "`/status [name]` — account summary, or one app in full\n"
         "`/logs <name>` — the last lines it printed\n"
         "`/restart <name>`  `/stop <name>`  `/delete <name>`\n"
-        "`/rename <name> <new>`\n\n"
-        "*Other*\n"
+        "`/rename <name> <new>`\n"
         "`/ping [url]` — check a URL\n"
         "`/unlink` — disconnect this chat\n\n"
-        "I message you if an app stops on its own.\n\n"
-        "_Pasted code is fine for quick scripts. For real projects open the "
-        "Mini App — it is the full editor._"
+        "I message you if an app stops on its own."
     )
 
 
@@ -273,17 +275,22 @@ def handle_start(chat_id, first_name, payload=""):
 
     user = telegram_link.user_for_chat(chat_id)
     if user:
-        btn = _open_button()
-        _send(chat_id, _help_text(user),
-              reply_markup={"inline_keyboard": [[btn]]} if btn else None)
+        _send(chat_id, _help_text(user), reply_markup=_open_kb())
         return
+
+    # UNLINKED: one button, and no instructions at all.
+    #
+    # There is nothing left to explain. Opening the Mini App verifies the same
+    # Telegram identity and writes the same telegram_id the /link code used to
+    # write — verified: user_for_chat() returns None before the first open and
+    # the account straight after. So the button IS the connect step, and a
+    # printed URL would only offer a worse route to the same place (a browser,
+    # where the user would have to log in by hand).
     _send(chat_id,
           f"👋 Hi {first_name}!\n\n"
-          "This bot works with a CodeNest account.\n\n"
-          "Open your dashboard → Settings → *Connect Telegram*, "
-          "then tap the button there. It brings you straight back here "
-          "and connects you automatically.",
-          reply_markup=_menu_buttons())
+          "Tap below to open CodeNest — writing, editing and deploying all "
+          "happen there, and you are signed in automatically.",
+          reply_markup=_open_kb())
 
 
 def handle_unlink(chat_id):
@@ -292,11 +299,6 @@ def handle_unlink(chat_id):
         _send(chat_id, UNKNOWN_REPLY)
         return
     telegram_link.unlink(user["id"])
-    # Anything mid-flight belongs to the account that just left.
-    waiting_for_code.pop(chat_id, None)
-    code_buffer.pop(chat_id, None)
-    pending_update.pop(chat_id, None)
-    pending_name.pop(chat_id, None)
     _send(chat_id,
           "🔌 Disconnected. This chat can no longer deploy or see your apps.\n\n"
           "Your apps keep running — nothing was stopped.",
@@ -328,48 +330,7 @@ def handle_ping(chat_id, text):
         _send(chat_id, f"❌ {str(e)}")
 
 
-# ==================== SMART CODE COLLECTION ====================
-def flush_code(chat_id, first_name):
-    """Fired 5s after the LAST chunk arrived — join everything and deploy."""
-    if chat_id not in code_buffer:
-        waiting_for_code.pop(chat_id, None)
-        return
-    code = "\n".join(code_buffer[chat_id])
-    del code_buffer[chat_id]
-    buffer_timer.pop(chat_id, None)
-    # Collection is over — the next plain message is NOT code any more.
-    waiting_for_code.pop(chat_id, None)
-    if not code.strip():
-        _send(chat_id, "❌ Kono code paini. Abar /code likhun.")
-        return
-    # Re-checked HERE too, not only at /code. This runs on a 5s timer thread,
-    # so the account can be suspended or unlinked between the last chunk
-    # arriving and the deploy firing — and the deploy is the part that spends
-    # real memory.
-    if not telegram_link.user_for_chat(chat_id):
-        _send(chat_id, UNKNOWN_REPLY)
-        return
-    deploy_code(code, chat_id, first_name)
-
-
-def collect_code(chat_id, text, first_name):
-    code_buffer[chat_id].append(text)
-
-    # Reset timer
-    if chat_id in buffer_timer:
-        buffer_timer[chat_id].cancel()
-
-    timer = threading.Timer(5.0, flush_code, args=[chat_id, first_name])
-    timer.start()
-    buffer_timer[chat_id] = timer
-
-
-# ==================== DEPLOY + INLINE BUTTONS ====================
-def detect_libs(code):
-    """Alias — the real table lives in bot_ops so the web path shares it."""
-    return bot_ops.detect_libs(code)
-
-
+# ==================== APP BUTTONS ====================
 def _app_buttons(job_id, url=""):
     """Buttons keyed on the SITE job id, not the runner id.
 
@@ -392,64 +353,11 @@ def _app_buttons(job_id, url=""):
     return {"inline_keyboard": rows}
 
 
-# Backwards-compatible alias: tests/test_bot_critical.py asserts the five
-# buttons still exist.
+# Kept under its old name: the reply_markup regression test drives it, and
+# that regression (a nested dict urlencoded into "reply_markup=inline_keyboard"
+# so every button vanished) is still worth guarding.
 def get_job_buttons(runner_id, url):
     return _app_buttons(runner_id, url)
-
-
-def deploy_code(code, chat_id, first_name, name=""):
-    """Deploy through bot_ops so the app lands in the jobs table.
-
-    BUG THIS FIXES: this used to POST straight to the runner. Measured — the
-    app ran, burned memory, and wrote 0 rows to the jobs table, so it was
-    invisible in /admin, exempt from MAX_JOBS_PER_USER, and absent from the
-    owner's own dashboard. Two deploy paths meant two sets of rules and only
-    one was enforced.
-    """
-    user = telegram_link.user_for_chat(chat_id)
-    if not user:
-        _send(chat_id, UNKNOWN_REPLY)
-        return
-
-    # Update-in-place if this chat was answering "which app?" for /update.
-    pending = pending_update.pop(chat_id, None)
-    if pending:
-        _send(chat_id, f"🔧 Rebuilding *{pending}*…")
-        res = bot_ops.update_code(user["id"], pending, code)
-        if not res.get("ok"):
-            _send(chat_id, f"❌ {res['error']}")
-            return
-        libs = res.get("libs") or []
-        extra = f"\nInstalling: `{', '.join(libs)}`" if libs else ""
-        _send(chat_id,
-              f"♻️ *{pending}* rebuilt and restarted.{extra}\n\n"
-              f"Its saved files were kept.",
-              reply_markup=_app_buttons(res["job"]["id"]))
-        return
-
-    name = name or pending_name.pop(chat_id, "")
-    lang = bot_ops.detect_language(code)
-    libs = bot_ops.detect_libs(code)
-    msg = f"✅ *Code received*\nLanguage: `{lang}`"
-    if libs:
-        msg += f"\nInstalling: `{', '.join(libs)}`"
-    _send(chat_id, msg + "\n\nDeploying…")
-
-    res = bot_ops.deploy(user["id"], name or f"bot-{int(time.time())}", code,
-                         lang, libs)
-    if not res.get("ok"):
-        _send(chat_id, f"❌ {res['error']}")
-        return
-    job = res["job"]
-    text = f"🚀 *{job['name']}* is live."
-    if job.get("web_url"):
-        text += f"\n\n{job['web_url']}"
-    # Pasted code stays supported for quick one-offs, but Telegram caps a
-    # message at ~4096 characters and has no editor, so anything real belongs
-    # in the Mini App. Said once, here, rather than nagging on every command.
-    text += "\n\n_For larger projects, open the CodeNest Mini App._"
-    _send(chat_id, text, reply_markup=_app_buttons(job["id"], job.get("web_url")))
 
 
 # ==================== APP COMMANDS ====================
@@ -582,38 +490,6 @@ def cmd_rename(chat_id, user, args):
           else f"❌ {res['error']}")
 
 
-def cmd_update(chat_id, user, ref):
-    """Two-step: name the app, then send the new code."""
-    if not ref:
-        _send(chat_id, "Which app? `/update <name>`, then send the new code.")
-        return
-    app = bot_ops.find_app(user["id"], ref)
-    if not app:
-        _send(chat_id, f"❌ No app called “{ref}”. /apps lists yours.")
-        return
-    pending_update[chat_id] = app["name"]
-    waiting_for_code[chat_id] = True
-    code_buffer.pop(chat_id, None)
-    _send(chat_id,
-          f"♻️ Send the new code for *{app['name']}*.\n\n"
-          "Its saved files are kept — this rebuilds, it does not start over.")
-
-
-def cmd_deploy(chat_id, user, name):
-    """/deploy <name> — name it up front instead of getting tg-<user>-<epoch>."""
-    if not name:
-        _send(chat_id, "Usage: `/deploy <name>`, then send the code.")
-        return
-    clean = bot_ops.slugify_name(name)
-    if not clean:
-        _send(chat_id, "That name has no usable characters.")
-        return
-    pending_name[chat_id] = clean
-    waiting_for_code[chat_id] = True
-    code_buffer.pop(chat_id, None)
-    _send(chat_id, f"📦 Send the code for *{clean}*.")
-
-
 # ==================== CALLBACK HANDLER ====================
 def handle_callback(chat_id, data):
     """Inline buttons. Every action re-resolves the app FOR THIS USER.
@@ -736,13 +612,6 @@ def poll_loop():
                         if _require_link(chat_id):
                             handle_ping(chat_id, text)
 
-                    elif text.startswith("/code"):
-                        if _require_link(chat_id):
-                            waiting_for_code[chat_id] = True
-                            code_buffer.pop(chat_id, None)
-                            pending_update.pop(chat_id, None)
-                            _send(chat_id, "✅ Send your code (any size)")
-
                     # Every command below acts on real apps, so each one is
                     # gated. _cmd_arg() splits off "/logs mybot" -> "mybot".
                     elif text.startswith("/apps") or text.startswith("/jobs"):
@@ -780,34 +649,15 @@ def poll_loop():
                         if _u:
                             cmd_rename(chat_id, _u, _cmd_arg(text))
 
-                    elif text.startswith("/update"):
-                        _u = _require_link(chat_id)
-                        if _u:
-                            cmd_update(chat_id, _u, _cmd_arg(text))
-
-                    elif text.startswith("/deploy"):
-                        _u = _require_link(chat_id)
-                        if _u:
-                            cmd_deploy(chat_id, _u, _cmd_arg(text))
-
                     elif text.startswith("/help"):
                         handle_start(chat_id, _tg_display(msg) or first_name)
 
-                    elif chat_id in waiting_for_code:
-                        # Re-checked on every chunk, not only at /code: a
-                        # suspension landing mid-upload must stop the deploy,
-                        # and the flag survives across messages by design.
-                        if _require_link(chat_id):
-                            # Keep the flag set: long files arrive as SEVERAL
-                            # messages and every one of them must land in the
-                            # buffer. flush_code() clears it after deploying.
-                            collect_code(chat_id, text, first_name)
-                        else:
-                            waiting_for_code.pop(chat_id, None)
-                            code_buffer.pop(chat_id, None)
-
-                    elif text.startswith("/"):
-                        _send(chat_id, UNKNOWN_REPLY)
+                    # No plain-text branch. A message that is not a command
+                    # used to become a deploy; now nothing does, so pasted
+                    # code cannot reach the runner by any path.
+                    else:
+                        _send(chat_id, UNKNOWN_REPLY,
+                              reply_markup=_open_kb())
 
                 elif "callback_query" in upd:
                     # Buttons are as powerful as commands — Restart and

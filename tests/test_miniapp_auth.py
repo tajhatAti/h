@@ -160,9 +160,15 @@ check("editing the user id after signing is caught",
 
 # Every failure gets the same message. Telling a forger that the hash was fine
 # but the timestamp was stale is a hint about what to fix next.
-msgs = {login(x).json().get("detail") for x in
-        (good[:-1] + "0", init_data(when=time.time() - 90000), "garbage")}
-check("all rejections read identically", len(msgs) == 1, str(msgs))
+_rejects = [login(x) for x in
+            (good[:-1] + ("0" if good[-1] != "0" else "1"),
+             init_data(when=time.time() - 90000), "garbage")]
+check("every one of them is refused",
+      all(r.status_code == 400 for r in _rejects),
+      str([r.status_code for r in _rejects]))
+msgs = {r.json().get("detail") for r in _rejects}
+check("all rejections read identically", len(msgs) == 1,
+      str(msgs) + " codes=" + str([r.status_code for r in _rejects]))
 
 print("[3b] the endpoint is rate limited, like every other auth route")
 _attempts.clear()
@@ -301,12 +307,31 @@ check("with type web_app",
       SENT[0][1]["menu_button"]["type"] == "web_app", str(SENT[0][1]))
 
 src_pb = open(os.path.join(ROOT, "services/pingbot.py"), encoding="utf-8").read()
-check("pasted code still works — it is not removed",
-      "def deploy_code(" in src_pb)
-check("but the reply points at the Mini App for real projects",
-      "For larger projects" in src_pb)
+src_ops = open(os.path.join(ROOT, "services/bot_ops.py"), encoding="utf-8").read()
+# Chat-based code deploy is removed outright, so the Mini App is the ONLY
+# place code is written — there is no cheaper-looking path competing with it.
+check("no /code command", 'startswith("/code")' not in src_pb)
+check("no /deploy command", 'startswith("/deploy")' not in src_pb)
+check("no /update command", 'startswith("/update")' not in src_pb)
+check("no message can reach the runner as a job",
+      '"/internal/jobs"' not in src_pb and '"/internal/jobs"' not in src_ops)
 check("/jobs is accepted as well as /apps",
       'text.startswith("/jobs")' in src_pb)
+
+# /start: exactly one button, and no URL as text.
+SENT.clear()
+PB.telegram_link.user_for_chat = lambda cid: None      # unlinked visitor
+PB.handle_start(424242, "Stranger")
+_msg = [p for m, p in SENT if m == "sendMessage"][-1]
+_kb = json.loads(_msg["reply_markup"])["inline_keyboard"]
+_btns = [b for row in _kb for b in row]
+check("/start shows exactly one button", len(_btns) == 1, str(_btns))
+check("labelled Open CodeNest", "Open CodeNest" in _btns[0]["text"], str(_btns[0]))
+check("and it is a web_app button, not a link", "web_app" in _btns[0], str(_btns[0]))
+check("no URL is printed in the text", "http" not in _msg["text"], _msg["text"][:120])
+check("and no code command is advertised",
+      not any(x in _msg["text"] for x in ("/code", "/deploy", "/update")),
+      _msg["text"][:160])
 
 # ---------------------------------------------------------------------------
 print("[8] a normal browser is untouched")

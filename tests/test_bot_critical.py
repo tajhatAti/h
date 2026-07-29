@@ -67,8 +67,17 @@ def _fake_post(url, json=None, timeout=None):  # noqa: A002
 _updates = []
 pb.requests.post = _fake_post
 
-# --- 1. the flag dict exists at module level -------------------------------
-check("waiting_for_code is defined", isinstance(getattr(pb, "waiting_for_code", None), dict))
+# --- 1. chat-based code deploy is GONE -------------------------------------
+# Bugs 1 and 3 below were both about the code-collection buffer. That whole
+# path has since been removed: a Telegram message caps at ~4096 characters and
+# has no editor, so it could only ever serve toy scripts while looking like a
+# real way to work. The regressions cannot recur because the code cannot.
+# What is asserted now is that it stays gone.
+for _gone in ("waiting_for_code", "code_buffer", "buffer_timer",
+              "collect_code", "flush_code", "deploy_code",
+              "cmd_deploy", "cmd_update"):
+    check(f"{_gone} is removed", not hasattr(pb, _gone),
+          f"{_gone} still exists")
 
 # --- 2. inline keyboard survives the trip to Telegram ----------------------
 _sent.clear()
@@ -89,47 +98,26 @@ check("the action buttons survive the trip",
 check("at least the original five are there", len(_labels) >= 5, str(_labels))
 check("callback buttons carry data", _kb[0][0]["callback_data"] == "logs:job123")
 
-# --- 3. multi-chunk code all lands in one deploy ---------------------------
-_deployed = []
-_real_deploy = pb.deploy_code
-pb.deploy_code = lambda code, chat_id, first_name: _deployed.append(code)
-
-# The deploy path is now gated on the chat being bound to an account — an
-# unlinked chat could previously run code on the server. Chat 7 has to be a
-# real linked account for this regression test to reach deploy_code() at all;
-# the gate itself is covered by tests/test_telegram_link.py.
-import database as _DB
-from routes.deps import now_utc_str as _now
-_DB.init_db()
-_c = _DB.get_db_connection()
-_c.execute("INSERT INTO users (username,email,password,is_verified,telegram_id,"
-           "created_at,updated_at) VALUES (?,?,?,1,?,?,?)",
-           ("botuser", "botuser@gmail.com", "x", 7, _now(), _now()))
-_c.commit()
-_c.close()
-
-pb.waiting_for_code[7] = True
-pb.collect_code(7, "import requests", "Ahad")
-pb.collect_code(7, "print('one')", "Ahad")
-pb.collect_code(7, "print('two')", "Ahad")
-check("flag survives every chunk", 7 in pb.waiting_for_code)
-pb.buffer_timer[7].cancel()  # fire the flush deterministically
-pb.flush_code(7, "Ahad")
-check("all chunks deployed together",
-      _deployed and _deployed[0] == "import requests\nprint('one')\nprint('two')",
-      repr(_deployed[:1]))
-check("flag cleared after deploy", 7 not in pb.waiting_for_code)
-check("buffer cleared after deploy", 7 not in pb.code_buffer)
-
-# empty submission must not deploy an empty job
-_deployed.clear()
-_sent.clear()
-pb.waiting_for_code[8] = True
-pb.collect_code(8, "   ", "Ahad")
-pb.buffer_timer[8].cancel()
-pb.flush_code(8, "Ahad")
-check("blank code is not deployed", not _deployed)
-pb.deploy_code = _real_deploy
+# --- 3. no message can become a deploy -------------------------------------
+_src_pb = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
+                            "services", "pingbot.py")).read()
+_src_ops = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
+                             "services", "bot_ops.py")).read()
+check("no /code command", 'startswith("/code")' not in _src_pb)
+check("no /deploy command", 'startswith("/deploy")' not in _src_pb)
+check("no /update command", 'startswith("/update")' not in _src_pb)
+check("no plain-text branch that collects a message as source",
+      "elif chat_id in waiting_for_code" not in _src_pb)
+check("the bot never POSTs a job to the runner",
+      '"/internal/jobs"' not in _src_pb and '"/internal/jobs"' not in _src_ops,
+      "a create path survives")
+check("bot_ops has no deploy()", "def deploy(" not in _src_ops)
+check("bot_ops has no update_code()", "def update_code(" not in _src_ops)
+# The lifecycle commands must survive — removing creation is not removing the
+# bot.
+for _keep in ("/apps", "/logs", "/restart", "/stop", "/delete", "/rename",
+              "/status"):
+    check(f"{_keep} still works", f'startswith("{_keep}")' in _src_pb)
 
 # --- /start must not print a literal backslash-n ---------------------------
 _src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",

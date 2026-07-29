@@ -134,29 +134,21 @@ def dispatch(chat_id, text, first_name="Someone", username=""):
     elif text.startswith("/ping"):
         if PB._require_link(chat_id):
             PB.handle_ping(chat_id, text)
-    elif text.startswith("/code"):
+    elif text.startswith("/apps"):
         if PB._require_link(chat_id):
-            PB.waiting_for_code[chat_id] = True
-            PB.code_buffer.pop(chat_id, None)
-            PB._send(chat_id, "✅ Send your code (any size)")
-    elif chat_id in PB.waiting_for_code:
-        if PB._require_link(chat_id):
-            PB.collect_code(chat_id, text, first_name)
-        else:
-            PB.waiting_for_code.pop(chat_id, None)
-            PB.code_buffer.pop(chat_id, None)
-    elif text.startswith("/"):
-        PB._send(chat_id, PB.UNKNOWN_REPLY)
+            PB.cmd_apps(chat_id, PB.telegram_link.user_for_chat(chat_id))
+    else:
+        # No plain-text branch any more: a message that is not a command used
+        # to be collected as source and deployed. Nothing does that now.
+        PB._send(chat_id, PB.UNKNOWN_REPLY, reply_markup=PB._open_kb())
 
 
 # ---------------------------------------------------------------------------
 print("\n[1] an unlinked chat can do nothing")
 # ---------------------------------------------------------------------------
 DEPLOYED.clear()
-dispatch(STRANGER, "/code")
-check("/code is refused", not PB.waiting_for_code.get(STRANGER),
-      str(PB.waiting_for_code.get(STRANGER)))
-check("and nothing is deployed", len(DEPLOYED) == 0, str(len(DEPLOYED)))
+dispatch(STRANGER, "/apps")
+check("a real command is refused", len(DEPLOYED) == 0, str(len(DEPLOYED)))
 refusal = last_text()
 check("the refusal reads as an unknown command",
       "Unknown command" in refusal, refusal)
@@ -169,16 +161,17 @@ check("nor that an account is needed",
 dispatch(STRANGER, "/ping https://example.com")
 check("/ping is refused too", "Unknown command" in last_text(), last_text())
 
-# Even if a stranger forces the buffer flag, the deploy path re-checks.
+# Pasting code is no longer refused — it is not a thing that can happen. The
+# original hole was that a stranger's os.system('whoami') deployed; there is
+# now no path from a chat message to the runner at all.
 DEPLOYED.clear()
-PB.waiting_for_code[STRANGER] = True
-PB.code_buffer[STRANGER] = ["import os\nos.system('whoami')"]
-PB.flush_code(STRANGER, "Stranger")
-check("a forced buffer still cannot deploy", len(DEPLOYED) == 0, str(DEPLOYED))
-check("because the timer path re-checks identity",
-      "Unknown command" in last_text(), last_text())
-PB.waiting_for_code.pop(STRANGER, None)
-PB.code_buffer.pop(STRANGER, None)
+dispatch(STRANGER, "import os\nos.system('whoami')")
+check("pasted code deploys nothing", len(DEPLOYED) == 0, str(DEPLOYED))
+check("it reads as an unknown command", "Unknown command" in last_text(),
+      last_text())
+for _gone in ("waiting_for_code", "code_buffer", "collect_code", "flush_code",
+              "deploy_code"):
+    check(f"{_gone} no longer exists at all", not hasattr(PB, _gone))
 
 # Buttons are as powerful as commands: Restart and Download DB both act.
 CB = []
@@ -199,11 +192,18 @@ s = last_text()
 # The instruction is no longer "type /link 123456" — the site hands out a
 # one-tap deep link, so the bot points at the site instead of teaching a
 # command the user should never have to run.
-check("a chat that ASKED is told where to go", "Connect Telegram" in s, s[:120])
-check("it names the settings step", "Settings" in s, s[:140])
-check("and gets a button, not just prose",
-      any("inline_keyboard" in str(p.get("reply_markup", "")) for m, p in SENT),
-      str(SENT[-1])[:120])
+# There is nothing left to explain: opening the Mini App verifies the same
+# Telegram identity and writes the same telegram_id the /link code wrote, so
+# the button IS the connect step.
+check("an unlinked visitor is pointed at the app", "CodeNest" in s, s[:140])
+check("and gets exactly one button",
+      len([b for r in
+           __import__("json").loads(SENT[-1][1]["reply_markup"])["inline_keyboard"]
+           for b in r]) == 1,
+      SENT[-1][1].get("reply_markup"))
+check("which is a web_app button, not a bare URL",
+      "web_app" in SENT[-1][1]["reply_markup"], SENT[-1][1]["reply_markup"])
+check("no URL is printed as text", "http" not in s, s[:160])
 check("nothing tells them to memorise a code", "123456" not in s, s[:140])
 
 # ---------------------------------------------------------------------------
@@ -240,11 +240,10 @@ check("the code is single-use",
       TL.redeem_code(code, OTHER_CHAT)["ok"] is False)
 
 DEPLOYED.clear()
-dispatch(OWNER_CHAT, "/code")
-check("/code is now accepted", PB.waiting_for_code.get(OWNER_CHAT) is True)
-dispatch(OWNER_CHAT, "print('hi')")
-time.sleep(6)
-check("and the deploy actually happens", len(DEPLOYED) == 1, str(len(DEPLOYED)))
+SENT.clear()
+dispatch(OWNER_CHAT, "/apps")
+check("a real command now works", "Unknown command" not in last_text(),
+      last_text()[:80])
 
 dispatch(OWNER_CHAT, "/start")
 check("/start now greets by username", "owner" in last_text(), last_text())
@@ -316,14 +315,10 @@ conn.commit()
 conn.close()
 check("a suspended account stops resolving", TL.user_for_chat(OWNER_CHAT) is None)
 DEPLOYED.clear()
-dispatch(OWNER_CHAT, "/code")
-check("so /code is refused again", len(DEPLOYED) == 0 and
-      "Unknown command" in last_text(), last_text())
-# Mid-flight work belongs to the account that just lost access.
-PB.waiting_for_code[OWNER_CHAT] = True
-PB.code_buffer[OWNER_CHAT] = ["print('sneak')"]
-PB.flush_code(OWNER_CHAT, "Owner")
-check("an in-flight deploy is stopped by the suspension", len(DEPLOYED) == 0, str(DEPLOYED))
+SENT.clear()
+dispatch(OWNER_CHAT, "/apps")
+check("so commands are refused again", "Unknown command" in last_text(),
+      last_text())
 check("a suspended account cannot re-link either",
       TL.redeem_code("000000", OWNER_CHAT)["ok"] is False)
 
@@ -337,13 +332,11 @@ check("reactivation restores it without re-linking",
 # ---------------------------------------------------------------------------
 print("[8] unlinking")
 # ---------------------------------------------------------------------------
-PB.waiting_for_code[OWNER_CHAT] = True
-PB.code_buffer[OWNER_CHAT] = ["print('x')"]
 dispatch(OWNER_CHAT, "/unlink")
 check("the bot confirms", "Disconnected" in last_text(), last_text())
 check("the chat no longer resolves", TL.user_for_chat(OWNER_CHAT) is None)
-check("any half-typed code is dropped with it",
-      OWNER_CHAT not in PB.waiting_for_code and OWNER_CHAT not in PB.code_buffer)
+check("there is no code state left that could leak between accounts",
+      not hasattr(PB, "waiting_for_code") and not hasattr(PB, "code_buffer"))
 check("the site agrees", c.get("/profile/telegram", headers=OH).json()["linked"] is False)
 check("an unlinked chat's /unlink says nothing revealing",
       (dispatch(OWNER_CHAT, "/unlink"), "Unknown command" in last_text())[1], last_text())
@@ -359,16 +352,20 @@ check("after unlinking the chat can bind elsewhere",
 print("[9] the gate is wired into every path, not just the ones tested")
 # ---------------------------------------------------------------------------
 src = open(os.path.join(ROOT, "services/pingbot.py"), encoding="utf-8").read()
-check("/code is gated", "if _require_link(chat_id):\n                            waiting_for_code" in src)
+check("there is no /code command left", 'startswith("/code")' not in src)
+check("nor any way for a message to become a deploy",
+      '"/internal/jobs"' not in src)
 check("/ping is gated", 'text.startswith("/ping")' in src and "_require_link" in src)
-check("the buffer path is gated", src.count("_require_link(chat_id)") >= 3,
+check("every acting command is gated", src.count("_require_link(chat_id)") >= 6,
       str(src.count("_require_link(chat_id)")))
-check("the deploy timer re-checks",
-      "if not telegram_link.user_for_chat(chat_id)" in src)
+# The deploy timer it used to guard no longer exists — there is nothing that
+# runs on a delay and spends memory.
+check("no delayed deploy path survives",
+      "threading.Timer" not in src, "a timer still schedules work")
 check("callbacks are gated",
       "if telegram_link.user_for_chat(cb_chat):" in src)
-check("an unknown slash command gets the same reply as a gated one",
-      'elif text.startswith("/"):\n                        _send(chat_id, UNKNOWN_REPLY)' in src)
+check("ANY message that is not a handled command gets the same reply",
+      "else:\n                        _send(chat_id, UNKNOWN_REPLY," in src)
 check("no command besides /start, /link and /unlink runs unlinked",
       src.count("UNKNOWN_REPLY") >= 4, str(src.count("UNKNOWN_REPLY")))
 
@@ -418,10 +415,13 @@ dispatch(DEEP_CHAT, "/start", "Victim", "victimtg")
 check("a bare /start still greets a linked user", "victim" in last_text(), last_text())
 SENT.clear()
 dispatch(404404404, "/start", "Nobody")
-check("an unlinked visitor is pointed at the site, not left guessing",
-      "Connect Telegram" in last_text(), last_text())
+check("an unlinked visitor is pointed at the app, not left guessing",
+      "CodeNest" in last_text(), last_text())
 check("with a button rather than instructions to hunt",
       any("inline_keyboard" in str(p.get("reply_markup", "")) for m, p in SENT))
+check("and it opens the Mini App rather than a browser",
+      "web_app" in str(SENT[-1][1].get("reply_markup", "")),
+      str(SENT[-1][1].get("reply_markup"))[:100])
 
 # Garbage payloads must behave like a wrong code, not crash the poll loop.
 SENT.clear()
