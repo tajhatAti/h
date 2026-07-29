@@ -2649,6 +2649,35 @@ document.addEventListener("DOMContentLoaded", () => {
   const otpPasteBtn = document.getElementById("otpPasteBtn");
   if (otpPasteBtn) otpPasteBtn.addEventListener("click", pasteOtp);
 
+  // ---- Telegram Mini App: sign in BEFORE choosing a screen ----
+  // Deliberately ahead of the sync boot below. Deciding the screen first and
+  // logging in after would flash the landing page inside Telegram on every
+  // single open, which is exactly the friction a Mini App removes.
+  if (window.__inTelegram && typeof window.__tgAutoLogin === "function"
+      && !authToken) {
+    document.documentElement.classList.add("booting");
+    window.__tgAutoLogin().then((r) => {
+      if (r && r.ok) {
+        authToken = localStorage.getItem("ahad_token");
+        showScreen("screen-dashboard");
+        loadDashboard().catch(() => {});
+        routeFromUrl();
+      } else {
+        // Verification failed. Show the normal login rather than trapping the
+        // user on a blank screen with no way forward.
+        showScreen("screen-landing");
+      }
+    }).catch(() => {
+      showScreen("screen-landing");
+    }).finally(() => {
+      _bootOk = true;
+      document.documentElement.classList.remove("booting");
+      const sp = document.getElementById("bootSplash");
+      if (sp) sp.style.display = "none";
+    });
+    return;
+  }
+
   // ---- Boot: decide the screen SYNCHRONOUSLY (no flash) ----
   if (authToken) {
     showScreen("screen-dashboard");

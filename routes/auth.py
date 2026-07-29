@@ -621,6 +621,91 @@ class TelegramAuthData(BaseModel):
     hash: str
     fingerprint: Optional[str] = None
 
+class MiniAppAuth(BaseModel):
+    init_data: str
+    fingerprint: Optional[str] = None
+
+
+@router.post("/auth/telegram/miniapp")
+def telegram_miniapp_login(payload: MiniAppAuth, request: Request):
+    """Auto-login for the CodeNest Mini App running inside Telegram.
+
+    SEPARATE FROM /auth/telegram ON PURPOSE. Both prove the same Telegram
+    identity, but the HMAC key differs — Login Widget uses sha256(token) while
+    the Mini App uses HMAC("WebAppData", token). Verified on the same
+    data-check string, the two hashes differ, so initData posted to the widget
+    route is rejected as tampered. Loosening that route to accept both would
+    mean one endpoint with two trust rules.
+
+    Resolution is IDENTICAL though: same telegram_id, same account, whichever
+    door the user came through.
+    """
+    rate_limit(f"{client_ip(request)}:miniapp_login")
+
+    from services import miniapp_auth
+    try:
+        tg = miniapp_auth.verify_init_data(payload.init_data)
+    except ValueError as exc:
+        reason = str(exc)
+        if reason == "not_configured":
+            raise HTTPException(status_code=500, detail="Telegram login not configured.")
+        # Everything else gets ONE message. Telling a forger that the hash was
+        # fine but the timestamp was stale is a hint about what to fix.
+        logger.info("miniapp auth rejected: %s", reason)
+        raise HTTPException(status_code=400, detail="Could not verify Telegram sign-in.")
+
+    tg_id = tg["id"]
+    label = miniapp_auth.display_name(tg)
+
+    conn = get_db_connection()
+    try:
+        row = conn.execute("SELECT * FROM users WHERE telegram_id = ?", (tg_id,)).fetchone()
+        if row:
+            if "is_suspended" in row.keys() and row["is_suspended"]:
+                raise HTTPException(status_code=403, detail="Account is suspended.")
+            # Refresh the cached handle: a user who changed their @name would
+            # otherwise show a stale one in the dashboard and admin console
+            # forever, since the bot only writes it at link time.
+            if label:
+                conn.execute(
+                    "UPDATE users SET telegram_name = ?, updated_at = ? WHERE id = ?",
+                    (label, now_utc_str(), row["id"]))
+                conn.commit()
+            token = create_session(row["id"], request,
+                                   fingerprint=payload.fingerprint or "")
+            return {"message": "Signed in via Telegram", "token": token,
+                    "username": row["username"], "created": False}
+
+        # No account for this Telegram id yet. Mirrors /auth/telegram exactly,
+        # including the username-clash fallback that used to 500 on a UNIQUE
+        # violation.
+        base_username = f"tg_{tg_id}"
+        username = base_username
+        for _attempt in range(6):
+            clash = conn.execute("SELECT id FROM users WHERE username = ?",
+                                 (username,)).fetchone()
+            if not clash:
+                break
+            username = f"{base_username}_{secrets.token_hex(3)}"
+        email = f"tg_{tg_id}@telegram.user"
+        password = hash_password(secrets.token_urlsafe(16))
+        now = now_utc_str()
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO users (username, email, password, is_verified, "
+            "telegram_id, telegram_name, created_at, updated_at) "
+            "VALUES (?, ?, ?, 1, ?, ?, ?, ?)",
+            (username, email, password, tg_id, label or None, now, now))
+        conn.commit()
+        user_id = cursor.lastrowid
+    finally:
+        conn.close()
+
+    token = create_session(user_id, request, fingerprint=payload.fingerprint or "")
+    return {"message": "Account created via Telegram", "token": token,
+            "username": username, "created": True}
+
+
 @router.post("/auth/telegram")
 def telegram_login(payload: TelegramAuthData, request: Request):
     rate_limit(f"{client_ip(request)}:telegram_login")

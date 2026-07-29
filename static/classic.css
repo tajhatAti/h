@@ -1476,6 +1476,28 @@ body.ed-full { overflow: hidden !important; }
 .tg-fallback[open] > summary::before { content: "▾ "; }
 .tg-waiting { text-align: center; min-height: 18px; margin-top: 10px; }
 
+/* ---------- Telegram Mini App ----------
+   The app is unchanged inside Telegram; these are the few places where the
+   webview is genuinely a different container from a browser tab. */
+
+/* Sign-out inside a Mini App would drop the session and the very next open
+   would sign the same person straight back in — a control that visibly does
+   nothing. Hidden, not removed, so nothing that queries for it breaks. */
+html.tg-hide-signout #btnLogout { display: none !important; }
+
+/* Telegram's viewport is not the window: the keyboard and the drag-to-close
+   gesture change it, so 100vh overflows its own container. --tg-vh is kept in
+   sync by the SDK's viewportChanged event. */
+html.in-telegram body { min-height: var(--tg-vh, 100vh); }
+html.in-telegram .dash-main { min-height: var(--tg-vh, 100vh); }
+
+/* Telegram already draws a header with the app name and a close control, so
+   the marketing navbar is a second one saying the same thing — and its
+   "Sign in / Get started" buttons are meaningless when the user is already
+   signed in by Telegram. (The class is `.nav`; I first wrote `.landing-nav`,
+   which does not exist in this markup, so the rule matched nothing.) */
+html.in-telegram nav.nav { display: none !important; }
+
 /* ---------- admin console ---------- */
 .adm-stats {
   display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 18px;

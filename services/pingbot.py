@@ -179,12 +179,53 @@ def _tg_display(msg):
     return (frm.get("first_name") or "").strip()
 
 
+# A Mini App button needs an HTTPS URL — Telegram refuses http:// and refuses
+# to render the button at all, so a local dev SITE_BASE must fall back to a
+# plain link rather than producing a keyboard Telegram will reject.
+def _miniapp_ok() -> bool:
+    return SITE_BASE.startswith("https://")
+
+
+def _open_button(label="🚀 Open CodeNest"):
+    """The Mini App launch button, or a plain link when that is not possible.
+
+    `web_app` opens the existing site INSIDE Telegram, where initData signs
+    the user in automatically. `url` opens a browser, where they would have to
+    log in — the same destination, a worse trip, but better than no button.
+    """
+    if not SITE_BASE:
+        return None
+    if _miniapp_ok():
+        return {"text": label, "web_app": {"url": f"{SITE_BASE}/dashboard"}}
+    return {"text": label, "url": f"{SITE_BASE}/dashboard"}
+
+
 def _menu_buttons():
     """Buttons an unlinked visitor sees, so the next step is a tap not a hunt."""
     rows = []
-    if SITE_BASE:
-        rows.append([{"text": "🔗 Connect my account", "url": f"{SITE_BASE}/dashboard"}])
+    btn = _open_button("🔗 Connect my account")
+    if btn:
+        rows.append([btn])
     return {"inline_keyboard": rows} if rows else None
+
+
+def set_menu_button():
+    """Register the persistent 'Open CodeNest' button next to the input box.
+
+    This is the always-available entry point — it does not depend on the user
+    finding an old message with an inline button in it.
+    """
+    if not BOT_TOKEN or not _miniapp_ok():
+        return False
+    res = _tg("setChatMenuButton", menu_button={
+        "type": "web_app",
+        "text": "Open CodeNest",
+        "web_app": {"url": f"{SITE_BASE}/dashboard"},
+    })
+    ok = bool((res or {}).get("ok"))
+    if not ok:
+        print("menu button not set:", res)
+    return ok
 
 
 def _help_text(user):
@@ -203,7 +244,9 @@ def _help_text(user):
         "*Other*\n"
         "`/ping [url]` — check a URL\n"
         "`/unlink` — disconnect this chat\n\n"
-        "I message you if an app stops on its own."
+        "I message you if an app stops on its own.\n\n"
+        "_Pasted code is fine for quick scripts. For real projects open the "
+        "Mini App — it is the full editor._"
     )
 
 
@@ -230,7 +273,9 @@ def handle_start(chat_id, first_name, payload=""):
 
     user = telegram_link.user_for_chat(chat_id)
     if user:
-        _send(chat_id, _help_text(user))
+        btn = _open_button()
+        _send(chat_id, _help_text(user),
+              reply_markup={"inline_keyboard": [[btn]]} if btn else None)
         return
     _send(chat_id,
           f"👋 Hi {first_name}!\n\n"
@@ -341,6 +386,9 @@ def _app_buttons(job_id, url=""):
     ]
     if url:
         rows.append([{"text": "🌐 Open live URL", "url": url}])
+    btn = _open_button("🚀 Open in CodeNest")
+    if btn:
+        rows.append([btn])
     return {"inline_keyboard": rows}
 
 
@@ -397,6 +445,10 @@ def deploy_code(code, chat_id, first_name, name=""):
     text = f"🚀 *{job['name']}* is live."
     if job.get("web_url"):
         text += f"\n\n{job['web_url']}"
+    # Pasted code stays supported for quick one-offs, but Telegram caps a
+    # message at ~4096 characters and has no editor, so anything real belongs
+    # in the Mini App. Said once, here, rather than nagging on every command.
+    text += "\n\n_For larger projects, open the CodeNest Mini App._"
     _send(chat_id, text, reply_markup=_app_buttons(job["id"], job.get("web_url")))
 
 
@@ -693,7 +745,7 @@ def poll_loop():
 
                     # Every command below acts on real apps, so each one is
                     # gated. _cmd_arg() splits off "/logs mybot" -> "mybot".
-                    elif text.startswith("/apps"):
+                    elif text.startswith("/apps") or text.startswith("/jobs"):
                         _u = _require_link(chat_id)
                         if _u:
                             cmd_apps(chat_id, _u)
@@ -773,6 +825,13 @@ def poll_loop():
 
 
 def start_bot():
+    # Register the persistent Mini App button before polling starts, so the
+    # entry point exists even for a user who never sends a command.
+    try:
+        set_menu_button()
+    except Exception as exc:  # noqa: BLE001
+        print("menu button registration failed:", exc)
+
     if not BOT_TOKEN:
         print("TELEGRAM_PING_BOT_TOKEN not set")
         return

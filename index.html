@@ -39,6 +39,10 @@
     }
   })();
 </script>
+<!-- Telegram Mini Apps SDK. Loaded on every page, not conditionally: it is
+     the only way to find out whether we are inside Telegram at all, and on a
+     normal browser it costs one small cached script and does nothing. -->
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
 
@@ -1331,6 +1335,9 @@
 <!-- CodeMirror 6 (self-hosted bundle, built from editor-src/). Must load
      before pro.js, which creates the editors. -->
 <script src="/static/cm6.bundle.js?v=20260724m"></script>
+<!-- BEFORE pro.js: it sets window.__inTelegram and window.__tgAutoLogin,
+     which pro.js's boot path checks to decide whether to sign in first. -->
+<script src="/static/miniapp.js?v=20260729a"></script>
 <script src="/static/pro.js?v=20260724m"></script>
 <script src="/static/terminal.js?v=20260724m"></script>
 <script>
