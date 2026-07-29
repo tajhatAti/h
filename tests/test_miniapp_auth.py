@@ -176,10 +176,13 @@ check("every one of them is refused",
 # blaming only the config would mislead a forger about why they failed, and
 # blaming only the payload leaves an owner with nothing to check.
 _bad = login(good[:-1] + ("0" if good[-1] != "0" else "1")).json().get("detail") or ""
-check("a rejected signature does not pretend to know which cause",
-      "could not verify" in _bad.lower() and "TELEGRAM_PING_BOT_TOKEN" in _bad, _bad)
-check("and it never describes the token itself",
-      "999" not in _bad and len(_bad) < 250, _bad)
+check("a rejected signature does not claim to know which cause",
+      "could not verify" in _bad.lower(), _bad)
+check("but it gives the owner something to check",
+      "bot ID" in _bad or "TELEGRAM_PING_BOT_TOKEN" in _bad, _bad)
+# The bot ID half of a token is public; the secret half is not.
+check("and never the secret half of the token",
+      TOKEN.split(":")[1] not in _bad and len(_bad) < 250, _bad)
 # An unparseable payload tells a prober nothing at all.
 _junk = login("garbage").json().get("detail") or ""
 check("junk stays fully generic",
@@ -205,13 +208,12 @@ print("[3c] a failure says WHICH failure, when the user can act on it")
 # Mini App turned into "Couldn't connect". A missing TELEGRAM_PING_BOT_TOKEN,
 # a token belonging to a different bot, and a stale session all looked like a
 # network problem on the phone, so the only debugging move was guessing.
-r = login(init_data(token="999999:SomeOtherBotToken"))
-check("a token mismatch is named", "TELEGRAM_PING_BOT_TOKEN" in (r.json().get("detail") or ""),
-      str(r.json().get("detail")))
+r = login(init_data(token="999999:SomeOtherBotTokenABCDEFGH"))
+_dm = (r.json().get("detail") or "")
+check("a token mismatch names the configured bot ID",
+      "bot ID" in _dm, _dm)
 check("and it points at the bot, not at the network",
-      "same bot" in (r.json().get("detail") or "").lower()
-      and "connect" not in (r.json().get("detail") or "").lower(),
-      str(r.json().get("detail")))
+      "connect" not in _dm.lower(), _dm)
 
 r = login(init_data(when=time.time() - 90000))
 check("a stale session says so", "expired" in (r.json().get("detail") or "").lower(),
@@ -240,6 +242,52 @@ for _junk in ("garbage", urlencode({"auth_date": "1", "user": "{}"})):
 _auth_src = open(os.path.join(ROOT, "routes/auth.py"), encoding="utf-8").read()
 check("rejections are logged as warnings, not info",
       'logger.warning("miniapp auth rejected: %s", reason)' in _auth_src)
+
+# ---------------------------------------------------------------------------
+print("[3d] a mangled token is tolerated, and a real mismatch names itself")
+# ---------------------------------------------------------------------------
+# Production log said exactly one word: bad_hash. FOUR different causes
+# produce it and none is distinguishable on a phone:
+#     quoted in the hosting UI   "123:ABC"
+#     pasted with an @ prefix    @123:ABC
+#     the bot username pasted instead of the token
+#     genuinely a different bot's token
+_orig = os.environ.get("TELEGRAM_PING_BOT_TOKEN", "")
+
+# Two of them are paste accidents around a CORRECT token, so they are cleaned
+# rather than left to fail as a signature mismatch.
+os.environ["TELEGRAM_PING_BOT_TOKEN"] = '"' + TOKEN + '"'
+check("a quoted token still verifies", login(init_data()).status_code == 200,
+      str(login(init_data()).status_code))
+os.environ["TELEGRAM_PING_BOT_TOKEN"] = "@" + TOKEN
+check("an @-prefixed token still verifies", login(init_data()).status_code == 200)
+os.environ["TELEGRAM_PING_BOT_TOKEN"] = "  " + TOKEN + "\n"
+check("surrounding whitespace still verifies", login(init_data()).status_code == 200)
+
+# The other two are real misconfigurations, so they say which.
+os.environ["TELEGRAM_PING_BOT_TOKEN"] = "MyCodeNestBot"
+_d = (login(init_data()).json() or {}).get("detail") or ""
+check("a username pasted instead of a token says so",
+      "not shaped like a bot token" in _d, _d)
+
+os.environ["TELEGRAM_PING_BOT_TOKEN"] = TOKEN
+_d = (login(init_data(token="9999999:AAsomeOtherBotTokenABCDEFGH123456")).json()
+      or {}).get("detail") or ""
+check("a genuine bot mismatch reports the configured bot ID",
+      "123456" in _d, _d)
+check("so the owner can compare it against BotFather in one glance",
+      "check that matches the bot" in _d, _d)
+
+# The bot ID half of a token is public — anyone who can message the bot sees
+# it. The SECRET half must never appear.
+check("the token's secret half is never echoed",
+      "AAFakeBotToken" not in _d, _d)
+_shape = MA.token_shape()
+check("token_shape exposes only the public id", set(_shape) <= {"configured", "bot_id", "looks_valid"},
+      str(_shape))
+check("and never the secret", TOKEN.split(":")[1] not in str(_shape), str(_shape))
+
+os.environ["TELEGRAM_PING_BOT_TOKEN"] = _orig
 
 # ---------------------------------------------------------------------------
 print("[4] the verifier's own edge cases")

@@ -666,15 +666,30 @@ def telegram_miniapp_login(payload: MiniAppAuth, request: Request):
             # tell them apart: a forged payload, or the site verifying with a
             # DIFFERENT bot's token than the one whose Mini App was opened.
             #
-            # Naming only the second would be MISLEADING to a forger — their
-            # real problem is that they signed it wrong. So the message states
-            # both. It leaks nothing either way: a forger already knows their
-            # hash failed, and the token itself is never described.
+            # Naming only the second would MISLEAD a forger — their real
+            # problem is that they signed it wrong — so the message states
+            # both. It leaks nothing: a forger already knows their hash failed.
+            #
+            # The BOT ID is included when it is available. A token is
+            # "<bot id>:<secret>" and the id half is public — anyone who can
+            # message the bot can see it — so printing it lets the owner
+            # compare against @BotFather in one glance instead of guessing
+            # between four causes that all look identical on a phone. The
+            # secret half is never read here.
+            shape = miniapp_auth.token_shape()
+            hint = ""
+            if not shape.get("looks_valid"):
+                hint = (" The value in TELEGRAM_PING_BOT_TOKEN is not shaped "
+                        "like a bot token — it should look like 123456:ABC-DEF.")
+            elif shape.get("bot_id"):
+                hint = (f" This server is configured for bot ID "
+                        f"{shape['bot_id']}; check that matches the bot you "
+                        f"opened this from.")
+            logger.warning("miniapp bad_hash with configured bot_id=%s looks_valid=%s",
+                           shape.get("bot_id"), shape.get("looks_valid"))
             raise HTTPException(
                 status_code=400,
-                detail="Telegram could not verify this session. If you are the "
-                       "site owner, check that TELEGRAM_PING_BOT_TOKEN belongs "
-                       "to the same bot this Mini App was opened from.")
+                detail="Telegram could not verify this session." + hint)
         if reason in ("expired", "future"):
             raise HTTPException(
                 status_code=400,

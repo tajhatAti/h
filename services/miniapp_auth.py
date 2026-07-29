@@ -42,7 +42,46 @@ _FUTURE_SKEW_S = 300
 
 
 def _bot_token() -> str:
-    return os.getenv("TELEGRAM_PING_BOT_TOKEN", "").strip()
+    """The bot token, cleaned of the ways a hosting UI mangles it.
+
+    Every one of these produced bad_hash with a token that was otherwise
+    CORRECT, and none of them is distinguishable on a phone:
+
+        quoted in the Render UI   "123:ABC"   -> bad_hash
+        pasted with an @ prefix   @123:ABC    -> bad_hash
+
+    strip() already handled stray whitespace and newlines. Quotes and a
+    leading @ are the two remaining paste accidents, so they are removed here
+    rather than left to fail silently as a signature mismatch.
+    """
+    raw = os.getenv("TELEGRAM_PING_BOT_TOKEN", "").strip()
+    if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in ("'", '"'):
+        raw = raw[1:-1].strip()
+    return raw.lstrip("@").strip()
+
+
+def token_shape() -> dict:
+    """A description of the configured token that reveals nothing secret.
+
+    A bot token is "<numeric bot id>:<35-char secret>". The bot ID half is
+    PUBLIC — it is visible to anyone who can message the bot — so reporting it
+    lets an owner check at a glance whether the server holds the same bot the
+    Mini App was opened from. The secret half is never touched.
+    """
+    tok = _bot_token()
+    if not tok:
+        return {"configured": False}
+    bot_id, sep, secret = tok.partition(":")
+    return {
+        "configured": True,
+        "bot_id": bot_id if (sep and bot_id.isdigit()) else None,
+        # Shape only, and deliberately loose. A real secret half is ~34-35
+        # chars, but the point of this flag is to catch a value that is
+        # obviously NOT a token — a bot username, a URL, an empty string —
+        # not to police length. I first used >= 30, which is close enough to
+        # the real length to reject legitimate variation for no benefit.
+        "looks_valid": bool(sep and bot_id.isdigit() and len(secret) >= 10),
+    }
 
 
 def verify_init_data(init_data: str, token: str = None) -> dict:
