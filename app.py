@@ -345,6 +345,40 @@ def _miniapp_bot_id():
         return "unknown"
 
 
+# Cached so /health stays a cheap liveness probe. The answer only changes when
+# the token changes, which means a restart.
+_BOT_IDENTITY = {"checked": False, "value": None}
+
+
+def _bot_identity():
+    """Which bot this server can verify Mini App sign-ins for.
+
+    The @username is what makes a bad_hash diagnosable: it is the single fact
+    that says whether the Mini App is being opened from the right bot. It was
+    previously only reachable through an admin-gated route, which needs an
+    Authorization HEADER — so typing that URL into a browser returned 404 and
+    the check was effectively unavailable to the person who needed it.
+
+    A bot's id and @username are PUBLIC: anyone who can message the bot sees
+    both. The token's secret half is never read here.
+    """
+    if _BOT_IDENTITY["checked"]:
+        return _BOT_IDENTITY["value"]
+    out = None
+    try:
+        from services import miniapp_auth
+        who = miniapp_auth.whoami()
+        if who.get("ok"):
+            out = {"username": who.get("username"), "id": who.get("bot_id"),
+                   "open": f"https://t.me/{who.get('username')}"}
+        else:
+            out = {"error": who.get("reason")}
+    except Exception as exc:  # pragma: no cover - diagnostics must never 500
+        out = {"error": "check_failed", "detail": str(exc)[:100]}
+    _BOT_IDENTITY.update(checked=True, value=out)
+    return out
+
+
 @app.get("/health")
 def health():
     return {
@@ -358,6 +392,9 @@ def health():
         # it can be compared against the bot the Mini App was actually opened
         # from. The secret half is never read.
         "telegram_bot_id": _miniapp_bot_id(),
+        # Open the Mini App from THIS bot or sign-in fails with bad_hash.
+        # Public information, and the one thing needed to diagnose it.
+        "telegram_bot": _bot_identity(),
         "brevo_api_key_set": bool(os.getenv("BREVO_API_KEY", "").strip()),
         "sender_email_set": bool(os.getenv("SENDER_EMAIL", "").strip()),
     }

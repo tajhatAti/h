@@ -21,6 +21,9 @@ from services import telegram_link  # noqa: E402
 from services import bot_ops  # noqa: E402
 from services import runner_client  # noqa: E402
 
+import logging
+logger = logging.getLogger("codenest-app")
+
 # CODE NEVER ARRIVES THROUGH CHAT.
 #
 # The bot used to accept a pasted snippet and deploy it. That is removed: a
@@ -675,16 +678,45 @@ def poll_loop():
 
 
 def start_bot():
+    if not BOT_TOKEN:
+        print("TELEGRAM_PING_BOT_TOKEN not set")
+        return
+
+    # ASK TELEGRAM WHO WE ARE, ONCE, AT BOOT.
+    #
+    # A token belonging to a different bot than the Mini App is opened from
+    # produces bad_hash, and nothing in the running system could say so — the
+    # only way to find out was to open the app, fail, read the log, and guess.
+    # getMe answers it in one call at startup, so the fact is in the logs
+    # before anyone tries to sign in.
+    try:
+        from services import miniapp_auth
+        who = miniapp_auth.whoami()
+        if who.get("ok"):
+            logger.warning(
+                "TELEGRAM BOT: this server is @%s (id %s). The Mini App must be "
+                "opened from THIS bot, or sign-in fails with bad_hash.",
+                who.get("username"), who.get("bot_id"))
+            env_name = os.getenv("TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
+            if env_name and env_name.lower() != (who.get("username") or "").lower():
+                logger.error(
+                    "TELEGRAM MISCONFIGURED: TELEGRAM_BOT_USERNAME is @%s but the "
+                    "token belongs to @%s. These must be the same bot.",
+                    env_name, who.get("username"))
+        else:
+            logger.error(
+                "TELEGRAM TOKEN REJECTED by getMe (%s). Sign-in will fail until "
+                "TELEGRAM_PING_BOT_TOKEN is a valid token: %s",
+                who.get("reason"), who.get("detail", ""))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("bot identity check skipped: %s", exc)
+
     # Register the persistent Mini App button before polling starts, so the
     # entry point exists even for a user who never sends a command.
     try:
         set_menu_button()
     except Exception as exc:  # noqa: BLE001
         print("menu button registration failed:", exc)
-
-    if not BOT_TOKEN:
-        print("TELEGRAM_PING_BOT_TOKEN not set")
-        return
     t = threading.Thread(target=poll_loop, daemon=True)
     t.start()
     print("✅ Advanced Bot started (with 5s buffer + inline controls)")

@@ -354,6 +354,44 @@ try:
 finally:
     MA.whoami = _saved_who
 
+# THE DIAGNOSTIC MUST BE REACHABLE WITHOUT SIGNING IN.
+# /admin/telegram-diagnostic needs an Authorization HEADER, so typing that URL
+# into a browser returns 404 — the check existed but the person who needed it
+# could not reach it. /health needs nothing.
+_saved_who2 = MA.whoami
+A._BOT_IDENTITY.update(checked=False, value=None)
+try:
+    MA.whoami = lambda timeout_s=6.0: {"ok": True, "bot_id": 123456,
+                                       "username": "AhadRealBot"}
+    _hh = c.get("/health").json()
+    check("/health names the bot, with no auth at all",
+          (_hh.get("telegram_bot") or {}).get("username") == "AhadRealBot", str(_hh.get("telegram_bot")))
+    check("and links straight to it",
+          (_hh.get("telegram_bot") or {}).get("open") == "https://t.me/AhadRealBot")
+    check("/health never carries the token secret",
+          TOKEN.split(":")[1] not in str(_hh), str(_hh)[:120])
+
+    # And the failure message itself should name the bot, so no second page
+    # is needed at all.
+    _dd = (login(init_data(token="9999999:AAsomeOtherBotTokenABCDEFGH123456")).json()
+           or {}).get("detail") or ""
+    check("the error names the bot by @username, not just a number",
+          "@AhadRealBot" in _dd, _dd)
+    check("and says what to do with it", "Open the Mini App from that bot" in _dd, _dd)
+
+    # One getMe per process, not per request: /health is a liveness probe.
+    _calls = []
+    MA.whoami = lambda timeout_s=6.0: (_calls.append(1),
+                                       {"ok": True, "bot_id": 1, "username": "X"})[1]
+    A._BOT_IDENTITY.update(checked=False, value=None)
+    for _ in range(5):
+        c.get("/health")
+    check("the identity is cached, not re-fetched on every probe",
+          len(_calls) == 1, str(len(_calls)))
+finally:
+    MA.whoami = _saved_who2
+    A._BOT_IDENTITY.update(checked=False, value=None)
+
 # /health carries the same public id, so it can be checked without signing in.
 _h = c.get("/health").json()
 check("/health reports the configured bot id",

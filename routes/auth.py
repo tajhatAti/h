@@ -681,10 +681,26 @@ def telegram_miniapp_login(payload: MiniAppAuth, request: Request):
             if not shape.get("looks_valid"):
                 hint = (" The value in TELEGRAM_PING_BOT_TOKEN is not shaped "
                         "like a bot token — it should look like 123456:ABC-DEF.")
-            elif shape.get("bot_id"):
-                hint = (f" This server is configured for bot ID "
-                        f"{shape['bot_id']}; check that matches the bot you "
-                        f"opened this from.")
+            else:
+                # Name the bot, not just its number. "bot ID 8719137492" still
+                # left the owner comparing digits by hand against BotFather;
+                # an @username is something you can recognise at a glance. The
+                # identity is cached from a single getMe at boot, so this adds
+                # no network call to a failing request.
+                ident = None
+                try:
+                    from app import _bot_identity
+                    ident = _bot_identity()
+                except Exception:
+                    pass
+                if ident and ident.get("username"):
+                    hint = (f" This server only accepts sign-ins from "
+                            f"@{ident['username']}. Open the Mini App from "
+                            f"that bot.")
+                elif shape.get("bot_id"):
+                    hint = (f" This server is configured for bot ID "
+                            f"{shape['bot_id']}; check that matches the bot "
+                            f"you opened this from.")
             logger.warning("miniapp bad_hash with configured bot_id=%s looks_valid=%s",
                            shape.get("bot_id"), shape.get("looks_valid"))
             raise HTTPException(
