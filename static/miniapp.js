@@ -143,7 +143,18 @@
     try {
       fp = typeof ensureFingerprint === "function" ? await ensureFingerprint() : "";
     } catch (e) {}
-    const res = await fetch(API + "/auth/telegram/miniapp", {
+    // Same-origin path, NOT the API constant.
+    //
+    // THE BUG: this read `API`, which pro.js declares with `const API = ""` on
+    // its line 6. miniapp.js is loaded BEFORE pro.js (it has to be — pro.js's
+    // boot reads the globals set here), so `API` did not exist yet and this
+    // threw ReferenceError: API is not defined. The rejection landed in the
+    // boot branch's .catch(), which showed "Couldn't connect" — an error that
+    // looked like a network or server problem and was neither.
+    //
+    // `API` is the empty string anyway, so a leading "/" is the same request
+    // with no cross-file dependency to get wrong.
+    const res = await fetch("/auth/telegram/miniapp", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ init_data: initData, fingerprint: fp }),

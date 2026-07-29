@@ -295,6 +295,59 @@ const okFetch = (url, opts) => {
   ok('the SDK loading in a browser tab changes nothing',
      webSdk.__inTelegram === false && signinReachable(webSdk));
 
+  console.log('[8b] miniapp.js cannot depend on anything pro.js defines');
+  // THE BUG THAT PRODUCED "Couldn't connect": this file used `API`, which
+  // pro.js declares on its line 6. miniapp.js loads BEFORE pro.js — it has
+  // to, because pro.js's boot reads the globals set here — so `API` did not
+  // exist and the fetch threw ReferenceError. The rejection hit the boot
+  // branch's .catch() and surfaced as a connection error that was neither a
+  // network nor a server problem.
+  ok('the auth request uses a same-origin path, not the API constant',
+     /fetch\("\/auth\/telegram\/miniapp"/.test(SRC),
+     (SRC.match(/fetch\([^,]*/) || [''])[0]);
+  ok('API is not referenced at all', !/\bAPI\b\s*\+/.test(SRC));
+
+  // Any OTHER pro.js symbol must be typeof-guarded, or it reintroduces this.
+  {
+    const code = SRC.replace(/\/\*[\s\S]*?\*\//g, '')
+                    .replace(/\/\/.*/g, '')
+                    .replace(/"[^"]*"|'[^']*'|`[^`]*`/g, '""');
+    const declared = new Set([...code.matchAll(/(?:const|let|var|function)\s+([A-Za-z_$][\w$]*)/g)]
+                             .map(m => m[1]));
+    // Bare calls only. A METHOD call like Object.keys() is not a global, and
+    // counting it produced a false hit on "keys".
+    const called = [...new Set([...code.matchAll(/(^|[^.\w$])([A-Za-z_$][\w$]*)\s*\(/g)]
+                               .map(m => m[2]))];
+    const fromPro = called.filter(n => !declared.has(n)
+      && new RegExp('(?:function|const|let|var)\\s+' + n + '\\b').test(PRO));
+    const unguarded = fromPro.filter(n => !new RegExp('typeof\\s+' + n).test(SRC));
+    ok('every pro.js symbol it touches is typeof-guarded',
+       unguarded.length === 0, unguarded.join(','));
+  }
+
+  // Drive the real function to prove it no longer throws.
+  {
+    const dd = new JSDOM('<!doctype html><body></body>', {
+      pretendToBeVisual: true, runScripts: 'dangerously',
+      url: 'https://ahadorg.onrender.com/dashboard#tgWebAppData=' + encodeURIComponent(DATA),
+    });
+    const ww = dd.window;
+    ww.Telegram = { WebApp: { initData: DATA, themeParams: {}, colorScheme: 'dark',
+      viewportStableHeight: 640, ready() {}, expand() {}, onEvent() {} } };
+    let hit = null;
+    ww.fetch = (u) => { hit = u; return Promise.resolve({ ok: true,
+      json: () => Promise.resolve({ token: 't', username: 'tg_555' }) }); };
+    const sc = ww.document.createElement('script');
+    sc.textContent = SRC; ww.document.body.appendChild(sc);
+    // pro.js has NOT run — exactly the real load order.
+    ok('API is genuinely undefined at this point',
+       ww.eval('typeof API') === 'undefined');
+    const res = await ww.__tgAutoLogin().catch((e) => ({ threw: e.message }));
+    ok('auto-login does not throw without pro.js', !res.threw, res.threw);
+    ok('it succeeds', res.ok === true, JSON.stringify(res));
+    ok('and hits the right endpoint', hit === '/auth/telegram/miniapp', String(hit));
+  }
+
   console.log('[9] the boot branch cannot route to an auth screen');
   const branch = PRO.slice(PRO.indexOf('if (window.__inTelegram) {'),
                            PRO.indexOf('// ---- Boot: decide the screen SYNCHRONOUSLY'));
