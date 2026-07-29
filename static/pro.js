@@ -2671,11 +2671,17 @@ document.addEventListener("DOMContentLoaded", () => {
       const sp = document.getElementById("bootSplash");
       if (sp) sp.style.display = "none";
     };
-    const fail = () => {
+    const fail = (r) => {
       // An error, not "no account" — a new Telegram id creates an account
       // silently server-side. So this is a retry, never a login form.
+      //
+      // SHOW THE SERVER'S OWN WORDING when it sent one. A single
+      // "Couldn't connect" for every cause pointed at the network even when
+      // the real problem was a missing or mismatched TELEGRAM_PING_BOT_TOKEN,
+      // which no amount of retrying fixes.
       showScreen("screen-dashboard");
-      _tgFatal("Couldn't connect. Pull down to retry, or reopen the app.");
+      const detail = r && r.detail;
+      _tgFatal(detail || "Couldn't connect. Tap Try again, or reopen the app.");
       done();
     };
 
@@ -2690,10 +2696,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (authToken) { go(); done(); return; }
 
-    if (typeof window.__tgAutoLogin !== "function") { fail(); return; }
+    if (typeof window.__tgAutoLogin !== "function") {
+      fail({ detail: "Telegram sign-in did not load. Reopen the app." });
+      return;
+    }
     window.__tgAutoLogin()
-      .then((r) => { if (r && r.ok) { go(); done(); } else { fail(); } })
-      .catch(() => fail());
+      .then((r) => { if (r && r.ok) { go(); done(); } else { fail(r); } })
+      .catch((e) => fail({ detail: "Sign-in failed: " + (e && e.message || e) }));
     return;
   }
 

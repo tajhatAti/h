@@ -166,9 +166,28 @@ _rejects = [login(x) for x in
 check("every one of them is refused",
       all(r.status_code == 400 for r in _rejects),
       str([r.status_code for r in _rejects]))
-msgs = {r.json().get("detail") for r in _rejects}
-check("all rejections read identically", len(msgs) == 1,
-      str(msgs) + " codes=" + str([r.status_code for r in _rejects]))
+# The rule is NOT "every message is identical" — that is what made a missing
+# env var indistinguishable from a forged payload and left the Mini App saying
+# "Couldn't connect" with nothing to act on. The rule is that a message may
+# only be specific when it tells the OPERATOR something a forger already
+# knows. So: causes an attacker controls stay generic.
+# A rejected signature has two indistinguishable causes: a forged payload, or
+# the server holding a different bot's token. The message must name BOTH —
+# blaming only the config would mislead a forger about why they failed, and
+# blaming only the payload leaves an owner with nothing to check.
+_bad = login(good[:-1] + ("0" if good[-1] != "0" else "1")).json().get("detail") or ""
+check("a rejected signature does not pretend to know which cause",
+      "could not verify" in _bad.lower() and "TELEGRAM_PING_BOT_TOKEN" in _bad, _bad)
+check("and it never describes the token itself",
+      "999" not in _bad and len(_bad) < 250, _bad)
+# An unparseable payload tells a prober nothing at all.
+_junk = login("garbage").json().get("detail") or ""
+check("junk stays fully generic",
+      _junk == "Could not verify Telegram sign-in.", _junk)
+# A stale timestamp is not a hint: the holder of an expired payload already
+# knows it is old, and the user needs to be told to reopen the app.
+_stale = login(init_data(when=time.time() - 90000)).json().get("detail") or ""
+check("a stale session is explained instead", "expired" in _stale.lower(), _stale)
 
 print("[3b] the endpoint is rate limited, like every other auth route")
 _attempts.clear()
@@ -178,6 +197,49 @@ check("a forger cannot hammer it forever", 429 in codes,
       str(sorted(set(codes))))
 check("and legitimate calls still work once the window clears",
       login(init_data()).status_code == 200)
+
+# ---------------------------------------------------------------------------
+print("[3c] a failure says WHICH failure, when the user can act on it")
+# ---------------------------------------------------------------------------
+# Every cause returned one "Could not verify Telegram sign-in.", which the
+# Mini App turned into "Couldn't connect". A missing TELEGRAM_PING_BOT_TOKEN,
+# a token belonging to a different bot, and a stale session all looked like a
+# network problem on the phone, so the only debugging move was guessing.
+r = login(init_data(token="999999:SomeOtherBotToken"))
+check("a token mismatch is named", "TELEGRAM_PING_BOT_TOKEN" in (r.json().get("detail") or ""),
+      str(r.json().get("detail")))
+check("and it points at the bot, not at the network",
+      "same bot" in (r.json().get("detail") or "").lower()
+      and "connect" not in (r.json().get("detail") or "").lower(),
+      str(r.json().get("detail")))
+
+r = login(init_data(when=time.time() - 90000))
+check("a stale session says so", "expired" in (r.json().get("detail") or "").lower(),
+      str(r.json().get("detail")))
+check("and tells the user to reopen, which actually fixes it",
+      "open it again" in (r.json().get("detail") or "").lower())
+
+_saved_tok = os.environ.get("TELEGRAM_PING_BOT_TOKEN", "")
+os.environ["TELEGRAM_PING_BOT_TOKEN"] = ""
+r = login(init_data())
+check("a missing server token is a 503, not a generic 400",
+      r.status_code == 503, str(r.status_code))
+check("and names the env var the operator must set",
+      "TELEGRAM_PING_BOT_TOKEN" in (r.json().get("detail") or ""),
+      str(r.json().get("detail")))
+os.environ["TELEGRAM_PING_BOT_TOKEN"] = _saved_tok
+
+# Causes a FORGER controls stay generic: telling them the payload was
+# well-formed but the user object was missing is a hint about what to fix.
+for _junk in ("garbage", urlencode({"auth_date": "1", "user": "{}"})):
+    d = (login(_junk).json() or {}).get("detail") or ""
+    check("an unusable payload stays generic",
+          d == "Could not verify Telegram sign-in.", d)
+
+# The reason must reach the operator's log at a level dashboards keep.
+_auth_src = open(os.path.join(ROOT, "routes/auth.py"), encoding="utf-8").read()
+check("rejections are logged as warnings, not info",
+      'logger.warning("miniapp auth rejected: %s", reason)' in _auth_src)
 
 # ---------------------------------------------------------------------------
 print("[4] the verifier's own edge cases")

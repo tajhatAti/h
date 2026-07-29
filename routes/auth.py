@@ -647,11 +647,41 @@ def telegram_miniapp_login(payload: MiniAppAuth, request: Request):
         tg = miniapp_auth.verify_init_data(payload.init_data)
     except ValueError as exc:
         reason = str(exc)
+        # WARNING, not info: this is the only trace of a user who cannot get in,
+        # and info level is routinely filtered out in hosting dashboards. It was
+        # invisible exactly when it mattered.
+        logger.warning("miniapp auth rejected: %s", reason)
+
         if reason == "not_configured":
-            raise HTTPException(status_code=500, detail="Telegram login not configured.")
-        # Everything else gets ONE message. Telling a forger that the hash was
-        # fine but the timestamp was stale is a hint about what to fix.
-        logger.info("miniapp auth rejected: %s", reason)
+            # The one failure the OPERATOR causes and can fix, so it is named.
+            # Hiding it behind a generic message meant a missing env var looked
+            # identical to a forged payload, and the Mini App just said
+            # "Couldn't connect" forever with no way to tell which it was.
+            raise HTTPException(
+                status_code=503,
+                detail="Telegram sign-in is not configured on the server "
+                       "(TELEGRAM_PING_BOT_TOKEN is missing).")
+        if reason == "bad_hash":
+            # A rejected signature has exactly two causes and the server cannot
+            # tell them apart: a forged payload, or the site verifying with a
+            # DIFFERENT bot's token than the one whose Mini App was opened.
+            #
+            # Naming only the second would be MISLEADING to a forger — their
+            # real problem is that they signed it wrong. So the message states
+            # both. It leaks nothing either way: a forger already knows their
+            # hash failed, and the token itself is never described.
+            raise HTTPException(
+                status_code=400,
+                detail="Telegram could not verify this session. If you are the "
+                       "site owner, check that TELEGRAM_PING_BOT_TOKEN belongs "
+                       "to the same bot this Mini App was opened from.")
+        if reason in ("expired", "future"):
+            raise HTTPException(
+                status_code=400,
+                detail="This Telegram session has expired. Close the Mini App "
+                       "and open it again.")
+        # Malformed / no_user / no_hash: nothing the user can act on, and the
+        # detail would only help someone probing.
         raise HTTPException(status_code=400, detail="Could not verify Telegram sign-in.")
 
     tg_id = tg["id"]

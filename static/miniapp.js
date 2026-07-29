@@ -154,15 +154,24 @@
     //
     // `API` is the empty string anyway, so a leading "/" is the same request
     // with no cross-file dependency to get wrong.
-    const res = await fetch("/auth/telegram/miniapp", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ init_data: initData, fingerprint: fp }),
-    });
+    let res;
+    try {
+      res = await fetch("/auth/telegram/miniapp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ init_data: initData, fingerprint: fp }),
+      });
+    } catch (e) {
+      // A genuine transport failure — this is the ONLY case where "couldn't
+      // connect" is the truth, so it is the only case that says it.
+      return { ok: false, status: 0, detail: "" };
+    }
     if (!res.ok) {
-      // Verification failed — a stale initData, or the bot token on the
-      // server not matching the bot that opened this. Fall through to the
-      // normal login screen rather than trapping the user on a blank page.
+      // Carry the server's own wording up to the caller. A single
+      // "Couldn't connect" for every cause is unactionable: a missing
+      // TELEGRAM_PING_BOT_TOKEN, a token belonging to a different bot, and a
+      // stale session all looked identical on the phone, so there was nothing
+      // to go on but guessing.
       let detail = "";
       try { detail = (await res.json()).detail || ""; } catch (e) {}
       return { ok: false, status: res.status, detail: detail };
