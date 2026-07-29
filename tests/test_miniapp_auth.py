@@ -290,6 +290,78 @@ check("and never the secret", TOKEN.split(":")[1] not in str(_shape), str(_shape
 os.environ["TELEGRAM_PING_BOT_TOKEN"] = _orig
 
 # ---------------------------------------------------------------------------
+print("[3e] the diagnostic that settles a bad_hash")
+# ---------------------------------------------------------------------------
+# Production reached a state nothing could explain from the inside:
+#     bad_hash with configured bot_id=8719137492 looks_valid=True
+# The token was well-formed, so shape checking had nothing left to say. Only
+# Telegram knows WHOSE token it is, so getMe is the check that ends the guess.
+import bcrypt as _bcrypt  # noqa: E402
+from routes.deps import now_utc_str as _now  # noqa: E402
+
+_pw = "Passw0rd!x"
+_conn = DB.get_db_connection()
+_conn.execute("INSERT INTO users (username,email,password,is_verified,is_admin,"
+              "created_at,updated_at) VALUES (?,?,?,1,1,?,?)",
+              ("diagadmin", "diagadmin@gmail.com",
+               _bcrypt.hashpw(_pw.encode(), _bcrypt.gensalt()).decode(),
+               _now(), _now()))
+_conn.commit()
+_conn.close()
+_at = c.post("/login", json={"username": "diagadmin", "password": _pw}).json()["token"]
+_AH = {"Authorization": "Bearer " + _at}
+
+check("the diagnostic is admin-only",
+      c.get("/admin/telegram-diagnostic").status_code == 404,
+      str(c.get("/admin/telegram-diagnostic").status_code))
+
+_saved_who = MA.whoami
+try:
+    MA.whoami = lambda timeout_s=6.0: {"ok": True, "bot_id": 123456,
+                                       "username": "AhadRealBot"}
+    _d = c.get("/admin/telegram-diagnostic", headers=_AH).json()
+    check("it names the bot the token really belongs to",
+          _d.get("bot_username") == "AhadRealBot", str(_d))
+    check("and gives a link to open that exact bot",
+          _d.get("open_this_bot") == "https://t.me/AhadRealBot", str(_d.get("open_this_bot")))
+    check("with a next step that says what to do",
+          "Open the Mini App from @AhadRealBot" in (_d.get("next_step") or ""),
+          str(_d.get("next_step")))
+
+    # A widget pointing at one bot while verification expects another is its
+    # own bug, and invisible without comparing the two.
+    _sv = os.environ.get("TELEGRAM_BOT_USERNAME", "")
+    os.environ["TELEGRAM_BOT_USERNAME"] = "ADifferentBot"
+    _d2 = c.get("/admin/telegram-diagnostic", headers=_AH).json()
+    check("a username/token mismatch is called out",
+          "must be the same bot" in (_d2.get("warning") or ""), str(_d2.get("warning")))
+    os.environ["TELEGRAM_BOT_USERNAME"] = "AhadRealBot"
+    _d3 = c.get("/admin/telegram-diagnostic", headers=_AH).json()
+    check("and no warning when they agree", not _d3.get("warning"), str(_d3.get("warning")))
+    os.environ["TELEGRAM_BOT_USERNAME"] = _sv
+
+    MA.whoami = lambda timeout_s=6.0: {"ok": False, "reason": "rejected_by_telegram",
+                                       "detail": "Unauthorized"}
+    _d4 = c.get("/admin/telegram-diagnostic", headers=_AH).json()
+    check("a token Telegram rejects says to re-copy it",
+          "BotFather" in (_d4.get("next_step") or ""), str(_d4.get("next_step")))
+
+    # The public half only, in every branch.
+    import json as _json
+    _all = _json.dumps(_d) + _json.dumps(_d4)
+    check("the token's secret half never appears",
+          TOKEN.split(":")[1] not in _all, _all[:160])
+finally:
+    MA.whoami = _saved_who
+
+# /health carries the same public id, so it can be checked without signing in.
+_h = c.get("/health").json()
+check("/health reports the configured bot id",
+      str(_h.get("telegram_bot_id")) == TOKEN.split(":")[0], str(_h.get("telegram_bot_id")))
+check("and /health never exposes the secret",
+      TOKEN.split(":")[1] not in str(_h), str(_h))
+
+# ---------------------------------------------------------------------------
 print("[4] the verifier's own edge cases")
 # ---------------------------------------------------------------------------
 try:
@@ -344,10 +416,15 @@ wf["hash"] = hmac.new(hashlib.sha256(TOKEN.encode()).digest(), wcs.encode(),
 rw = c.post("/auth/telegram", json=wf)
 check("the website widget still works", rw.status_code == 200, rw.text[:120])
 check("and lands on the SAME username", rw.json().get("username") == "tg_555")
+# Count rows for THIS telegram id, not every user in the table. Counting all
+# users made the assertion depend on how many unrelated fixtures earlier
+# sections had created — it broke the moment [3e] added an admin, which says
+# nothing about whether the two doors share an account.
 conn = DB.get_db_connection()
-n2 = dict(conn.execute("SELECT COUNT(*) AS c FROM users").fetchone())["c"]
+n2 = dict(conn.execute("SELECT COUNT(*) AS c FROM users WHERE telegram_id = ?",
+                       (555,)).fetchone())["c"]
 conn.close()
-check("still one account, not two", n2 == 1, str(n2))
+check("still one account for this Telegram id, not two", n2 == 1, str(n2))
 
 check("the Telegram handle is cached for the dashboard",
       c.get("/profile/telegram", headers=H).json().get("telegram_name") == "@ahadxyz",

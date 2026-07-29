@@ -331,6 +331,20 @@ def public_config():
     }
 
 
+def _miniapp_bot_id():
+    """The configured bot's public ID, or a short reason it is unusable."""
+    try:
+        from services import miniapp_auth
+        shape = miniapp_auth.token_shape()
+        if not shape.get("configured"):
+            return "not configured"
+        if not shape.get("looks_valid"):
+            return "malformed"
+        return shape.get("bot_id")
+    except Exception:
+        return "unknown"
+
+
 @app.get("/health")
 def health():
     return {
@@ -338,6 +352,12 @@ def health():
         "database": DIALECT,
         "runner": "embedded" if EMBEDDED_RUNNER else "remote",
         "ping_bot": "running" if bool(os.getenv("TELEGRAM_PING_BOT_TOKEN", "").strip()) else "not configured",
+        # Which bot this server verifies Mini App sign-ins for. The bot ID half
+        # of a token is PUBLIC — anyone who can message the bot can see it — so
+        # this is safe, and it is the one fact needed to diagnose a bad_hash:
+        # it can be compared against the bot the Mini App was actually opened
+        # from. The secret half is never read.
+        "telegram_bot_id": _miniapp_bot_id(),
         "brevo_api_key_set": bool(os.getenv("BREVO_API_KEY", "").strip()),
         "sender_email_set": bool(os.getenv("SENDER_EMAIL", "").strip()),
     }

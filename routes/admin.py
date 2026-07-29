@@ -103,6 +103,49 @@ def admin_panel_html(authorization: Optional[str] = Header(None)):
                         headers={"Cache-Control": "no-store"})
 
 
+@router.get("/admin/telegram-diagnostic")
+def admin_telegram_diagnostic(authorization: Optional[str] = Header(None)):
+    """Is the server holding the same bot the Mini App is opened from?
+
+    A bad_hash means the HMAC did not match, and the server cannot tell a
+    forged payload from a token belonging to a different bot. Every other
+    check could only report the token's SHAPE. This asks Telegram directly
+    with getMe, which is the only thing that proves whose token it is.
+
+    Admin-gated: getMe is a network call, so leaving it public would let a
+    stranger make this server hammer api.telegram.org.
+    """
+    require_admin(authorization)
+    from services import miniapp_auth
+    shape = miniapp_auth.token_shape()
+    who = miniapp_auth.whoami()
+    out = {"configured_bot_id": shape.get("bot_id"),
+           "token_looks_valid": shape.get("looks_valid"),
+           "telegram_says": who}
+    if who.get("ok"):
+        out["bot_username"] = who.get("username")
+        out["open_this_bot"] = f"https://t.me/{who.get('username')}"
+        out["next_step"] = (
+            f"Open the Mini App from @{who.get('username')} — that is the bot "
+            f"this server can verify. Opening it from any other bot gives "
+            f"bad_hash.")
+    else:
+        out["next_step"] = (
+            "Telegram did not accept TELEGRAM_PING_BOT_TOKEN. Copy it again "
+            "from @BotFather for the bot whose Mini App you are opening.")
+    # Also report what the site tells the browser, since a mismatch between
+    # these two is its own bug: the login widget would point at one bot while
+    # verification expects another.
+    out["TELEGRAM_BOT_USERNAME_env"] = os.getenv("TELEGRAM_BOT_USERNAME", "").strip().lstrip("@") or None
+    if out.get("bot_username") and out["TELEGRAM_BOT_USERNAME_env"] \
+            and out["bot_username"].lower() != out["TELEGRAM_BOT_USERNAME_env"].lower():
+        out["warning"] = (
+            f"TELEGRAM_BOT_USERNAME is @{out['TELEGRAM_BOT_USERNAME_env']} but "
+            f"the token belongs to @{out['bot_username']}. These must be the "
+            f"same bot.")
+    return out
+
+
 @router.get("/admin/overview")
 def admin_overview_route(authorization: Optional[str] = Header(None)):
     require_admin(authorization)

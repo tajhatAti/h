@@ -156,6 +156,41 @@ def verify_init_data(init_data: str, token: str = None) -> dict:
     }
 
 
+def whoami(timeout_s: float = 6.0) -> dict:
+    """Ask Telegram which bot the configured token belongs to.
+
+    This is the one check that settles a bad_hash. token_shape() can only say
+    the value LOOKS like a token; getMe proves whose it is. Comparing the
+    @username it returns against the bot whose Mini App was opened turns a
+    guess into a fact.
+
+    Never called on the auth path — it is a network round-trip, and a
+    diagnostic must not slow down or break a working sign-in.
+    """
+    tok = _bot_token()
+    if not tok:
+        return {"ok": False, "reason": "not_configured"}
+    try:
+        import requests
+        r = requests.get(f"https://api.telegram.org/bot{tok}/getMe",
+                         timeout=timeout_s)
+        d = r.json() or {}
+    except Exception as exc:
+        return {"ok": False, "reason": "unreachable", "detail": str(exc)[:120]}
+    if not d.get("ok"):
+        # Telegram rejecting the token is the clearest possible answer: the
+        # value is not a live bot token at all.
+        return {"ok": False, "reason": "rejected_by_telegram",
+                "detail": str(d.get("description"))[:160]}
+    res = d.get("result") or {}
+    return {
+        "ok": True,
+        "bot_id": res.get("id"),
+        "username": res.get("username"),
+        "can_join_groups": res.get("can_join_groups"),
+    }
+
+
 def display_name(user: dict) -> str:
     """The label cached on the account, matching what the bot stores."""
     if user.get("username"):
