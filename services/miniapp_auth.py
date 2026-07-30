@@ -41,13 +41,18 @@ class BadHash(ValueError):
     it and str() still returns "bad_hash" for the callers that compare on that.
     """
 
-    def __init__(self, fields, lengths, culprit=None):
+    def __init__(self, fields, lengths, culprit=None, age_s=None):
         super().__init__("bad_hash")
         self.fields = fields
         self.lengths = lengths
         # The field whose DECODING differs from Telegram's, when one can be
-        # identified. None means the mismatch is not a decoding difference.
+        # identified. None means the mismatch is not a decoding difference —
+        # which leaves only one explanation: the signing KEY differs.
         self.culprit = culprit
+        # Seconds since Telegram signed it. A few seconds means the payload is
+        # fresh and the secret is wrong right now; a large value would mean a
+        # replayed session instead.
+        self.age_s = age_s
 
 # Telegram signs auth_date, so without an age limit a leaked initData string
 # would be a permanent credential. Telegram's own guidance is to bound it;
@@ -170,6 +175,24 @@ def verify_init_data(init_data: str, token: str = None) -> dict:
         # This is diagnosis, not a fallback: the result is reported, never
         # accepted. A payload that only verifies under a substitution has NOT
         # been validly signed for us.
+        # WHICH BOT ACTUALLY SENT THIS?
+        #
+        # I had been logging the bot_id of the SERVER's token and calling that
+        # "the bot", which cannot detect the one case that matters: a payload
+        # signed by a different bot. Telegram does not name the bot in
+        # initData, but it does not have to — chat_instance and query_id are
+        # bot-scoped, and more usefully, if the SAME bot id verifies with a
+        # different secret then the token was revoked and reissued.
+        #
+        # Recording the auth_date age separates those: a freshly signed
+        # payload that fails means the secret is wrong NOW, not that a stale
+        # session was replayed.
+        age_s = None
+        try:
+            age_s = int(time.time() - int(pairs.get("auth_date") or 0))
+        except Exception:
+            pass
+
         culprit = None
         try:
             raw_pairs = _raw_pairs(init_data)
@@ -188,7 +211,7 @@ def verify_init_data(init_data: str, token: str = None) -> dict:
             pass
         raise BadHash(sorted(pairs.keys()),
                       {k: len(str(v)) for k, v in sorted(pairs.items())},
-                      culprit)
+                      culprit, age_s)
 
     try:
         auth_date = int(pairs.get("auth_date") or 0)

@@ -373,13 +373,20 @@ try:
     check("/health never carries the token secret",
           TOKEN.split(":")[1] not in str(_hh), str(_hh)[:120])
 
-    # And the failure message itself should name the bot, so no second page
-    # is needed at all.
+    # When the configured token's bot id does NOT match what getMe reports,
+    # the right message names the bot — the revoked-secret reasoning must not
+    # hijack it, because a mismatched id has a better explanation.
+    MA.whoami = lambda timeout_s=6.0: {"ok": True, "bot_id": 555000111,
+                                       "username": "AhadRealBot"}
+    A._BOT_IDENTITY.update(checked=False, value=None)
     _dd = (login(init_data(token="9999999:AAsomeOtherBotTokenABCDEFGH123456")).json()
            or {}).get("detail") or ""
     check("the error names the bot by @username, not just a number",
           "@AhadRealBot" in _dd, _dd)
     check("and says what to do with it", "Open the Mini App from that bot" in _dd, _dd)
+    MA.whoami = lambda timeout_s=6.0: {"ok": True, "bot_id": 123456,
+                                       "username": "AhadRealBot"}
+    A._BOT_IDENTITY.update(checked=False, value=None)
 
     # One getMe per process, not per request: /health is a liveness probe.
     _calls = []
@@ -492,6 +499,79 @@ check("the substitution is never accepted as a login",
 
 _asrc = open(os.path.join(ROOT, "routes/auth.py"), encoding="utf-8").read()
 check("the culprit reaches the log", "culprit=%s" in _asrc)
+
+# ---------------------------------------------------------------------------
+print("[3h] a revoked token diagnoses ITSELF")
+# ---------------------------------------------------------------------------
+# The production log ended here:
+#   fields=['auth_date','query_id','user']  culprit=None
+# An ordinary field set, and no field whose decoding differs. An HMAC can only
+# fail two ways — different DATA or a different KEY — and culprit=None rules
+# out the first. So the secret is wrong.
+#
+# The trap: BotFather's "revoke" keeps the bot ID and changes only the secret.
+# getMe still succeeds, every bot_id comparison still matches, and the sign-in
+# still fails. Every check I had built compared IDs, so none of them could see
+# it. This one does not compare anything — it reasons from culprit + freshness.
+_srv = "8719137492:AAserverHasTheOldRevokedSecret1"
+_tg = "8719137492:AAtelegramSignsWithTheNewOne222"
+_prev = os.environ.get("TELEGRAM_PING_BOT_TOKEN", "")
+os.environ["TELEGRAM_PING_BOT_TOKEN"] = _srv
+# getMe SUCCEEDS and the id MATCHES — that is exactly what makes a revoked
+# token invisible to every id-based check.
+_prev_who = MA.whoami
+MA.whoami = lambda timeout_s=6.0: {"ok": True, "bot_id": 8719137492,
+                                   "username": "mytestRenderBot"}
+A._BOT_IDENTITY.update(checked=False, value=None)
+
+_u = json.dumps({"id": 123, "first_name": "Ahad"}, separators=(",", ":"))
+_f = {"auth_date": str(int(time.time())), "query_id": "AAHdqTcvCH1vGWJx0000",
+      "user": _u}
+_cs = "\n".join(f"{k}={_f[k]}" for k in sorted(_f))
+_sc = hmac.new(b"WebAppData", _tg.encode(), hashlib.sha256).digest()
+_f["hash"] = hmac.new(_sc, _cs.encode(), hashlib.sha256).hexdigest()
+
+_r = login(urlencode(_f))
+check("a revoked-token sign-in is a 503, not a generic 400",
+      _r.status_code == 503, str(_r.status_code))
+_msg = (_r.json() or {}).get("detail") or ""
+check("the message says the TOKEN is out of date",
+      "out of date" in _msg.lower(), _msg)
+check("and names exactly where to fix it",
+      "BotFather" in _msg and "TELEGRAM_PING_BOT_TOKEN" in _msg, _msg)
+
+# The reasoning must not fire on anything else.
+# `except X as _e` UNBINDS the name at the end of the block in Python 3, so
+# _e was undefined on the next line. Capture it deliberately.
+_e = None
+try:
+    MA.verify_init_data(urlencode(_f), _srv)
+except MA.BadHash as _exc:
+    _e = _exc
+check("the diagnosis records freshness", _e is not None and _e.age_s is not None,
+      str(_e and _e.age_s))
+check("and the payload really is fresh", _e and _e.age_s < 60, str(_e and _e.age_s))
+
+# A stale replay has culprit=None too, so age is what separates them — it must
+# NOT be reported as a bad token.
+_old = dict(_f)
+_old["auth_date"] = str(int(time.time()) - 3600)
+_ocs = "\n".join(f"{k}={_old[k]}" for k in sorted(_old) if k != "hash")
+_old["hash"] = hmac.new(_sc, _ocs.encode(), hashlib.sha256).hexdigest()
+_ro = login(urlencode(_old))
+check("an hour-old payload is NOT blamed on the token",
+      _ro.status_code != 503 or "out of date" not in
+      ((_ro.json() or {}).get("detail") or "").lower(),
+      f"{_ro.status_code} {(_ro.json() or {}).get('detail')}")
+
+# And a forger gets nothing helpful.
+check("junk still gets the generic message",
+      ((login("garbage").json() or {}).get("detail") or "")
+      == "Could not verify Telegram sign-in.")
+
+os.environ["TELEGRAM_PING_BOT_TOKEN"] = _prev
+MA.whoami = _prev_who
+A._BOT_IDENTITY.update(checked=False, value=None)
 
 # ---------------------------------------------------------------------------
 print("[4] the verifier's own edge cases")

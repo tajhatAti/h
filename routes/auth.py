@@ -621,6 +621,15 @@ class TelegramAuthData(BaseModel):
     hash: str
     fingerprint: Optional[str] = None
 
+def _bot_identity_safe():
+    """The cached getMe result, or None. Never raises on the auth path."""
+    try:
+        from app import _bot_identity
+        return _bot_identity()
+    except Exception:
+        return None
+
+
 class MiniAppAuth(BaseModel):
     init_data: str
     # The SDK's initData and the URL's tgWebAppData are usually the same
@@ -702,12 +711,7 @@ def telegram_miniapp_login(payload: MiniAppAuth, request: Request):
                 # an @username is something you can recognise at a glance. The
                 # identity is cached from a single getMe at boot, so this adds
                 # no network call to a failing request.
-                ident = None
-                try:
-                    from app import _bot_identity
-                    ident = _bot_identity()
-                except Exception:
-                    pass
+                ident = _bot_identity_safe()
                 if ident and ident.get("username"):
                     hint = (f" This server only accepts sign-ins from "
                             f"@{ident['username']}. Open the Mini App from "
@@ -720,11 +724,49 @@ def telegram_miniapp_login(payload: MiniAppAuth, request: Request):
             # bot, plus a hash that still does not match, means the bytes we
             # signed differ from the bytes Telegram signed — and the field list
             # is the only thing that can show where.
+            _age = getattr(exc, "age_s", None)
+            _culprit = getattr(exc, "culprit", None)
             logger.warning(
-                "miniapp bad_hash: bot_id=%s fields=%s lengths=%s culprit=%s",
-                shape.get("bot_id"),
-                getattr(exc, "fields", "?"), getattr(exc, "lengths", "?"),
-                getattr(exc, "culprit", None))
+                "miniapp bad_hash: bot_id=%s fields=%s lengths=%s culprit=%s age_s=%s",
+                shape.get("bot_id"), getattr(exc, "fields", "?"),
+                getattr(exc, "lengths", "?"), _culprit, _age)
+
+            # culprit=None on a FRESH payload is not ambiguous. The field set
+            # was ordinary and no field's decoding differs, so the data is
+            # right and the KEY is wrong: the token in TELEGRAM_PING_BOT_TOKEN
+            # is not the one Telegram signed with. The commonest cause is a
+            # token that was revoked and reissued in BotFather — the bot id
+            # stays the same, so getMe still succeeds and every id comparison
+            # still looks correct, which is exactly why this took so long to
+            # pin down.
+            # Only when the token is otherwise CREDIBLE. A username pasted in
+            # place of a token, or a token whose bot id does not match the one
+            # Telegram accepts, has a better explanation already — and the
+            # existing messages say it more precisely. This branch is for the
+            # one case nothing else can see: a well-formed, live token whose
+            # SECRET has been rotated out from under it.
+            _tok_ok = bool(shape.get("looks_valid"))
+            try:
+                _ident = _bot_identity_safe()
+            except Exception:
+                _ident = None
+            _id_agrees = bool(
+                _ident and _ident.get("id")
+                and str(_ident["id"]) == str(shape.get("bot_id")))
+            if (_tok_ok and _id_agrees
+                    and _culprit is None and _age is not None and _age < 300):
+                logger.error(
+                    "TELEGRAM TOKEN IS STALE OR WRONG: the payload is %ss old and "
+                    "its field set is normal, so the data is fine and the SECRET "
+                    "does not match. Open @BotFather -> /mybots -> your bot -> "
+                    "API Token, copy it again, and set TELEGRAM_PING_BOT_TOKEN. "
+                    "A revoked token keeps the same bot id, so getMe still "
+                    "passes while every sign-in fails.", _age)
+                raise HTTPException(
+                    status_code=503,
+                    detail="The server's Telegram token is out of date. If you "
+                           "own this site: copy the API Token again from "
+                           "@BotFather and update TELEGRAM_PING_BOT_TOKEN.")
             raise HTTPException(
                 status_code=400,
                 detail="Telegram could not verify this session." + hint)
