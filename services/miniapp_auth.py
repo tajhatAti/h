@@ -41,10 +41,13 @@ class BadHash(ValueError):
     it and str() still returns "bad_hash" for the callers that compare on that.
     """
 
-    def __init__(self, fields, lengths):
+    def __init__(self, fields, lengths, culprit=None):
         super().__init__("bad_hash")
         self.fields = fields
         self.lengths = lengths
+        # The field whose DECODING differs from Telegram's, when one can be
+        # identified. None means the mismatch is not a decoding difference.
+        self.culprit = culprit
 
 # Telegram signs auth_date, so without an age limit a leaked initData string
 # would be a permanent credential. Telegram's own guidance is to bound it;
@@ -97,6 +100,21 @@ def token_shape() -> dict:
     }
 
 
+def _raw_pairs(init_data: str) -> dict:
+    """Field values EXACTLY as they arrived, with no percent-decoding.
+
+    parse_qsl decodes, which is correct per Telegram's spec. This is the
+    undecoded view, used only to work out which field's decoding differs when
+    a signature fails.
+    """
+    out = {}
+    for chunk in (init_data or "").split("&"):
+        if "=" in chunk:
+            k, _, v = chunk.partition("=")
+            out[k] = v
+    return out
+
+
 def verify_init_data(init_data: str, token: str = None) -> dict:
     """Validate initData and return the Telegram user, or raise ValueError.
 
@@ -142,8 +160,35 @@ def verify_init_data(init_data: str, token: str = None) -> dict:
         # their lengths. Never a value, never the token, never the user's data.
         # That is enough to spot the two things that actually break this: a
         # field the signer included but we dropped, or an extra field we kept.
+        # The field list came back completely normal — nothing dropped, nothing
+        # extra — so the difference is in a VALUE, not the set of keys. The
+        # only way to find which one from the outside is to re-run the HMAC
+        # with each field's raw (still-percent-encoded) form substituted in
+        # turn: whichever substitution makes the hash match is the field whose
+        # decoding differs from Telegram's.
+        #
+        # This is diagnosis, not a fallback: the result is reported, never
+        # accepted. A payload that only verifies under a substitution has NOT
+        # been validly signed for us.
+        culprit = None
+        try:
+            raw_pairs = _raw_pairs(init_data)
+            for k in pairs:
+                if raw_pairs.get(k) == pairs[k]:
+                    continue                      # nothing was decoded here
+                probe = dict(pairs)
+                probe[k] = raw_pairs[k]
+                pc = "\n".join(f"{kk}={probe[kk]}" for kk in sorted(probe))
+                if hmac.compare_digest(
+                        hmac.new(secret, pc.encode(), hashlib.sha256).hexdigest(),
+                        received_hash):
+                    culprit = k
+                    break
+        except Exception:
+            pass
         raise BadHash(sorted(pairs.keys()),
-                      {k: len(str(v)) for k, v in sorted(pairs.items())})
+                      {k: len(str(v)) for k, v in sorted(pairs.items())},
+                      culprit)
 
     try:
         auth_date = int(pairs.get("auth_date") or 0)

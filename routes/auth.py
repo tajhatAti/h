@@ -721,9 +721,10 @@ def telegram_miniapp_login(payload: MiniAppAuth, request: Request):
             # signed differ from the bytes Telegram signed — and the field list
             # is the only thing that can show where.
             logger.warning(
-                "miniapp bad_hash: bot_id=%s fields=%s lengths=%s",
+                "miniapp bad_hash: bot_id=%s fields=%s lengths=%s culprit=%s",
                 shape.get("bot_id"),
-                getattr(exc, "fields", "?"), getattr(exc, "lengths", "?"))
+                getattr(exc, "fields", "?"), getattr(exc, "lengths", "?"),
+                getattr(exc, "culprit", None))
             raise HTTPException(
                 status_code=400,
                 detail="Telegram could not verify this session." + hint)

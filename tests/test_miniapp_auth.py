@@ -25,7 +25,7 @@ import os
 import sys
 import tempfile
 import time
-from urllib.parse import urlencode
+from urllib.parse import urlencode, quote
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -445,6 +445,53 @@ _attempts.clear()
 _r3 = c.post("/auth/telegram/miniapp",
              json={"init_data": "junk", "init_data_alt": ["a", "b", "c", "d", "e"]})
 check("the number of attempts is bounded", _r3.status_code == 400)
+
+# ---------------------------------------------------------------------------
+print("[3g] when the field list is normal, name the field whose VALUE differs")
+# ---------------------------------------------------------------------------
+# Production returned a completely ordinary field list:
+#   fields=['auth_date','chat_instance','chat_type','user']
+# Nothing dropped, nothing extra. So the mismatch is in a VALUE, and the only
+# candidate is how it was decoded. Re-running the HMAC with each field's raw
+# (still percent-encoded) form identifies which one.
+_u = json.dumps({"id": 5, "first_name": "Ahad",
+                 "photo_url": "https://t.me/i/a+b.svg"}, separators=(",", ":"))
+_f = {"user": _u, "chat_instance": "-1", "chat_type": "sender",
+      "auth_date": str(int(time.time()))}
+# Sign over the RAW user value instead of the decoded one.
+_signed = dict(_f)
+_signed["user"] = quote(_u, safe="")
+_cs = "\n".join(f"{k}={_signed[k]}" for k in sorted(_signed))
+_sec = hmac.new(b"WebAppData", TOKEN.encode(), hashlib.sha256).digest()
+_h = hmac.new(_sec, _cs.encode(), hashlib.sha256).hexdigest()
+_wire = urlencode({**_f, "hash": _h}, quote_via=quote)
+
+try:
+    MA.verify_init_data(_wire, TOKEN)
+    _cerr = None
+except MA.BadHash as e:
+    _cerr = e
+check("a decoding difference is still rejected", _cerr is not None)
+check("and the responsible field is named", _cerr and _cerr.culprit == "user",
+      str(_cerr and _cerr.culprit))
+
+# A genuinely forged payload has no culprit — nothing makes it verify.
+try:
+    MA.verify_init_data(init_data(token="9999999:AAforgedTokenABCDEFGH1234567"), TOKEN)
+    _ferr = None
+except MA.BadHash as e:
+    _ferr = e
+check("a forged payload reports no culprit", _ferr and _ferr.culprit is None,
+      str(_ferr and _ferr.culprit))
+
+# The finder must DIAGNOSE only. A payload that verifies solely under a
+# substitution has not been validly signed for us, and must never be accepted.
+_attempts.clear()
+check("the substitution is never accepted as a login",
+      c.post("/auth/telegram/miniapp", json={"init_data": _wire}).status_code == 400)
+
+_asrc = open(os.path.join(ROOT, "routes/auth.py"), encoding="utf-8").read()
+check("the culprit reaches the log", "culprit=%s" in _asrc)
 
 # ---------------------------------------------------------------------------
 print("[4] the verifier's own edge cases")
