@@ -241,7 +241,9 @@ for _junk in ("garbage", urlencode({"auth_date": "1", "user": "{}"})):
 # The reason must reach the operator's log at a level dashboards keep.
 _auth_src = open(os.path.join(ROOT, "routes/auth.py"), encoding="utf-8").read()
 check("rejections are logged as warnings, not info",
-      'logger.warning("miniapp auth rejected: %s", reason)' in _auth_src)
+      'logger.warning("miniapp auth rejected: %s' in _auth_src)
+check("and the log says how many payload forms were tried",
+      "tried %d payload form" in _auth_src)
 
 # ---------------------------------------------------------------------------
 print("[3d] a mangled token is tolerated, and a real mismatch names itself")
@@ -398,6 +400,51 @@ check("/health reports the configured bot id",
       str(_h.get("telegram_bot_id")) == TOKEN.split(":")[0], str(_h.get("telegram_bot_id")))
 check("and /health never exposes the secret",
       TOKEN.split(":")[1] not in str(_h), str(_h))
+
+# ---------------------------------------------------------------------------
+print("[3f] a bad_hash records the payload's SHAPE, so it can be diagnosed")
+# ---------------------------------------------------------------------------
+# Production reached a state where getMe confirmed the RIGHT bot and the hash
+# still failed. At that point every remaining explanation is "the bytes we
+# hashed differ from the bytes Telegram hashed", and nothing in the system
+# could say how. The field list is the smallest thing that can.
+try:
+    MA.verify_init_data(init_data(token="9999999:AAotherBotTokenABCDEFGH12345"), TOKEN)
+    _shape_err = None
+except MA.BadHash as e:
+    _shape_err = e
+check("a mismatch raises BadHash", _shape_err is not None)
+check("it is still a ValueError, so existing handlers catch it",
+      isinstance(_shape_err, ValueError))
+check("and still reads 'bad_hash' for callers that compare on it",
+      str(_shape_err) == "bad_hash", str(_shape_err))
+check("it records which fields were hashed",
+      "auth_date" in _shape_err.fields and "user" in _shape_err.fields,
+      str(_shape_err.fields))
+check("hash itself is excluded from the hashed set",
+      "hash" not in _shape_err.fields, str(_shape_err.fields))
+# Lengths, never values — a length cannot reconstruct a name or a token.
+check("only lengths are recorded, not values",
+      all(isinstance(v, int) for v in _shape_err.lengths.values()),
+      str(_shape_err.lengths))
+check("no field VALUE appears in the diagnostic",
+      "Ahad" not in str(_shape_err.lengths) and "ahadxyz" not in str(_shape_err.fields),
+      str(_shape_err.lengths))
+
+# Multiple payload forms: the browser may hold two spellings of the same
+# initData, and only one carries the bytes that were signed.
+_good = init_data()
+_r = c.post("/auth/telegram/miniapp",
+            json={"init_data": "definitely-not-valid", "init_data_alt": [_good]})
+check("a valid alternate form is accepted", _r.status_code == 200, _r.text[:120])
+_attempts.clear()
+_r2 = c.post("/auth/telegram/miniapp",
+             json={"init_data": "junk", "init_data_alt": ["more junk"]})
+check("but junk alternates are still refused", _r2.status_code == 400)
+_attempts.clear()
+_r3 = c.post("/auth/telegram/miniapp",
+             json={"init_data": "junk", "init_data_alt": ["a", "b", "c", "d", "e"]})
+check("the number of attempts is bounded", _r3.status_code == 400)
 
 # ---------------------------------------------------------------------------
 print("[4] the verifier's own edge cases")

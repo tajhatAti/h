@@ -623,6 +623,12 @@ class TelegramAuthData(BaseModel):
 
 class MiniAppAuth(BaseModel):
     init_data: str
+    # The SDK's initData and the URL's tgWebAppData are usually the same
+    # string, but some clients decode one of them an extra time and a single
+    # differing byte fails the HMAC. The browser sends every form it has;
+    # accepting whichever verifies weakens nothing, because a candidate is
+    # only accepted if it is validly signed with OUR bot token.
+    init_data_alt: Optional[List[str]] = None
     fingerprint: Optional[str] = None
 
 
@@ -643,14 +649,23 @@ def telegram_miniapp_login(payload: MiniAppAuth, request: Request):
     rate_limit(f"{client_ip(request)}:miniapp_login")
 
     from services import miniapp_auth
-    try:
-        tg = miniapp_auth.verify_init_data(payload.init_data)
-    except ValueError as exc:
+    candidates = [payload.init_data] + list(payload.init_data_alt or [])[:3]
+    tg, exc = None, None
+    for cand in candidates:
+        try:
+            tg = miniapp_auth.verify_init_data(cand)
+            break
+        except ValueError as e:
+            # Keep the FIRST failure: it describes the value the client
+            # considered authoritative, which is the useful one to report.
+            exc = exc or e
+    if tg is None:
         reason = str(exc)
         # WARNING, not info: this is the only trace of a user who cannot get in,
         # and info level is routinely filtered out in hosting dashboards. It was
         # invisible exactly when it mattered.
-        logger.warning("miniapp auth rejected: %s", reason)
+        logger.warning("miniapp auth rejected: %s (tried %d payload form%s)",
+                       reason, len(candidates), "" if len(candidates) == 1 else "s")
 
         if reason == "not_configured":
             # The one failure the OPERATOR causes and can fix, so it is named.
@@ -701,8 +716,14 @@ def telegram_miniapp_login(payload: MiniAppAuth, request: Request):
                     hint = (f" This server is configured for bot ID "
                             f"{shape['bot_id']}; check that matches the bot "
                             f"you opened this from.")
-            logger.warning("miniapp bad_hash with configured bot_id=%s looks_valid=%s",
-                           shape.get("bot_id"), shape.get("looks_valid"))
+            # Log the payload's SHAPE. A token that getMe confirms is the right
+            # bot, plus a hash that still does not match, means the bytes we
+            # signed differ from the bytes Telegram signed — and the field list
+            # is the only thing that can show where.
+            logger.warning(
+                "miniapp bad_hash: bot_id=%s fields=%s lengths=%s",
+                shape.get("bot_id"),
+                getattr(exc, "fields", "?"), getattr(exc, "lengths", "?"))
             raise HTTPException(
                 status_code=400,
                 detail="Telegram could not verify this session." + hint)

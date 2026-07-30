@@ -46,7 +46,24 @@
 
   const hashData = _hashInitData();
   const sdkData = (TG && typeof TG.initData === "string") ? TG.initData : "";
+
+  /* TWO SOURCES, AND THEY CAN DISAGREE.
+   *
+   * The HMAC is over the exact bytes Telegram signed. TG.initData and the
+   * URL's tgWebAppData are USUALLY the same string, but not always — some
+   * clients hand the SDK a value that has been URL-decoded one extra time,
+   * and a single differing byte makes the signature fail. Verified: the two
+   * forms are not equal, and picking the wrong one is bad_hash even with a
+   * perfectly correct bot token.
+   *
+   * Choosing one blindly is the bug. Both are sent, and the server accepts
+   * whichever verifies — that cannot weaken anything, because a candidate is
+   * only accepted if it carries a valid signature for our own bot token.
+   */
   const initData = sdkData || hashData;
+  const candidates = [];
+  if (sdkData) candidates.push(sdkData);
+  if (hashData && hashData !== sdkData) candidates.push(hashData);
 
   /* Presence of the SDK object alone is NOT enough: telegram-web-app.js
    * defines window.Telegram.WebApp on any page that loads it, including a
@@ -159,7 +176,9 @@
       res = await fetch("/auth/telegram/miniapp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ init_data: initData, fingerprint: fp }),
+        body: JSON.stringify({ init_data: initData,
+                               init_data_alt: candidates.slice(1),
+                               fingerprint: fp }),
       });
     } catch (e) {
       // A genuine transport failure — this is the ONLY case where "couldn't

@@ -33,6 +33,19 @@ from urllib.parse import parse_qsl
 
 logger = logging.getLogger("codenest-app")
 
+
+class BadHash(ValueError):
+    """A signature mismatch, carrying the payload's SHAPE for diagnosis.
+
+    Subclasses ValueError so every existing `except ValueError` still catches
+    it and str() still returns "bad_hash" for the callers that compare on that.
+    """
+
+    def __init__(self, fields, lengths):
+        super().__init__("bad_hash")
+        self.fields = fields
+        self.lengths = lengths
+
 # Telegram signs auth_date, so without an age limit a leaked initData string
 # would be a permanent credential. Telegram's own guidance is to bound it;
 # a Mini App session is refreshed on every open, so this can be tight.
@@ -120,7 +133,17 @@ def verify_init_data(init_data: str, token: str = None) -> dict:
     # compare_digest, not ==: a plain comparison leaks the position of the
     # first mismatching byte through timing.
     if not hmac.compare_digest(expected, received_hash):
-        raise ValueError("bad_hash")
+        # WHY THIS RECORDS DETAIL: bad_hash has been reported with a token that
+        # getMe confirms belongs to the right bot. When the token is right and
+        # the hash is still wrong, the payload itself must differ from what was
+        # signed — and no amount of guessing from outside can say how.
+        #
+        # Only NON-SECRET structure is recorded: which field names arrived, and
+        # their lengths. Never a value, never the token, never the user's data.
+        # That is enough to spot the two things that actually break this: a
+        # field the signer included but we dropped, or an extra field we kept.
+        raise BadHash(sorted(pairs.keys()),
+                      {k: len(str(v)) for k, v in sorted(pairs.items())})
 
     try:
         auth_date = int(pairs.get("auth_date") or 0)
