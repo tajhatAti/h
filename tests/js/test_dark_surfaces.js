@@ -73,10 +73,20 @@ function resolve(value) {
 console.log('\n[A] theme default');
 ok('does not hard-default to light',
    !/localStorage\.getItem\("ahad_theme"\)\s*\|\|\s*"light"/.test(JS));
-ok('falls back to dark', /\?\s*"light"\s*:\s*"dark"/.test(JS));
+ok('falls back to dark', /applyTheme\(saved === "light" \? "light" : "dark"\)/.test(JS));
 ok('still honours an explicit saved choice',
-   /saved\s*!==\s*"light"\s*&&\s*saved\s*!==\s*"dark"/.test(JS));
-ok('respects the OS preference', /prefers-color-scheme/.test(JS));
+   /saved === "light" \? "light" : "dark"/.test(JS));
+// REVERSED DELIBERATELY. This used to require prefers-color-scheme, and that
+// requirement caused a real bug: a phone in light mode got light chrome, but
+// RunSpace and Code Studio are hardcoded dark and PIN themselves dark even
+// under data-theme="light". The result was light glass over permanently dark
+// panels — the "white middle" report. Following the OS can return once every
+// surface is able to follow it.
+ok('the OS preference is NOT consulted, because not every surface can follow it',
+   !/prefers-color-scheme/.test(
+     JS.slice(JS.indexOf('function initTheme'), JS.indexOf('function initTheme') + 1200)));
+ok('and the reversal is explained where it lives',
+   /THE OS PREFERENCE IS NOT CONSULTED/.test(JS));
 
 // ── B. no unreadable pair anywhere ──────────────────────────────────────
 console.log('[B] contrast of every background/colour pair');

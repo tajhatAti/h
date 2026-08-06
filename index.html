@@ -20,13 +20,23 @@
  * applied, removes the window entirely.
  * Mirrors initTheme(): explicit choice > OS preference > dark. */
 (function () {
+  /* DARK UNLESS THE USER ASKED OTHERWISE — the OS preference is deliberately
+   * NOT consulted.
+   *
+   * REPRODUCED: with a phone in light mode this script chose "light", which
+   * is honest to the OS but wrong for this product. RunSpace and Code Studio
+   * ship hardcoded dark palettes (#0d1117 / #161b22) and contain ZERO
+   * data-theme rules, so they stay dark no matter what. The shared chrome
+   * then rendered light glass — rgba(255,255,255,.62) — against them, and the
+   * middle of the dashboard read as a white sheet.
+   *
+   * Following the OS only makes sense once every surface can actually follow
+   * it. Until then, defaulting to dark is what matches the app the user sees;
+   * an explicit choice in Settings is still honoured. */
   try {
     var t = localStorage.getItem("ahad_theme");
-    if (t !== "light" && t !== "dark") {
-      t = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches
-        ? "light" : "dark";
-    }
-    document.documentElement.setAttribute("data-theme", t);
+    document.documentElement.setAttribute(
+      "data-theme", t === "light" ? "light" : "dark");
   } catch (e) {
     document.documentElement.setAttribute("data-theme", "dark");
   }

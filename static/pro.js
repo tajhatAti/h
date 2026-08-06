@@ -1719,17 +1719,25 @@ function toggleTheme() {
 }
 (function initTheme() {
   // Dark is the product's identity: the landing page, RunSpace and the code
-  // editor are all hardcoded dark surfaces. Defaulting to "light" meant the
-  // shared chrome (cards, hero blocks, modals) rendered on a #ffffff --panel
-  // INSIDE an otherwise dark app — that is the "white boxes in dark mode"
-  // report. Honour a saved choice, then the OS, then fall back to dark.
+  // editor are all hardcoded dark surfaces.
+  //
+  // THE OS PREFERENCE IS NOT CONSULTED, and that is a deliberate reversal.
+  // Following it looked correct, but RunSpace and Code Studio contain ZERO
+  // data-theme rules — they are dark whatever the OS says. So a phone in
+  // light mode produced light chrome wrapped around permanently dark panels,
+  // which is the "white middle" report. Reproduced: OS light -> data-theme
+  // light -> glass renders rgba(255,255,255,.62) over #0d1117.
+  //
+  // Consulting the OS can come back the day every surface can honour it.
+  // Until then an explicit choice in Settings is the only thing that switches
+  // themes, and it still works exactly as before.
+  //
+  // This MUST agree with the inline script in index.html, which runs before
+  // the stylesheets so the first paint is already correct. Two different
+  // answers would mean a visible flip on every load.
   let saved = null;
   try { saved = localStorage.getItem("ahad_theme"); } catch (e) {}
-  if (saved !== "light" && saved !== "dark") {
-    saved = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches)
-      ? "light" : "dark";
-  }
-  applyTheme(saved);
+  applyTheme(saved === "light" ? "light" : "dark");
 })();
 
 /* ==================== PROFILE ==================== */

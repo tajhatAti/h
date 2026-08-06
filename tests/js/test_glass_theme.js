@@ -229,6 +229,64 @@ ok('the code-studio toolbar is opaque too',
 ok('job rows are not double-veiled over a glass rail',
    /#tab-jobs \.job-item \{[^}]*backdrop-filter:\s*none/.test(RS_CSS));
 
+console.log('[10a] dark unless the user explicitly chose otherwise');
+// THE REPORTED BUG. The inline script consulted prefers-color-scheme, so a
+// phone in light mode got data-theme="light" — honest to the OS, wrong for
+// this product. RunSpace and Code Studio contain ZERO data-theme rules and
+// are hardcoded dark, so light chrome wrapped permanently dark panels and the
+// middle of the dashboard read as a white sheet.
+{
+  function bootTheme(osLight, saved) {
+    // Seed storage BEFORE parsing — that is what a real reload does.
+    const dd = new JSDOM(HTML, {
+      pretendToBeVisual: true, runScripts: 'dangerously', url: 'https://x.test/',
+      beforeParse(w) {
+        if (saved) { try { w.localStorage.setItem('ahad_theme', saved); } catch (e) {} }
+        w.matchMedia = (q) => ({
+          matches: /prefers-color-scheme: light/.test(q) && osLight,
+          media: q, addEventListener() {}, removeEventListener() {},
+          addListener() {}, removeListener() {},
+        });
+      },
+    });
+    return dd.window.document.documentElement.getAttribute('data-theme');
+  }
+  ok('a light-mode phone still gets dark', bootTheme(true, null) === 'dark',
+     bootTheme(true, null));
+  ok('a dark-mode phone gets dark', bootTheme(false, null) === 'dark');
+  ok('an explicit light choice is still honoured',
+     bootTheme(true, 'light') === 'light', bootTheme(true, 'light'));
+  ok('an explicit dark choice is honoured over a light OS',
+     bootTheme(true, 'dark') === 'dark');
+}
+// The two places that decide the theme must AGREE, or the page flips once
+// pro.js loads.
+{
+  const inlineBlock = (HTML.match(/<script>[\s\S]*?<\/script>/) || [''])[0];
+  const initBlock = PRO.slice(PRO.indexOf('function initTheme'),
+                              PRO.indexOf('function initTheme') + 1200);
+  ok('the inline script does not consult the OS',
+     !/prefers-color-scheme/.test(inlineBlock));
+  ok('initTheme does not either, so there is no flip',
+     !/prefers-color-scheme/.test(initBlock));
+  ok('and the reason is recorded next to both',
+     /hardcoded dark/.test(inlineBlock) || /ZERO/.test(inlineBlock));
+}
+// The premise: those screens genuinely cannot follow a light theme.
+// RunSpace DOES mention data-theme="light" — but only to PIN itself dark,
+// overriding the shared tokens so the subtree cannot follow the site. My
+// first assertion said "no data-theme rules at all", which was simply wrong
+// about the file and would have failed on correct code.
+ok('RunSpace pins itself dark even under a light theme',
+   /html\[data-theme="light"\] #tab-jobs/.test(RS_CSS));
+ok('and it does so by remapping --panel onto its own dark surface',
+   /html\[data-theme="light"\] #tab-jobs[\s\S]{0,400}--panel:\s*var\(--bg-2\)/.test(RS_CSS));
+ok('Code Studio simply has no light mode', !/data-theme/.test(CS_CSS));
+// So a light SITE theme can never make those panels light — which is exactly
+// why pairing it with light chrome produced the white middle.
+ok('the glass defaults are light, which is what leaked through',
+   /:root \{[\s\S]{0,600}--glass-bg:\s*rgba\(255, 255, 255/.test(RAW_CSS));
+
 console.log('[10] the theme is decided before the first paint');
 // REPORTED: "Dashboard middle is white". data-theme was only set once pro.js
 // ran, so the first paint used the :root defaults — which are the LIGHT glass
