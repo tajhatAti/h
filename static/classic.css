@@ -1951,3 +1951,128 @@ a:not(.btn-primary):not(.btn-secondary):not(.btn-ghost):not(.jd-btn):not(.link):
 }
 .adm-lib-tag.heavy { color: var(--st-warn); border-color: color-mix(in srgb, var(--st-warn) 40%, transparent); }
 .adm-lib-tag.watch { color: var(--st-danger); border-color: color-mix(in srgb, var(--st-danger) 40%, transparent); }
+
+/* ================= 25. GLASS SURFACES ================================= */
+/*
+ * ONE definition of "glass", applied through tokens, so every surface stays
+ * consistent instead of each component inventing its own blur.
+ *
+ * WHY THIS SECTION HAD TO OVERRIDE THINGS: commit f0773ec deliberately set
+ * `backdrop-filter: none !important` on .nav and .dash-bar and replaced them
+ * with a solid --band. That was the right call at the time (a half-blurred
+ * bar over a hardcoded-dark app looked broken). Glass is now the intended
+ * look, so those two rules are reversed HERE rather than edited in place —
+ * the original decision and its reasoning stay readable in context.
+ *
+ * Glass is a SURFACE treatment only. It never carries meaning: the accent
+ * stays the only accent, and status colours keep their jobs. A blurred
+ * surface that also signalled something would break that rule.
+ */
+:root {
+  /* Tuned per theme below. Light needs a whiter veil and more saturation to
+     stop the blur reading as grey mud; dark needs a lift, not a tint. */
+  --glass-bg:      rgba(255, 255, 255, .62);
+  --glass-bg-2:    rgba(255, 255, 255, .48);
+  --glass-line:    rgba(17, 17, 19, .10);
+  --glass-blur:    18px;
+  --glass-sat:     150%;
+  --glass-shadow:  0 8px 30px rgba(17, 17, 19, .08);
+}
+html[data-theme="dark"] {
+  --glass-bg:      rgba(27, 27, 31, .58);
+  --glass-bg-2:    rgba(19, 19, 22, .52);
+  --glass-line:    rgba(255, 255, 255, .09);
+  --glass-shadow:  0 8px 30px rgba(0, 0, 0, .38);
+}
+
+/* The single reusable treatment. Everything below just points at it. */
+.glass,
+.dash-bar,
+.dash-tabs.open,
+.profile-card, .stat-card, .quick-card, .job-card, .job-form,
+.jobs-empty, .session-item, .history-item,
+.adm-panel, .adm-stat,
+.ah-modal-card,
+.side-menu, .more-sheet {
+  background: var(--glass-bg) !important;
+  background-image: none !important;
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) !important;
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) !important;
+  border: 1px solid var(--glass-line) !important;
+  box-shadow: var(--glass-shadow) !important;
+}
+
+/* Bars sit ON content, so they need the stronger veil and only a bottom edge. */
+.dash-bar {
+  background: var(--glass-bg-2) !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--glass-line) !important;
+}
+.nav {
+  background: var(--glass-bg-2) !important;
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) !important;
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) !important;
+  border-bottom: 1px solid var(--glass-line) !important;
+  box-shadow: none !important;
+}
+html[data-theme="light"] .nav { background: var(--glass-bg-2) !important; }
+
+/* Buttons. The PRIMARY button keeps its solid accent fill — it is the one
+   element whose job is to be unmissable, and a translucent call-to-action is
+   a weaker one. Secondary/ghost buttons become glass. */
+.btn-secondary, .btn-ghost, .adm-act, .dash-tab, .cs-act:not(.primary) {
+  background: var(--glass-bg) !important;
+  backdrop-filter: blur(12px) saturate(var(--glass-sat)) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(var(--glass-sat)) !important;
+  border: 1px solid var(--glass-line) !important;
+}
+.dash-tab { box-shadow: none !important; }
+/* The active tab must still read as active THROUGH the glass, so it keeps the
+   solid accent it always had. */
+.dash-tab.active {
+  background: var(--btn) !important;
+  color: var(--btn-fg) !important;
+  backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+  border-color: transparent !important;
+}
+
+/* Inputs stay legible: a blurred field with text in it is hard to read, so
+   they get the veil but no saturation boost. */
+.input-text, .field input, .field select, .field textarea {
+  background: var(--glass-bg-2) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+  border: 1px solid var(--glass-line) !important;
+}
+
+/* Modal scrim: darken AND blur what is behind, so the card floats. */
+.ah-modal { backdrop-filter: blur(6px) !important; -webkit-backdrop-filter: blur(6px) !important; }
+.ah-modal-card { background: var(--glass-bg) !important; }
+
+/* WITHOUT backdrop-filter (older WebKit, Firefox with the flag off) a
+   translucent surface renders as washed-out text on whatever is behind it.
+   Fall back to the opaque panels the app already ships. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass, .dash-bar, .nav, .dash-tabs.open,
+  .profile-card, .stat-card, .quick-card, .job-card, .job-form,
+  .jobs-empty, .session-item, .history-item,
+  .adm-panel, .adm-stat, .ah-modal-card, .side-menu, .more-sheet,
+  .btn-secondary, .btn-ghost, .adm-act, .dash-tab, .cs-act:not(.primary),
+  .input-text, .field input, .field select, .field textarea {
+    background: var(--panel) !important;
+    border-color: var(--line) !important;
+  }
+  .dash-bar, .nav { background: var(--band) !important; }
+}
+
+/* Reduced transparency is an accessibility setting, not a preference to
+   override: honour it by going solid. */
+@media (prefers-reduced-transparency: reduce) {
+  .glass, .dash-bar, .nav, .dash-tabs.open,
+  .profile-card, .stat-card, .quick-card, .job-card, .job-form,
+  .adm-panel, .adm-stat, .ah-modal-card, .side-menu, .more-sheet {
+    background: var(--panel) !important;
+    backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+  }
+  .dash-bar, .nav { background: var(--band) !important; }
+}

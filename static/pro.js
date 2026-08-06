@@ -2568,7 +2568,24 @@ document.addEventListener("DOMContentLoaded", () => {
   if (sideMenuBtn) sideMenuBtn.addEventListener("click", openSideMenu);
   const sideOverlay = document.getElementById("sideOverlay");
   if (sideOverlay) sideOverlay.addEventListener("click", closeSideMenu);
-  document.querySelectorAll(".dash-tabs .dash-tab").forEach(b => b.addEventListener("click", closeSideMenu));
+  // DELEGATED, not bound per button.
+  //
+  // BUG THIS FIXES: this used to attach a listener to each .dash-tab that
+  // existed AT BOOT. The Admin button does not — the server strips it from the
+  // shell so its existence is not discoverable, and applyAdminVisibility()
+  // injects it once the profile confirms an admin. That injected button
+  // therefore never got closeSideMenu, so opening the drawer and tapping
+  // Admin left the menu covering the console. Reproduced: after click,
+  // open = true.
+  //
+  // A delegated listener on the container covers every tab, including any
+  // added later, so the same bug cannot come back with the next dynamic tab.
+  const _tabsBar = document.querySelector(".dash-tabs");
+  if (_tabsBar) {
+    _tabsBar.addEventListener("click", (e) => {
+      if (e.target.closest(".dash-tab")) closeSideMenu();
+    });
+  }
   const btnActivitySide = document.getElementById("btnActivitySide");
   if (btnActivitySide) btnActivitySide.addEventListener("click", () => { closeSideMenu(); openActivityPanel(); });
 

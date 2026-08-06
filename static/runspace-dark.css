@@ -1956,3 +1956,51 @@ html[data-theme="light"] #tab-jobs .jd {
   /* Swiping the drawer away should feel available, not just tapping. */
   #tab-jobs .rs-side { touch-action: pan-y; }
 }
+
+/* ================= GLASS SURFACES (RunSpace) ==========================
+ * RunSpace ships its own dark palette and never reads data-theme, so the
+ * site-wide glass layer in classic.css cannot reach it. Same treatment,
+ * expressed in this file's own tokens, so the two stay in step.
+ *
+ * Only RAISED surfaces get glass — bars, side rails, cards. The canvas and
+ * the log console stay solid on purpose: blurring a scrolling terminal costs
+ * real frames on a phone and makes monospace text fuzzy, which is the one
+ * place legibility beats decoration.
+ */
+#tab-jobs {
+  --rs-glass:      rgba(22, 27, 34, .62);
+  --rs-glass-2:    rgba(13, 17, 23, .55);
+  --rs-glass-line: rgba(255, 255, 255, .08);
+}
+#tab-jobs .rs-head,
+#tab-jobs .rs-side,
+#tab-jobs .rs-insp,
+#tab-jobs .job-item,
+#tab-jobs .wb-card {
+  background: var(--rs-glass) !important;
+  backdrop-filter: blur(18px) saturate(150%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(150%) !important;
+  border-color: var(--rs-glass-line) !important;
+}
+/* The editor pane and the log console stay OPAQUE. Code and streaming logs
+   must read cleanly, and a blur behind moving text is both slower and
+   harder to read. */
+#tab-jobs .rs-ws,
+#tab-jobs .rs-logs,
+#tab-jobs .cm-editor {
+  backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  #tab-jobs .rs-head, #tab-jobs .rs-side, #tab-jobs .rs-insp,
+  #tab-jobs .job-item, #tab-jobs .wb-card {
+    background: var(--bg-2) !important;
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  #tab-jobs .rs-head, #tab-jobs .rs-side, #tab-jobs .rs-insp,
+  #tab-jobs .job-item, #tab-jobs .wb-card {
+    background: var(--bg-2) !important;
+    backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+  }
+}
