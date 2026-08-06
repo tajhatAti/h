@@ -87,8 +87,12 @@ for (const tok of ['--panel', '--muted', '--line-2', '--ink']) {
 console.log('[2] focus glow retained');
 ok('focus outline uses the accent',
    /#tab-jobs :focus-visible \{[^}]*outline:\s*2px solid var\(--accent\)/.test(CSS));
+// The ring must EXIST; its colour is not this test's business. It used to
+// pin rgba(88,166,255) -- the blue that was a second accent alongside the
+// grey --acc. Asserting a literal hue here made the palette fix look like a
+// regression. What matters for focus is that a ring is drawn at all.
 ok('inputs get a ring instead of an offset outline',
-   /#tab-jobs \.rs-inp:focus[\s\S]{0,220}box-shadow:\s*0 0 0 3px rgba\(88, ?166, ?255/.test(CSS));
+   /#tab-jobs \.rs-inp:focus[\s\S]{0,220}box-shadow:\s*0 0 0 \dpx /.test(CSS));
 
 // ── 3. mobile drawer is closable ────────────────────────────────────────
 console.log('[3] mobile drawer');

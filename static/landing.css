@@ -9,18 +9,18 @@
    what actually happens when you ship a bot.
    ============================================================ */
 :root {
-  --ln-bg:      #0d1117;
-  --ln-bg-2:    #161b22;
-  --ln-bg-3:    #21262d;
-  --ln-line:    #21262d;
-  --ln-line-2:  #30363d;
-  --ln-fg:      #e6edf3;
-  --ln-fg-2:    #c9d1d9;
-  --ln-fg-3:    #8b949e;
-  --ln-accent:  #58a6ff;
+  --ln-bg:      #121212;
+  --ln-bg-2:    #1c1c1c;
+  --ln-bg-3:    #272727;
+  --ln-line:    #272727;
+  --ln-line-2:  #373737;
+  --ln-fg:      #ececec;
+  --ln-fg-2:    #d1d1d1;
+  --ln-fg-3:    #949494;
+  --ln-accent:  #e8e8e8;
   --ln-ok:      #3fb950;
-  --ln-sunken:  #010409;   /* terminal canvas */
-  --ln-fg-4:    #6e7681;   /* dimmest: prompts, timestamps */
+  --ln-sunken:  #050505;   /* terminal canvas */
+  --ln-fg-4:    #787878;   /* dimmest: prompts, timestamps */
 
   --ln-t-xs: 12px;
   --ln-t-sm: 14px;

@@ -27,8 +27,8 @@ body.code-active .dash-tab-content.code-studio {
   overflow: hidden !important;
   display: flex !important;
   flex-direction: column !important;
-  background: #0d1117 !important;
-  color: #c9d1d9;
+  background: #121212 !important;
+  color: #d1d1d1;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
   border: none !important;
   border-radius: 0 !important;
@@ -47,8 +47,8 @@ body.code-active .dash-tab-content.code-studio {
   display: flex !important;
   align-items: center !important;
   gap: 6px !important;
-  background: #161b22 !important;
-  border-bottom: 1px solid #21262d !important;
+  background: #1c1c1c !important;
+  border-bottom: 1px solid #272727 !important;
   flex-wrap: nowrap !important;
   overflow: hidden !important;
   box-sizing: border-box !important;
@@ -70,7 +70,7 @@ body.code-active .dash-tab-content.code-studio {
   border: 1px solid transparent !important;
   border-radius: 4px !important;
   background: transparent !important;
-  color: #e6edf3 !important;
+  color: #ececec !important;
   font-family: inherit !important;
   font-size: 12px !important;
   font-weight: 500 !important;
@@ -79,9 +79,9 @@ body.code-active .dash-tab-content.code-studio {
   max-width: 220px !important;
   box-sizing: border-box !important;
 }
-.code-studio .cs-name::placeholder { color: #6e7681 !important; }
-.code-studio .cs-name:hover { background: #21262d !important; border-color: #30363d !important; }
-.code-studio .cs-name:focus { background: #0d1117 !important; border-color: var(--accent, #58a6ff) !important; }
+.code-studio .cs-name::placeholder { color: #787878 !important; }
+.code-studio .cs-name:hover { background: #272727 !important; border-color: #373737 !important; }
+.code-studio .cs-name:focus { background: #121212 !important; border-color: var(--accent, #e8e8e8) !important; }
 .code-studio .cs-pill { display: none !important; }
 .code-studio .cs-lang {
   height: 24px !important;
@@ -91,7 +91,7 @@ body.code-active .dash-tab-content.code-studio {
   border: 1px solid transparent !important;
   border-radius: 4px !important;
   background: transparent !important;
-  color: #7d8590 !important;
+  color: #868686 !important;
   font-family: ui-monospace, SFMono-Regular, "JetBrains Mono", Consolas, monospace !important;
   font-size: 11px !important;
   font-weight: 500 !important;
@@ -102,7 +102,7 @@ body.code-active .dash-tab-content.code-studio {
   box-sizing: border-box !important;
   appearance: none !important;
 }
-.code-studio .cs-lang:hover { background: #21262d !important; border-color: #30363d !important; color: #e6edf3 !important; }
+.code-studio .cs-lang:hover { background: #272727 !important; border-color: #373737 !important; color: #ececec !important; }
 .code-studio .cs-actions {
   display: flex !important;
   align-items: center !important;
@@ -121,7 +121,7 @@ body.code-active .dash-tab-content.code-studio {
   border: 1px solid transparent !important;
   border-radius: 4px !important;
   background: transparent !important;
-  color: #c9d1d9 !important;
+  color: #d1d1d1 !important;
   font-family: inherit !important;
   font-size: 12px !important;
   font-weight: 500 !important;
@@ -134,8 +134,8 @@ body.code-active .dash-tab-content.code-studio {
   box-sizing: border-box !important;
   transition: background .12s ease, color .12s ease !important;
 }
-.code-studio .cs-act:hover { background: #30363d !important; color: #e6edf3 !important; transform: none !important; }
-.code-studio .cs-act:active { background: #3e444d !important; transition-duration: .05s !important; }
+.code-studio .cs-act:hover { background: #373737 !important; color: #ececec !important; transform: none !important; }
+.code-studio .cs-act:active { background: #464646 !important; transition-duration: .05s !important; }
 .code-studio .cs-act .btn-svg { width: 14px !important; height: 14px !important; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; display: block; }
 /* Colour for .cs-act.primary / .run now comes from the unified system in
    classic.css §16. Green here meant "important", not "running", which is
@@ -151,7 +151,7 @@ body.code-active .dash-tab-content.code-studio {
   height: 0 !important;              /* flex trick — lets children fill */
   display: flex !important;
   flex-direction: row !important;
-  background: #0d1117 !important;
+  background: #121212 !important;
   border: none !important;
   margin: 0 !important;
   padding: 0 !important;
@@ -163,8 +163,8 @@ body.code-active .dash-tab-content.code-studio {
 .code-studio .cs-activity {
   flex: 0 0 42px !important;
   width: 42px !important;
-  background: #161b22 !important;
-  border-right: 1px solid #21262d !important;
+  background: #1c1c1c !important;
+  border-right: 1px solid #272727 !important;
   display: flex !important;
   flex-direction: column !important;
   align-items: center !important;
@@ -178,7 +178,7 @@ body.code-active .dash-tab-content.code-studio {
   border: none !important;
   border-radius: 4px !important;
   background: transparent !important;
-  color: #7d8590 !important;
+  color: #868686 !important;
   display: grid !important;
   place-items: center !important;
   cursor: pointer !important;
@@ -187,18 +187,18 @@ body.code-active .dash-tab-content.code-studio {
   transition: background .12s ease, color .12s ease !important;
 }
 .code-studio .cs-act-btn .btn-svg { width: 18px !important; height: 18px !important; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; display: block; }
-.code-studio .cs-act-btn:hover { background: #21262d !important; color: #e6edf3 !important; }
-.code-studio .cs-act-btn.active { color: #e6edf3 !important; }
+.code-studio .cs-act-btn:hover { background: #272727 !important; color: #ececec !important; }
+.code-studio .cs-act-btn.active { color: #ececec !important; }
 .code-studio .cs-act-btn.active::before {
   content: ""; position: absolute; left: -6px; top: 6px; bottom: 6px; width: 2px;
-  background: var(--fg-3, #7d8590); border-radius: 2px;
+  background: var(--fg-3, #868686); border-radius: 2px;
 }
 
 .code-studio .cs-explorer {
   flex: 0 0 0 !important;
   width: 0 !important;
   overflow: hidden !important;
-  background: #0d1117 !important;
+  background: #121212 !important;
   border-right: none !important;
   transition: flex-basis .18s ease, width .18s ease, border-color .18s ease !important;
   display: flex !important;
@@ -207,7 +207,7 @@ body.code-active .dash-tab-content.code-studio {
 .code-studio.explorer-open .cs-explorer {
   flex: 0 0 200px !important;
   width: 200px !important;
-  border-right: 1px solid #21262d !important;
+  border-right: 1px solid #272727 !important;
 }
 .code-studio .cs-explorer-head {
   flex: 0 0 30px !important;
@@ -220,18 +220,18 @@ body.code-active .dash-tab-content.code-studio {
   font-weight: 700 !important;
   letter-spacing: .04em !important;
   text-transform: uppercase !important;
-  color: #7d8590 !important;
-  border-bottom: 1px solid #21262d !important;
+  color: #868686 !important;
+  border-bottom: 1px solid #272727 !important;
 }
 .code-studio .cs-explorer-head button {
   width: 20px !important; height: 20px !important;
   background: transparent !important; border: none !important;
-  color: #7d8590 !important; font-size: 16px !important;
+  color: #868686 !important; font-size: 16px !important;
   border-radius: 3px !important; cursor: pointer !important;
   display: grid !important; place-items: center !important; padding: 0 !important;
   line-height: 1 !important;
 }
-.code-studio .cs-explorer-head button:hover { background: #21262d !important; color: #3fb950 !important; }
+.code-studio .cs-explorer-head button:hover { background: #272727 !important; color: #3fb950 !important; }
 .code-studio .snippets-list {
   flex: 1 1 auto !important;
   overflow-y: auto !important;
@@ -249,7 +249,7 @@ body.code-active .dash-tab-content.code-studio {
   box-shadow: none !important;
   gap: 6px !important;
   cursor: pointer !important;
-  color: #c9d1d9 !important;
+  color: #d1d1d1 !important;
   font-size: 12.5px !important;
   position: relative !important;
   min-height: 22px !important;
@@ -258,8 +258,8 @@ body.code-active .dash-tab-content.code-studio {
   content: "📄"; position: absolute; left: 6px; top: 50%;
   transform: translateY(-50%); font-size: 11px; opacity: .55;
 }
-.code-studio .snippet-item:hover { background: #161b22 !important; transform: none !important; }
-.code-studio .snippet-item.active { background: #161b22 !important; color: #e6edf3 !important; }
+.code-studio .snippet-item:hover { background: #1c1c1c !important; transform: none !important; }
+.code-studio .snippet-item.active { background: #1c1c1c !important; color: #ececec !important; }
 .code-studio .snippet-item.active::before { opacity: 1 !important; }
 .code-studio .snippet-head { flex: 1 !important; min-width: 0 !important; display: flex !important; align-items: center !important; gap: 6px !important; }
 .code-studio .snippet-head h4 {
@@ -284,12 +284,12 @@ body.code-active .dash-tab-content.code-studio {
 .code-studio .snippet-actions .xbtn {
   width: 20px !important; height: 20px !important;
   background: transparent !important; border: none !important;
-  color: #7d8590 !important; font-size: 10px !important;
+  color: #868686 !important; font-size: 10px !important;
   border-radius: 3px !important; cursor: pointer !important;
   padding: 0 !important; line-height: 1 !important;
   display: grid !important; place-items: center !important;
 }
-.code-studio .snippet-actions .xbtn:hover { background: #30363d !important; color: #f85149 !important; }
+.code-studio .snippet-actions .xbtn:hover { background: #373737 !important; color: #f85149 !important; }
 .code-studio .snippet-actions .xbtn.delete:hover { color: #f85149 !important; background: rgba(248,81,73,.15) !important; }
 
 /* ---------- Editor zone ---------- */
@@ -297,7 +297,7 @@ body.code-active .dash-tab-content.code-studio {
   flex: 1 1 auto !important;
   min-width: 0 !important;
   min-height: 0 !important;
-  background: #0d1117 !important;
+  background: #121212 !important;
   border: none !important;
   overflow: hidden !important;
   display: flex !important;
@@ -312,18 +312,18 @@ body.code-active .dash-tab-content.code-studio {
   tab-size: 2 !important;
   white-space: pre !important;
   overflow: auto !important;
-  caret-color: #58a6ff !important;
+  caret-color: #e8e8e8 !important;
 }
-.code-studio .cs-code-input::selection { background: rgba(56,139,253,.3) !important; }
+.code-studio .cs-code-input::selection { background: rgba(232,232,232,.3) !important; }
 .code-studio .cm-qualifier  { color: #d2a8ff !important; }
 .code-studio .cm-error      { color: #ffa198 !important; background: rgba(248,81,73,.15) !important; }
 .code-studio .cm-m-xml .cm-tag       { color: #7ee787 !important; }
 .code-studio .cm-m-xml .cm-attribute { color: #ffa657 !important; }
-.code-studio .cm-m-xml .cm-string    { color: #a5d6ff !important; }
-.code-studio .cm-m-css .cm-atom      { color: #79c0ff !important; }
-.code-studio .cm-m-css .cm-number    { color: #79c0ff !important; }
-.code-studio .cm-m-css .cm-property  { color: #79c0ff !important; }
-.code-studio .cm-m-css .cm-string    { color: #a5d6ff !important; }
+.code-studio .cm-m-xml .cm-string    { color: #d2d2d2 !important; }
+.code-studio .cm-m-css .cm-atom      { color: #bcbcbc !important; }
+.code-studio .cm-m-css .cm-number    { color: #bcbcbc !important; }
+.code-studio .cm-m-css .cm-property  { color: #bcbcbc !important; }
+.code-studio .cm-m-css .cm-string    { color: #d2d2d2 !important; }
 
 /* ---------- Preview panel (right, closed by default) ---------- */
 .code-studio .cs-preview-zone {
@@ -331,7 +331,7 @@ body.code-active .dash-tab-content.code-studio {
   width: 0 !important;
   min-width: 0 !important;
   overflow: hidden !important;
-  background: #0d1117 !important;
+  background: #121212 !important;
   border-left: none !important;
   display: flex !important;
   flex-direction: column !important;
@@ -341,7 +341,7 @@ body.code-active .dash-tab-content.code-studio {
   flex: 0 0 42% !important;
   width: 42% !important;
   min-width: 280px !important;
-  border-left: 1px solid #21262d !important;
+  border-left: 1px solid #272727 !important;
 }
 .code-studio .cs-preview-top {
   flex: 0 0 28px !important;
@@ -350,11 +350,11 @@ body.code-active .dash-tab-content.code-studio {
   display: flex !important;
   align-items: center !important;
   justify-content: space-between !important;
-  background: #161b22 !important;
-  border-bottom: 1px solid #21262d !important;
+  background: #1c1c1c !important;
+  border-bottom: 1px solid #272727 !important;
   font-family: ui-monospace, monospace !important;
   font-size: 11px !important;
-  color: #7d8590 !important;
+  color: #868686 !important;
 }
 .code-studio .cs-preview-body {
   flex: 1 1 auto !important;
@@ -368,30 +368,30 @@ body.code-active .dash-tab-content.code-studio {
 }
 .code-studio .cs-console {
   position: absolute !important; left: 0; right: 0; bottom: 0; height: 40%;
-  background: #010409 !important; border-top: 1px solid #21262d !important;
+  background: #050505 !important; border-top: 1px solid #272727 !important;
   display: flex !important; flex-direction: column !important;
 }
 .code-studio .cs-con-head {
   flex: 0 0 auto !important; padding: 4px 10px !important;
   font-family: ui-monospace, monospace !important; font-size: 10.5px !important;
-  color: #7d8590 !important; border-bottom: 1px solid #21262d !important;
+  color: #868686 !important; border-bottom: 1px solid #272727 !important;
 }
 .code-studio .cs-con-body {
   flex: 1 1 auto !important; overflow: auto !important;
   padding: 6px 10px !important; font-family: ui-monospace, monospace !important;
-  font-size: 11.5px !important; line-height: 1.5 !important; color: #c9d1d9 !important;
+  font-size: 11.5px !important; line-height: 1.5 !important; color: #d1d1d1 !important;
 }
 .code-studio .cs-con-body .err { color: var(--st-danger, #f85149) !important; }
 .code-studio .cs-con-body .info { color: #3fb950 !important; }
 .code-studio .cs-close-prev {
   background: transparent !important; border: none !important;
-  color: #7d8590 !important; font-size: 14px !important;
+  color: #868686 !important; font-size: 14px !important;
   width: 22px !important; height: 22px !important;
   border-radius: 3px !important; cursor: pointer !important;
   display: grid !important; place-items: center !important;
   padding: 0 !important; line-height: 1 !important;
 }
-.code-studio .cs-close-prev:hover { background: #30363d !important; color: #e6edf3 !important; }
+.code-studio .cs-close-prev:hover { background: #373737 !important; color: #ececec !important; }
 .code-studio .cs-close-prev .btn-svg { width: 11px !important; height: 11px !important; }
 
 /* ---------------- Bottom runner terminal ---------------- */
@@ -400,7 +400,7 @@ body.code-active .dash-tab-content.code-studio {
   height: 0 !important;
   min-height: 0 !important;
   overflow: hidden !important;
-  background: #010409 !important;
+  background: #050505 !important;
   border-top: none !important;
   margin: 0 !important;
   display: flex !important;
@@ -410,7 +410,7 @@ body.code-active .dash-tab-content.code-studio {
 .code-studio.term-open .ah-term {
   flex: 0 0 180px !important;
   height: 180px !important;
-  border-top: 1px solid #21262d !important;
+  border-top: 1px solid #272727 !important;
 }
 .code-studio .ah-term-head {
   flex: 0 0 28px !important;
@@ -419,8 +419,8 @@ body.code-active .dash-tab-content.code-studio {
   display: flex !important;
   align-items: center !important;
   gap: 8px !important;
-  background: #161b22 !important;
-  border-bottom: 1px solid #21262d !important;
+  background: #1c1c1c !important;
+  border-bottom: 1px solid #272727 !important;
 }
 .code-studio .ah-dots { display: inline-flex; gap: 5px !important; }
 .code-studio .ah-dots i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
@@ -429,7 +429,7 @@ body.code-active .dash-tab-content.code-studio {
 .code-studio .ah-dots .d-g { background: #3fb950; }
 .code-studio .ah-term-title {
   font-family: ui-monospace, monospace !important; font-size: 11px !important;
-  color: #c9d1d9 !important; flex: 1 !important;
+  color: #d1d1d1 !important; flex: 1 !important;
 }
 .code-studio .ah-term-badge {
   font-size: 10px !important; padding: 1px 6px !important; border-radius: 10px !important;
@@ -439,11 +439,11 @@ body.code-active .dash-tab-content.code-studio {
 .code-studio .ah-term-badge.bad { background: rgba(248,81,73,.15) !important; color: var(--st-danger, #f85149) !important; }
 .code-studio .ah-term-close {
   background: transparent !important; border: none !important;
-  color: #7d8590 !important; font-size: 12px !important;
+  color: #868686 !important; font-size: 12px !important;
   width: 22px !important; height: 22px !important;
   border-radius: 3px !important; cursor: pointer !important;
 }
-.code-studio .ah-term-close:hover { background: #30363d !important; color: #e6edf3 !important; }
+.code-studio .ah-term-close:hover { background: #373737 !important; color: #ececec !important; }
 .code-studio .ah-term-body {
   flex: 1 1 auto !important;
   overflow-y: auto !important;
@@ -452,12 +452,12 @@ body.code-active .dash-tab-content.code-studio {
   font-family: ui-monospace, monospace !important;
   font-size: 12px !important;
   line-height: 1.55 !important;
-  color: #c9d1d9 !important;
-  background: #010409 !important;
+  color: #d1d1d1 !important;
+  background: #050505 !important;
   white-space: pre-wrap !important;
   word-break: break-word !important;
 }
-.code-studio .ah-term-body .t-prompt { color: #58a6ff !important; }
+.code-studio .ah-term-body .t-prompt { color: #e8e8e8 !important; }
 .code-studio .ah-term-body .t-err    { color: #ff7b72 !important; }
 .code-studio .ah-term-body .t-foot.ok  { color: #3fb950 !important; }
 .code-studio .ah-term-body .t-foot.bad { color: var(--st-danger, #f85149) !important; }
@@ -470,9 +470,9 @@ body.code-active .dash-tab-content.code-studio {
      meaning colour, and #fff on it measured 2.54:1 (unreadable). The bar is
      chrome; it goes neutral. Individual status words inside it may still be
      coloured, because there the colour reports something. */
-  background: var(--bg-2, #161b22) !important;
-  border-top: 1px solid var(--line, #21262d) !important;
-  color: var(--fg-3, #7d8590) !important;
+  background: var(--bg-2, #1c1c1c) !important;
+  border-top: 1px solid var(--line, #272727) !important;
+  color: var(--fg-3, #868686) !important;
   font-family: ui-monospace, monospace !important;
   font-size: 11px !important;
   padding: 0 12px !important;
@@ -488,18 +488,18 @@ body.code-active .dash-tab-content.code-studio {
   position: fixed !important;
   inset: 0 !important;
   z-index: 5000 !important;
-  background: #0d1117 !important;
+  background: #121212 !important;
 }
 .code-studio .cs-canvas.full .cs-activity,
 .code-studio .cs-canvas.full .cs-explorer { display: none !important; }
 .code-studio .ed-exit {
   position: absolute !important; top: 6px; right: 6px; z-index: 100;
-  background: #21262d !important; border: 1px solid #30363d !important;
-  color: #c9d1d9 !important; font-size: 11px !important; padding: 4px 8px !important;
+  background: #272727 !important; border: 1px solid #373737 !important;
+  color: #d1d1d1 !important; font-size: 11px !important; padding: 4px 8px !important;
   border-radius: 4px !important; font-family: inherit !important; font-weight: 600 !important;
   cursor: pointer !important; display: inline-flex !important; align-items: center !important; gap: 4px !important;
 }
-.code-studio .ed-exit:hover { background: #30363d !important; color: #e6edf3 !important; }
+.code-studio .ed-exit:hover { background: #373737 !important; color: #ececec !important; }
 body.ed-full { overflow: hidden !important; }
 
 /* ---------------- Mobile ---------------- */
@@ -540,7 +540,7 @@ body.ed-full { overflow: hidden !important; }
 
 /* ---------- Name input more prominent ---------- */
 .code-studio .cs-name {
-  color: #e6edf3 !important;
+  color: #ececec !important;
   font-weight: 600 !important;
   font-size: 13px !important;
   min-width: 160px !important;
@@ -548,12 +548,12 @@ body.ed-full { overflow: hidden !important; }
   font-family: ui-monospace, monospace !important;
   padding: 0 10px !important;
   height: 26px !important;
-  background: #0d1117 !important;
-  border: 1px solid #30363d !important;
+  background: #121212 !important;
+  border: 1px solid #373737 !important;
 }
-.code-studio .cs-name:hover { border-color: #484f58 !important; background: #0d1117 !important; }
-.code-studio .cs-name:focus { border-color: var(--accent, #58a6ff) !important; background: #0d1117 !important; box-shadow: 0 0 0 2px rgba(56,139,253,.2) !important; }
-.code-studio .cs-name::placeholder { color: #6e7681 !important; font-style: italic !important; }
+.code-studio .cs-name:hover { border-color: #505050 !important; background: #121212 !important; }
+.code-studio .cs-name:focus { border-color: var(--accent, #e8e8e8) !important; background: #121212 !important; box-shadow: 0 0 0 2px rgba(232,232,232,.2) !important; }
+.code-studio .cs-name::placeholder { color: #787878 !important; font-style: italic !important; }
 .code-studio .cs-lang {
   font-weight: 500 !important;
   letter-spacing: .03em !important;
@@ -569,30 +569,30 @@ body.ed-full { overflow: hidden !important; }
   margin-left: 4px !important;
   position: relative !important;
   overflow: visible !important;
-  box-shadow: 0 1px 0 rgba(255,255,255,.08) inset, 0 2px 6px rgba(249,115,22,.35) !important;
+  box-shadow: 0 1px 0 rgba(0,0,0,.45) inset, 0 2px 6px rgba(249,115,22,.35) !important;
 }
 .code-studio .cs-act.publish-btn .btn-svg { stroke: currentColor !important; }
 /* Save becomes quiet ghost */
 .code-studio #btnSaveSnippet {
-  background: #21262d !important;
-  border-color: #30363d !important;
-  color: #c9d1d9 !important;
+  background: #272727 !important;
+  border-color: #373737 !important;
+  color: #d1d1d1 !important;
 }
-.code-studio #btnSaveSnippet:hover { background: #30363d !important; border-color: #484f58 !important; }
+.code-studio #btnSaveSnippet:hover { background: #373737 !important; border-color: #505050 !important; }
 /* Run was removed; any leftover run styling cleaned */
 .code-studio .cs-act.run { display: none !important; }
 
 /* ---------- Copy/Download icon buttons ---------- */
-.code-studio .cs-act.ic-btn { width: 28px !important; color: #7d8590 !important; }
-.code-studio .cs-act.ic-btn:hover { color: #e6edf3 !important; }
+.code-studio .cs-act.ic-btn { width: 28px !important; color: #868686 !important; }
+.code-studio .cs-act.ic-btn:hover { color: #ececec !important; }
 
 /* ---------- Explorer files: minimal hover — only Delete appears, no messy buttons ---------- */
 .code-studio .snippet-item { padding: 2px 8px 2px 20px !important; }
-.code-studio .snippet-item::before { content: ""; position: absolute; left: 7px; top: 50%; transform: translateY(-50%); width: 10px; height: 12px; background: #7d8590; opacity: .7; -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/></svg>") center/contain no-repeat; mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/></svg>") center/contain no-repeat; }
-.code-studio .snippet-item:hover::before { background: #e6edf3; opacity: 1; }
-.code-studio .snippet-item.active::before { background: #58a6ff; opacity: 1; }
+.code-studio .snippet-item::before { content: ""; position: absolute; left: 7px; top: 50%; transform: translateY(-50%); width: 10px; height: 12px; background: #868686; opacity: .7; -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/></svg>") center/contain no-repeat; mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/></svg>") center/contain no-repeat; }
+.code-studio .snippet-item:hover::before { background: #ececec; opacity: 1; }
+.code-studio .snippet-item.active::before { background: #e8e8e8; opacity: 1; }
 .code-studio .snippet-head h4 { font-size: 12.5px !important; font-weight: 400 !important; }
-.code-studio .snippet-item.active .snippet-head h4 { color: #58a6ff !important; font-weight: 500 !important; }
+.code-studio .snippet-item.active .snippet-head h4 { color: #e8e8e8 !important; font-weight: 500 !important; }
 .code-studio .snippet-actions .xbtn { display: none !important; } /* open/copy/unpublished — too noisy */
 .code-studio .snippet-actions .xbtn.delete { display: inline-grid !important; }
 .code-studio .snippet-item:hover .snippet-actions { opacity: 1 !important; }
@@ -601,7 +601,7 @@ body.ed-full { overflow: hidden !important; }
 /* done in HTML */
 
 /* ---------- Status bar: publish URL display ---------- */
-.code-studio #csStatusErr a { color: #58a6ff !important; text-decoration: none !important; }
+.code-studio #csStatusErr a { color: #e8e8e8 !important; text-decoration: none !important; }
 .code-studio #csStatusErr a:hover { text-decoration: underline !important; }
 /* Mobile fixes */
 @media (max-width: 760px) {
@@ -647,10 +647,10 @@ body.ed-full { overflow: hidden !important; }
   max-width: 320px !important;
   max-height: 360px !important;
   overflow-y: auto !important;
-  background: #1a1a1e !important;
-  border: 1px solid #2a2a30 !important;
+  background: #1c1c1c !important;
+  border: 1px solid #2d2d2d !important;
   border-radius: 10px !important;
-  box-shadow: 0 20px 48px rgba(0,0,0,.45), 0 1px 0 rgba(255,255,255,.05) inset !important;
+  box-shadow: 0 20px 48px rgba(0,0,0,.45), 0 1px 0 rgba(0,0,0,.45) inset !important;
   padding: 6px !important;
   z-index: 500 !important;
   animation: csPopIn .18s cubic-bezier(.2,.9,.3,1.2) !important;
@@ -666,12 +666,12 @@ body.ed-full { overflow: hidden !important; }
   font-weight: 700 !important;
   text-transform: uppercase !important;
   letter-spacing: .06em !important;
-  color: #7d8590 !important;
+  color: #868686 !important;
   display: flex !important; align-items: center !important;
 }
 .cs-files-pop .cs-fp-count {
   margin-left: auto !important;
-  background: rgba(255,255,255,.08) !important;
+  background: #29292c !important;
   padding: 1px 6px !important;
   border-radius: 10px !important;
   font-weight: 600 !important;
@@ -681,28 +681,28 @@ body.ed-full { overflow: hidden !important; }
   padding: 5px 8px !important;
   border-radius: 6px !important;
   cursor: pointer !important;
-  color: #c9d1d9 !important;
+  color: #d1d1d1 !important;
   font-size: 12.5px !important;
 }
-.cs-files-pop .cs-fp-item:hover { background: rgba(255,255,255,.08) !important; }
+.cs-files-pop .cs-fp-item:hover { background: #29292c !important; }
 .cs-fp-item .cs-fpi-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: ui-monospace, monospace; }
 .cs-fp-item .cs-fpi-act { display: none; gap: 2px; }
 .cs-fp-item:hover .cs-fpi-act { display: inline-flex !important; }
 .cs-fp-item .cs-fpi-act button {
-  background: transparent; border: none; color: #7d8590; width: 22px; height: 22px;
+  background: transparent; border: none; color: #868686; width: 22px; height: 22px;
   border-radius: 4px; cursor: pointer; display: grid; place-items: center; padding: 0;
 }
-.cs-fp-item .cs-fpi-act button:hover { background: rgba(255,255,255,.1); color: #e6edf3; }
-.cs-fp-item .cs-fpi-act button.dl:hover { color: #58a6ff; }
+.cs-fp-item .cs-fpi-act button:hover { background: #2d2d31; color: #ececec; }
+.cs-fp-item .cs-fpi-act button.dl:hover { color: #e8e8e8; }
 .cs-fp-item.is-pub .cs-fpi-name::after {
   content: "●"; color: #3fb950; margin-left: 6px; font-size: 8px;
 }
 
 /* Activity bar Files button active */
-.cs-act-btn.active { color: #e6edf3 !important; background: rgba(255,255,255,.06) !important; }
+.cs-act-btn.active { color: #ececec !important; background: #262626 !important; }
 .cs-act-btn.active::before {
   content: ""; position: absolute; left: 0; top: 6px; bottom: 6px; width: 2px;
-  background: var(--fg-3, #7d8590); border-radius: 2px;
+  background: var(--fg-3, #868686); border-radius: 2px;
 }
 
 /* Publish button publishing state */

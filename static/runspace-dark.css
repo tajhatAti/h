@@ -20,22 +20,22 @@
    ============================================================ */
 #tab-jobs {
   /* Surfaces — 3 depths, nothing in between */
-  --bg:        #0d1117;   /* canvas              */
-  --bg-2:      #161b22;   /* raised: bars, cards */
-  --bg-3:      #21262d;   /* hover / pressed     */
-  --bg-sunken: #010409;   /* log console         */
+  --bg:        #121212;   /* canvas              */
+  --bg-2:      #1c1c1c;   /* raised: bars, cards */
+  --bg-3:      #272727;   /* hover / pressed     */
+  --bg-sunken: #050505;   /* log console         */
 
   /* Borders — one hairline, one emphasis */
-  --line:      #21262d;
-  --line-2:    #30363d;
+  --line:      #272727;
+  --line-2:    #373737;
 
   /* Text — 3 levels only */
-  --fg:        #e6edf3;   /* primary */
-  --fg-2:      #c9d1d9;   /* body    */
-  --fg-3:      #7d8590;   /* muted   */
+  --fg:        #ececec;   /* primary */
+  --fg-2:      #d1d1d1;   /* body    */
+  --fg-3:      #868686;   /* muted   */
 
   /* Accents — ONE brand accent; the rest are pure status signals */
-  --accent:    #58a6ff;   /* interactive / focus   */
+  --accent:    #e8e8e8;   /* interactive / focus   */
   --ok:        #3fb950;   /* running               */
   --warn:      #d29922;   /* starting / checking   */
   --danger:    #f85149;   /* crashed / destructive */
@@ -347,7 +347,7 @@ body.rs-active #tab-jobs { display: flex !important; flex: 1 1 auto !important; 
   transition: background .1s ease !important;
 }
 #tab-jobs .job-item:hover { background: var(--bg-2) !important; }
-#tab-jobs .job-item.active { background: rgba(56,139,253,.12) !important; }
+#tab-jobs .job-item.active { background: rgba(232,232,232,.12) !important; }
 #tab-jobs .job-item.active .jname { color: var(--accent); font-weight: 500; }
 #tab-jobs .job-item .jlang-icon {
   width: 18px; height: 18px; flex-shrink: 0;
@@ -429,7 +429,7 @@ body.rs-active #tab-jobs { display: flex !important; flex: 1 1 auto !important; 
   border-radius: var(--r-sm) !important; outline: none;
 }
 #tab-jobs .rs-inp:hover { border-color: var(--fg-3); }
-#tab-jobs .rs-inp:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(56,139,253,.2) !important; }
+#tab-jobs .rs-inp:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(232,232,232,.2) !important; }
 #tab-jobs .rs-inp::placeholder { color: var(--fg-3); font-style: italic; }
 #tab-jobs .rs-sel {
   height: 24px;
@@ -561,7 +561,7 @@ body.rs-active #tab-jobs { display: flex !important; flex: 1 1 auto !important; 
    not be pressed to close it. Start it below the header instead. */
 #tab-jobs .rs-menu-backdrop {
   position: absolute; inset: var(--rs-head-h) 0 0 0;
-  background: rgba(1,4,9,.6);
+  background: rgba(5,5,5,.6);
   z-index: 20; display: none;
 }
 body.rs-side-open #tab-jobs .rs-menu-backdrop { display: block; }
@@ -611,7 +611,7 @@ body.rs-side-open #tab-jobs .rs-menu-backdrop { display: block; }
     transform: translateX(-100%);
     transition: transform .18s cubic-bezier(.2,.7,.2,1);
     border-right: 1px solid var(--line);
-    box-shadow: 8px 0 24px rgba(1,4,9,.5);
+    box-shadow: 8px 0 24px rgba(5,5,5,.5);
     will-change: transform;
   }
   /* Its own header is redundant on mobile — the app header is right above it
@@ -1257,7 +1257,7 @@ body.rs-detail-open #tab-jobs .rs-side {
 #tab-jobs .rs-inp#jobName:focus {
   background: var(--bg) !important;
   border-color: var(--accent) !important;
-  box-shadow: 0 0 0 2px rgba(56,139,253,.25) !important;
+  box-shadow: 0 0 0 2px rgba(232,232,232,.25) !important;
 }
 
 #tab-jobs .rs-sel {
@@ -1270,7 +1270,7 @@ body.rs-detail-open #tab-jobs .rs-side {
   text-transform: none !important; letter-spacing: 0 !important;
 }
 #tab-jobs .rs-sel:hover { border-color: var(--fg-3) !important; }
-#tab-jobs .rs-sel:focus { border-color: var(--accent) !important; box-shadow: 0 0 0 2px rgba(56,139,253,.25) !important; }
+#tab-jobs .rs-sel:focus { border-color: var(--accent) !important; box-shadow: 0 0 0 2px rgba(232,232,232,.25) !important; }
 
 /* GitHub import: icon + field + action read as ONE composed control
    rather than a loose input next to an unexplained square button. */
@@ -1285,7 +1285,7 @@ body.rs-detail-open #tab-jobs .rs-side {
 }
 #tab-jobs .rs-gh-wrap:focus-within {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(56,139,253,.25);
+  box-shadow: 0 0 0 2px rgba(232,232,232,.25);
 }
 #tab-jobs .rs-gh-ic {
   display: grid; place-items: center;
@@ -1545,7 +1545,7 @@ body.rs-insp-open #tab-jobs .rs-insp { display: flex; }
     border-left: 0;
     border-top: 1px solid var(--line-2);
     border-radius: var(--r-md) var(--r-md) 0 0;
-    box-shadow: 0 -8px 28px rgba(1,4,9,.55);
+    box-shadow: 0 -8px 28px rgba(5,5,5,.55);
     will-change: transform;
   }
   body.rs-insp-open #tab-jobs .rs-insp { transform: translateY(0); }
@@ -1682,7 +1682,7 @@ body.rs-detail-open #tab-jobs .rs-insp { display: none !important; }
   background: var(--bg-2);
   border: 1px solid var(--line-2);
   border-radius: var(--r-md) !important;
-  box-shadow: 0 10px 30px rgba(1,4,9,.55);
+  box-shadow: 0 10px 30px rgba(5,5,5,.55);
 }
 #tab-jobs .jd-menu[hidden] { display: none; }
 #tab-jobs .jd-menu-item {
@@ -1917,7 +1917,7 @@ html[data-theme="light"] #tab-jobs .jd {
 #tab-jobs .jd-env input:focus {
   outline: none !important;
   border-color: var(--accent) !important;
-  box-shadow: 0 0 0 3px rgba(88, 166, 255, .25) !important;
+  box-shadow: 0 0 0 3px rgba(172,172,172,.25) !important;
 }
 
 /* ============================================================

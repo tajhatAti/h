@@ -21,37 +21,37 @@
   --paper:   #f4f4f5;   /* page canvas                 */
   --paper-2: #e9e9eb;   /* alt sections                */
   --panel:   #ffffff;   /* card surface                */
-  --ink:     #111113;   /* primary text                */
+  --ink:     #121212;   /* primary text                */
   --ink-2:   #46464b;   /* secondary text              */
   --muted:   #7c7c85;   /* tertiary text               */
-  --line:    #e3e3e6;   /* hairline                    */
-  --line-2:  #c9c9cf;   /* stronger hairline           */
+  --line:    #e4e4e4;   /* hairline                    */
+  --line-2:  #cccccc;   /* stronger hairline           */
   /* NO accent hue. The site is black / white / grey; emphasis comes from
      weight and contrast, never from colour. Only status (green/amber/red)
      is allowed to be coloured, because there the colour carries meaning. */
-  --acc:     #111113;   /* ink — emphasis, not a hue   */
-  --acc-soft: rgba(17, 17, 19, .07);
+  --acc:     #121212;   /* ink — emphasis, not a hue   */
+  --acc-soft: rgba(18,18,18,.07);
   --code-bg: #ffffff;   /* editor canvas               */
 
   /* invertible solids (buttons, chips) */
-  --btn:      #111113;
-  --btn-fg:   #f5f5f6;
+  --btn:      #121212;
+  --btn-fg:   #f6f6f6;
   --btn-hover:#000000;
 
   /* the always-black bands (nav, sidebar, hero, footer, bottom bar) */
-  --band:       #111113;
-  --cream:      #f5f5f6;   /* text on band           */
-  --cream-dim:  #a9a9b2;   /* muted text on band     */
-  --cream-line: rgba(245, 245, 246, .16);
-  --on-cream:   #111113;   /* dark text on cream pill */
-  --acc-ink:    #f5f5f6;   /* emphasis ON black bands */
+  --band:       #121212;
+  --cream:      #f6f6f6;   /* text on band           */
+  --cream-dim:  #aeaeae;   /* muted text on band     */
+  --cream-line: rgba(246,246,246,.16);
+  --on-cream:   #121212;   /* dark text on cream pill */
+  --acc-ink:    #f6f6f6;   /* emphasis ON black bands */
 
-  --scrim: rgba(17, 17, 19, .5);
+  --scrim: rgba(18,18,18,.5);
 
   /* Named surfaces, shared by both themes so a rule never has to guess. */
   --surface-1: #ffffff;
   --surface-2: #f4f4f5;
-  --edge:      #e3e3e6;
+  --edge:      #e4e4e4;
 
   --green: #1e7a3c;
   --red:   #b3261e;
@@ -77,21 +77,21 @@ html[data-theme="dark"] {
      panels #1a1a1a-#1e1e1e. Every value is fully opaque -- the previous
      translucent surfaces are what produced unreadable text over whatever
      happened to be behind them. */
-  --paper:   #0d0d0f;
-  --paper-2: #0a0a0b;
-  --panel:   #1a1a1e;
-  --surface-1: #141417;
-  --surface-2: #1e1e22;
-  --edge:      #2a2a30;
+  --paper:   #0e0e0e;
+  --paper-2: #0a0a0a;
+  --panel:   #1c1c1c;
+  --surface-1: #161616;
+  --surface-2: #202020;
+  --edge:      #2d2d2d;
 
-  /* Text at full contrast. #f2f2f4 on #0d0d0f measures ~16.8:1, and the
+  /* Text at full contrast. #f3f3f3 on #0e0e0e measures ~16.8:1, and the
      dimmest step still clears 4.5:1 on the panel colour, so no level of the
      scale is a readability compromise. */
-  --ink:     #f2f2f4;
-  --ink-2:   #c8c8d0;
-  --muted:   #8e8e99;
-  --line:    #2a2a30;
-  --line-2:  #3a3a42;
+  --ink:     #f3f3f3;
+  --ink-2:   #cccccc;
+  --muted:   #939393;
+  --line:    #2d2d2d;
+  --line-2:  #3e3e3e;
 
   /* ONE accent, used only for primary actions and active states.
      It has NO HUE, and that is a standing decision this pass must not undo:
@@ -99,11 +99,11 @@ html[data-theme="dark"] {
      and was reverted. Emphasis comes from weight and contrast; colour is
      reserved for status (green / amber / red), where it carries meaning.
      tests/js/test_no_warm_cast.js enforces this on computed colours. */
-  --acc:     #f2f2f4;
-  --acc-soft: rgba(242, 242, 244, .12);
-  --code-bg: #0f0f12;
+  --acc:     #f3f3f3;
+  --acc-soft: rgba(243,243,243,.12);
+  --code-bg: #101010;
 
-  --btn:      #f2f2f4;
+  --btn:      #f3f3f3;
   --btn-fg:   #0a0a0b;
   --btn-hover:#ffffff;
 
@@ -473,8 +473,8 @@ html[data-theme="light"] .dash-bar { background: var(--band) !important; }
 
   /* ⚡ JOBS — THE SPECIAL ONE in the DEV group: orange, tagged 24/7 */
   .dash-tab[data-tab="jobs"] {
-    background: rgba(17, 17, 19, .06) !important;
-    border: 1px solid rgba(17, 17, 19, .28) !important;
+    background: rgba(18,18,18,.06) !important;
+    border: 1px solid rgba(18,18,18,.28) !important;
     color: var(--acc-ink) !important;
     font-weight: 700 !important;
   }
@@ -484,16 +484,16 @@ html[data-theme="light"] .dash-bar { background: var(--band) !important; }
     margin-left: auto;
     font-family: var(--mono); font-size: 9px; font-weight: 600;
     letter-spacing: .1em; padding: 3px 7px; border-radius: 99px;
-    background: rgba(17, 17, 19, .08); color: inherit;
+    background: rgba(18,18,18,.08); color: inherit;
   }
-  .dash-tab[data-tab="jobs"]:hover { background: rgba(17, 17, 19, .10) !important; color: #f5f5f6 !important; }
+  .dash-tab[data-tab="jobs"]:hover { background: rgba(18,18,18,.10) !important; color: #f6f6f6 !important; }
   .dash-tab[data-tab="jobs"].active {
     background: var(--acc) !important;
     border-color: var(--acc) !important;
     color: var(--paper) !important;
-    box-shadow: 0 6px 20px rgba(17, 17, 19, .18) !important;
+    box-shadow: 0 6px 20px rgba(18,18,18,.18) !important;
   }
-  .dash-tab[data-tab="jobs"].active::after { background: rgba(255,255,255,.25); }
+  .dash-tab[data-tab="jobs"].active::after { background: #505053; }
   html[data-theme="dark"] .dash-tab[data-tab="jobs"].active { color: var(--on-cream) !important; }
 }
 
@@ -635,20 +635,20 @@ svg.ic { width: 1em; height: 1em; display: inline-block; vertical-align: -.14em;
 
 /* ================= 12. TERMINAL (warm dark screen) ================== */
 .ah-term {
-  background: #0d0d0f !important;
-  border: 1px solid #26262c !important;
+  background: #0e0e0e !important;
+  border: 1px solid #292929 !important;
   border-radius: var(--r-md) !important;
   box-shadow: var(--shadow-m) !important;
   overflow: hidden !important;
 }
-.ah-term-head { background: #161619 !important; border-bottom: 1px solid #26262c !important; }
-.ah-term-title { color: #9a9aa4 !important; font-family: var(--mono) !important; }
-.ah-term-close { color: #9a9aa4 !important; }
+.ah-term-head { background: #181818 !important; border-bottom: 1px solid #292929 !important; }
+.ah-term-title { color: #9f9f9f !important; font-family: var(--mono) !important; }
+.ah-term-close { color: #9f9f9f !important; }
 .ah-term-close:hover { color: var(--cream) !important; }
-.ah-term-body { color: #e4e4e8 !important; font-family: var(--mono) !important; }
-.ah-term-body::-webkit-scrollbar-track { background: #0d0d0f !important; }
-.ah-term-body::-webkit-scrollbar-thumb { background: #33333a !important; border-color: #0d0d0f !important; }
-.t-out { color: #e4e4e8 !important; }
+.ah-term-body { color: #e6e6e6 !important; font-family: var(--mono) !important; }
+.ah-term-body::-webkit-scrollbar-track { background: #0e0e0e !important; }
+.ah-term-body::-webkit-scrollbar-thumb { background: #373737 !important; border-color: #0e0e0e !important; }
+.t-out { color: #e6e6e6 !important; }
 .t-err { color: #ff8a7a !important; }
 .t-in  { color: var(--acc-ink) !important; }
 .t-sys { color: #82828c !important; }
@@ -690,17 +690,17 @@ svg.ic { width: 1em; height: 1em; display: inline-block; vertical-align: -.14em;
 .job-btn.danger:hover { background: var(--red) !important; color: #fff !important; border-color: var(--red) !important; }
 
 .jobs-log {
-  background: #0d0d0f !important; border: 1px solid #26262c !important;
+  background: #0e0e0e !important; border: 1px solid #292929 !important;
   border-radius: var(--r-md) !important; padding: 0 !important; overflow: hidden !important;
   box-shadow: var(--shadow-m) !important;
 }
 .jobs-log-head {
-  background: #161619 !important; border-bottom: 1px solid #26262c !important;
-  color: #9a9aa4 !important; font-family: var(--mono) !important;
+  background: #181818 !important; border-bottom: 1px solid #292929 !important;
+  color: #9f9f9f !important; font-family: var(--mono) !important;
 }
-.jobs-log-btn { color: #9a9aa4 !important; }
+.jobs-log-btn { color: #9f9f9f !important; }
 .jobs-log-btn:hover { color: var(--cream) !important; }
-.jobs-log-body { color: #e4e4e8 !important; font-family: var(--mono) !important; }
+.jobs-log-body { color: #e6e6e6 !important; font-family: var(--mono) !important; }
 .mini-spinner {
   border-color: var(--acc-soft) !important; border-top-color: var(--acc) !important;
   animation: ahSpin .7s linear infinite !important;
@@ -769,7 +769,7 @@ html[data-theme="light"] .more-sheet { background: var(--panel) !important; }
 
 .session-chip, .badge, .tag {
   background: var(--acc-soft) !important; color: var(--acc) !important;
-  border: 1px solid rgba(17, 17, 19, .22) !important;
+  border: 1px solid rgba(18,18,18,.22) !important;
   border-radius: 99px !important; font-weight: 600 !important;
 }
 .toggle, .switch {
@@ -1076,7 +1076,7 @@ body.ed-full { overflow: hidden !important; }
 /* ---- warning callout (shared) ---- */
 .warn-box {
   display: flex; gap: 10px; align-items: flex-start;
-  background: rgba(17, 17, 19, .06) !important; border: 1px solid rgba(17, 17, 19, .28) !important;
+  background: rgba(18,18,18,.06) !important; border: 1px solid rgba(18,18,18,.28) !important;
   color: var(--ink) !important; border-radius: var(--r-sm) !important;
   padding: 11px 12px; font-size: 12.5px; line-height: 1.45; margin-bottom: 14px;
 }
@@ -1261,7 +1261,7 @@ body.ed-full { overflow: hidden !important; }
 #tab-jobs .job-dot.running { background: var(--green); box-shadow: 0 0 8px rgba(30,122,60,.5); }
 #tab-jobs .job-dot.crashed, #tab-jobs .job-dot.install_failed { background: var(--red); }
 #tab-jobs .job-dot.stopped, #tab-jobs .job-dot.offline { background: var(--muted); }
-#tab-jobs .job-dot.installing { background: var(--acc); box-shadow: 0 0 8px rgba(17,17,19,.35); }
+#tab-jobs .job-dot.installing { background: var(--acc); box-shadow: 0 0 8px rgba(18,18,18,.35); }
 #tab-jobs .jobs-empty { font-size: 13px; }
 /* public URL row of a web-server job */
 .job-url {
@@ -1281,7 +1281,7 @@ body.ed-full { overflow: hidden !important; }
   border: 1px solid var(--line-2); color: var(--muted);
 }
 .job-pill.pub { color: var(--green); border-color: rgba(30,122,60,.45); }
-.job-pill.priv { color: var(--acc); border-color: rgba(17,17,19,.35); }
+.job-pill.priv { color: var(--acc); border-color: rgba(18,18,18,.35); }
 
 /* ============================================================
 §25  jobs live-note
@@ -1450,7 +1450,7 @@ body.ed-full { overflow: hidden !important; }
 .fc-body b i {
   font-style: normal; font-family: var(--mono); font-size: 9.5px; font-weight: 600;
   letter-spacing: .1em; text-transform: uppercase; color: var(--acc);
-  background: rgba(17, 17, 19, .07); padding: 3px 8px; border-radius: 99px;
+  background: rgba(18,18,18,.07); padding: 3px 8px; border-radius: 99px;
 }
 .fc-body small { font-size: 12.5px; line-height: 1.5; color: var(--muted); }
 .fc-go { flex: 0 0 auto; font-size: 17px; color: var(--muted); transition: transform .2s var(--ease), color .2s var(--ease); }
@@ -1770,7 +1770,7 @@ html[data-theme="dark"] {
    (a) CONTRAST. The feature-card body copy ("Write & run code…", "Deploy a
        Telegram bot…") used var(--muted). Measured against the card surface:
            light  #7c7c85 on #ffffff = 4.13:1   <- FAILS WCAG AA (needs 4.5)
-           dark   #85858f on #1b1b1f = 4.70:1   <- passes, barely
+           dark   #85858f on #1d1d1d = 4.70:1   <- passes, barely
        These are the first two things a new user reads, so they get --ink-2
        (6.6:1 light) instead of the muted tertiary tone.
 
@@ -1807,7 +1807,7 @@ html[data-theme="dark"] {
    (11 greens, 16 reds, 3 ambers, 7 blues), and 14 separate badge classes
    (.ah-term-badge .jd-badge .rs-chip .rs-badge .job-pill .cs-pill .chip
    .adm-pill .wb-badge …) each with their own shape and colour. Near-duplicates
-   like #4ade80 / #34d399 / #3fb950 all meant "running".
+   like #4ade80 / #848484 / #3fb950 all meant "running".
 
    THE SYSTEM (identical to the Job Detail Page):
      ACCENT   var(--accent) — the ONE hue. Active tab + primary button only.
@@ -1824,11 +1824,11 @@ html[data-theme="dark"] {
    the hardcoded literal in the var() defaults above. Promote it to :root so
    the entire product genuinely reads from ONE declaration. */
 :root {
-  --accent: #58a6ff;
+  --accent: #e8e8e8;
 }
 html[data-theme="light"] {
-  /* Same hue, darkened for contrast on white (#58a6ff on white is 2.2:1). */
-  --accent: #0969da;
+  /* Same hue, darkened for contrast on white (#e8e8e8 on white is 2.2:1). */
+  --accent: #181818;
 }
 
 /* ---- PILL / BADGE: one shape everywhere -------------------------------- */
@@ -1838,9 +1838,9 @@ html[data-theme="light"] {
   align-items: center; gap: 6px;
   height: 22px; padding: 0 10px;
   border-radius: 999px !important;
-  border: 1px solid var(--line-2, #30363d);
+  border: 1px solid var(--line-2, #373737);
   background: transparent;
-  color: var(--muted, #7d8590);
+  color: var(--muted, #868686);
   font-size: 11px; font-weight: 500; line-height: 1;
   letter-spacing: 0; text-transform: capitalize;
   white-space: nowrap;
@@ -1880,7 +1880,7 @@ html[data-theme="light"] {
   background: transparent !important;
   border: 1px solid transparent !important;
   border-radius: 999px !important;
-  color: var(--muted, #7d8590) !important;
+  color: var(--muted, #868686) !important;
   font-family: inherit; font-size: 13px; font-weight: 500;
   white-space: nowrap; cursor: pointer;
 }
@@ -1890,10 +1890,10 @@ html[data-theme="light"] {
 }
 /* The single accent-filled element in any given tab row. */
 .dash-tab.active, .tab-secondary.active, .cs-tab.active {
-  background: var(--accent, #58a6ff) !important;
+  background: var(--accent, #e8e8e8) !important;
   background-image: none !important;
-  border-color: var(--accent, #58a6ff) !important;
-  color: #0d1117 !important;
+  border-color: var(--accent, #e8e8e8) !important;
+  color: #121212 !important;
   font-weight: 600;
 }
 html[data-theme="light"] .dash-tab.active,
@@ -1904,27 +1904,27 @@ html[data-theme="light"] .tab-secondary.active { color: #ffffff !important; }
 .dash-tab[data-tab="jobs"]:hover,
 .dash-tab[data-tab="jobs"].active { background-image: none !important; }
 .dash-tab[data-tab="jobs"].active {
-  background: var(--accent, #58a6ff) !important;
-  border-color: var(--accent, #58a6ff) !important;
+  background: var(--accent, #e8e8e8) !important;
+  border-color: var(--accent, #e8e8e8) !important;
 }
 .dash-tab[data-tab="jobs"]::after,
 .dash-tab[data-tab="jobs"].active::after { display: none !important; }
 
 /* ---- BOTTOM NAV: active item uses the accent, not a brand gradient ----- */
-.bn-item.active { color: var(--accent, #58a6ff) !important; }
+.bn-item.active { color: var(--accent, #e8e8e8) !important; }
 .bn-item.active .bn-ic {
   background: transparent !important;
-  color: var(--accent, #58a6ff) !important;
+  color: var(--accent, #e8e8e8) !important;
 }
 
 /* ---- LINKS: one interactive colour ------------------------------------- */
 a:not(.btn-primary):not(.btn-secondary):not(.btn-ghost):not(.jd-btn):not(.link):not(.auth-switch a) {
-  color: var(--accent, #58a6ff);
+  color: var(--accent, #e8e8e8);
 }
 
 /* ---- FOCUS: one ring, everywhere --------------------------------------- */
 :focus-visible {
-  outline: 2px solid var(--accent, #58a6ff) !important;
+  outline: 2px solid var(--accent, #e8e8e8) !important;
   outline-offset: 2px;
 }
 

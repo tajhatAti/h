@@ -134,7 +134,7 @@
   -webkit-touch-callout: default !important;
 }
 .wb-term .xterm .xterm-selection-layer { z-index: 2; }
-.wb-term .xterm .xterm-selection { background: rgba(255,255,255,.25) !important; }
+.wb-term .xterm .xterm-selection { background: #505053 !important; }
 .wb-term .xterm-cursor-layer .xterm-cursor {
   background: #c0c0c0 !important; border-color: #c0c0c0 !important;
   width: 1px !important; box-shadow: none !important;
@@ -186,12 +186,12 @@
 .wb-term-slots .slot-tab:active { background: #1d1d1d; }
 .wb-term-slots .slot-tab.active {
   background: #242017;
-  border-color: #33333a;
-  color: #d0d0d8;
+  border-color: #373737;
+  color: #d4d4d4;
 }
 .wb-term-slots .slot-tab .slot-badge {
   font-size: 9px;
-  color: #b9b9c2;
+  color: #bebebe;
   opacity: .9;
 }
 .wb-term-slots .slot-tab.add {
@@ -250,7 +250,7 @@ body.term-fullscreen .wb-term-slots { display: flex; }
   font-size: 10px;
 }
 .wb-term-kbd button.kbd-nano {
-  color: #d0d0d8; background: #1c1c22; border-color: #2e2e36;
+  color: #d4d4d4; background: #1f1f1f; border-color: #323232;
   font-size: 10px;
 }
 .wb-term-kbd button.kbd-ok { background: #1f4d2a !important; color: #8affa0 !important; border-color:#2f6a3a !important; }
@@ -267,7 +267,7 @@ body.term-fullscreen .wb-term-slots { display: flex; }
 #tab-jobs.term-open .wb-ws-name { color: #ddd; }
 #tab-jobs.term-open .ws-dot { background: #bbb; box-shadow: none; animation: none; }
 
-.wb-btn[data-term-open] .btn-svg { color: #9aa4b3; }
+.wb-btn[data-term-open] .btn-svg { color: #a6a6a6; }
 .wb-btn[data-term-open]:hover .btn-svg { color: #ddd; }
 .wb-btn[data-term-open].on .btn-svg { color: #fff; }
 
