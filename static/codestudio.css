@@ -647,10 +647,8 @@ body.ed-full { overflow: hidden !important; }
   max-width: 320px !important;
   max-height: 360px !important;
   overflow-y: auto !important;
-  background: rgba(22,27,34,.72) !important;
-  backdrop-filter: saturate(180%) blur(24px) !important;
-  -webkit-backdrop-filter: saturate(180%) blur(24px) !important;
-  border: 1px solid rgba(255,255,255,.08) !important;
+  background: #1a1a1e !important;
+  border: 1px solid #2a2a30 !important;
   border-radius: 10px !important;
   box-shadow: 0 20px 48px rgba(0,0,0,.45), 0 1px 0 rgba(255,255,255,.05) inset !important;
   padding: 6px !important;
@@ -745,45 +743,3 @@ body.ed-full { overflow: hidden !important; }
 .code-studio .cs-cm-host .cm-editor.cm-focused { outline: none; }
 .code-studio .cs-cm-host .cm-scroller { overflow: auto; }
 
-/* ================= GLASS SURFACES (Code Studio) =======================
- * Same rule as RunSpace: chrome gets glass, the editor does not. A blurred
- * surface behind code is slower to paint and harder to read, and this is the
- * screen where reading text IS the task.
- */
-.code-studio {
-  --cs-glass:      rgba(22, 27, 34, .62);
-  --cs-glass-line: rgba(255, 255, 255, .08);
-}
-/* .cs-bar holds the toolbar buttons. Same lesson as RunSpace's .rs-head: a
- * translucent toolbar lets the dark canvas through and the controls stop
- * reading. It stays solid; the panels behind content keep the glass. */
-.code-studio .cs-bar {
-  background: #161b22 !important;
-  backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
-}
-.code-studio .cs-explorer,
-.code-studio .cs-tabs,
-.code-studio .ah-term-head {
-  background: var(--cs-glass) !important;
-  backdrop-filter: blur(18px) saturate(150%) !important;
-  -webkit-backdrop-filter: blur(18px) saturate(150%) !important;
-  border-color: var(--cs-glass-line) !important;
-}
-.code-studio .cm-editor,
-.code-studio .ah-term-body {
-  backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
-}
-
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .code-studio .cs-bar, .code-studio .cs-explorer,
-  .code-studio .cs-tabs, .code-studio .ah-term-head {
-    background: #161b22 !important;
-  }
-}
-@media (prefers-reduced-transparency: reduce) {
-  .code-studio .cs-bar, .code-studio .cs-explorer,
-  .code-studio .cs-tabs, .code-studio .ah-term-head {
-    background: #161b22 !important;
-    backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
-  }
-}

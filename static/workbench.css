@@ -600,8 +600,7 @@ body.no-such-legacy-scope #tab-jobs * { all: revert; }
   .mobile-backdrop {
     display: none !important;
     position: absolute; top: 40px; right: 0; bottom: 0; left: 0;
-    background: rgba(0,0,0,.55); z-index: 55;
-    backdrop-filter: blur(2px);
+    background: rgba(0,0,0,.62); z-index: 55;
     -webkit-tap-highlight-color: transparent;
   }
   #tab-jobs.side-open .mobile-backdrop { display: block !important; }

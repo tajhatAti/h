@@ -48,6 +48,11 @@
 
   --scrim: rgba(17, 17, 19, .5);
 
+  /* Named surfaces, shared by both themes so a rule never has to guess. */
+  --surface-1: #ffffff;
+  --surface-2: #f4f4f5;
+  --edge:      #e3e3e6;
+
   --green: #1e7a3c;
   --red:   #b3261e;
 
@@ -68,24 +73,42 @@
 
 /* ================= TOKENS — NIGHT =================================== */
 html[data-theme="dark"] {
-  --paper:   #131316;
-  --paper-2: #0e0e10;
-  --panel:   #1b1b1f;
-  --ink:     #e9e9ec;
-  --ink-2:   #c2c2c9;
-  --muted:   #85858f;
+  /* SOLID DARK, to the spec: near-black canvas #0a0a0a-#121212, dark grey
+     panels #1a1a1a-#1e1e1e. Every value is fully opaque -- the previous
+     translucent surfaces are what produced unreadable text over whatever
+     happened to be behind them. */
+  --paper:   #0d0d0f;
+  --paper-2: #0a0a0b;
+  --panel:   #1a1a1e;
+  --surface-1: #141417;
+  --surface-2: #1e1e22;
+  --edge:      #2a2a30;
+
+  /* Text at full contrast. #f2f2f4 on #0d0d0f measures ~16.8:1, and the
+     dimmest step still clears 4.5:1 on the panel colour, so no level of the
+     scale is a readability compromise. */
+  --ink:     #f2f2f4;
+  --ink-2:   #c8c8d0;
+  --muted:   #8e8e99;
   --line:    #2a2a30;
   --line-2:  #3a3a42;
-  --acc:     #e9e9ec;
-  --acc-soft: rgba(233, 233, 236, .12);
-  --code-bg: #141417;
 
-  --btn:      #e9e9ec;
-  --btn-fg:   #111113;
+  /* ONE accent, used only for primary actions and active states.
+     It has NO HUE, and that is a standing decision this pass must not undo:
+     an earlier round introduced an indigo accent, turned the whole UI blue,
+     and was reverted. Emphasis comes from weight and contrast; colour is
+     reserved for status (green / amber / red), where it carries meaning.
+     tests/js/test_no_warm_cast.js enforces this on computed colours. */
+  --acc:     #f2f2f4;
+  --acc-soft: rgba(242, 242, 244, .12);
+  --code-bg: #0f0f12;
+
+  --btn:      #f2f2f4;
+  --btn-fg:   #0a0a0b;
   --btn-hover:#ffffff;
 
-  --band:  #08080a;
-  --scrim: rgba(0, 0, 0, .62);
+  --band:  #0a0a0b;
+  --scrim: rgba(0, 0, 0, .72);
 
   --shadow-s: 0 1px 2px rgba(0, 0, 0, .45);
   --shadow-m: 0 10px 30px rgba(0, 0, 0, .5);
@@ -516,10 +539,10 @@ svg.ic { width: 1em; height: 1em; display: inline-block; vertical-align: -.14em;
 .ap-ic .ic { font-size: 15px; }
 .toast-ic { display: inline-flex; font-size: 15px; }
 #themeIcon .ic, #cmdBtn .ic, .icon-btn .ic { font-size: 16px; }
-.pub-ic .ic { font-size: 15px; color: var(--acc); }
+.pub-ic .ic { font-size: 15px; color: var(--muted); }
 .ed-exit .ic { font-size: 16px; }
-.stat-ic .ic { font-size: 20px; color: var(--acc); }
-.qc-ic .ic { font-size: 20px; color: var(--acc); }
+.stat-ic .ic { font-size: 20px; color: var(--muted); }
+.qc-ic .ic { font-size: 20px; color: var(--muted); }
 
 /* ---------- stat cards — minimal, data-first (fix: dashboard redesign) --- */
 .stat-card { display: flex !important; align-items: center !important; gap: 14px !important; padding: 16px 18px !important; }
@@ -650,7 +673,7 @@ svg.ic { width: 1em; height: 1em; display: inline-block; vertical-align: -.14em;
 
 .job-dot { border: none !important; box-shadow: none !important; }
 .job-dot.running   { background: var(--green) !important; animation: ahPulse 1.8s var(--ease) infinite !important; }
-.job-dot.installing { background: var(--acc) !important; animation: ahPulse 1.2s var(--ease) infinite !important; }
+.job-dot.installing { background: var(--st-warn) !important; animation: ahPulse 1.2s var(--ease) infinite !important; }
 .job-dot.crashed, .job-dot.install_failed { background: var(--red) !important; }
 .job-dot.stopped, .job-dot.offline { background: var(--line-2) !important; }
 
@@ -711,20 +734,16 @@ html[data-theme="light"] .activity-panel { background: var(--panel) !important; 
 }
 
 /* ================= 15. MOBILE ======================================= */
-/* Bottom nav: a translucent dark bar, not a solid slab. classic.css loads
-   last, and it was force-disabling the blur that pro.css sets — so the nav
-   read as a hard block glued to the bottom of the screen. */
+/* Bottom nav: SOLID. It was translucent + blurred, which is the effect being
+   removed everywhere — a nav bar sitting over scrolling content is the worst
+   place for it, because the text behind keeps changing what the labels sit
+   on. Opaque means the labels have one predictable background. */
 .bottom-nav, .bn {
-  background: rgba(9, 9, 11, .88) !important;
-  border-top: 1px solid rgba(255, 255, 255, .09) !important;
+  background: var(--surface-1) !important;
+  border-top: 1px solid var(--edge) !important;
   box-shadow: none !important;
-  backdrop-filter: blur(18px) saturate(140%) !important;
-  -webkit-backdrop-filter: blur(18px) saturate(140%) !important;
 }
-@supports not (backdrop-filter: blur(1px)) {
-  .bottom-nav, .bn { background: #09090b !important; }
-}
-html[data-theme="light"] .bottom-nav { background: rgba(9, 9, 11, .88) !important; }
+html[data-theme="light"] .bottom-nav { background: var(--surface-1) !important; }
 .bn-item { color: var(--cream-dim) !important; }
 .bn-item.active { color: var(--cream) !important; }
 .bn-item.active .bn-ic {
@@ -746,7 +765,7 @@ html[data-theme="light"] .more-sheet { background: var(--panel) !important; }
 .more-item:hover, .more-item:active { background: var(--paper) !important; }
 .more-item.danger { color: var(--red) !important; }
 /* Jobs stays special in the mobile sheet too */
-.more-item[onclick*="jobs"] { color: var(--acc) !important; font-weight: 700 !important; }
+.more-item[onclick*="jobs"] { color: var(--ink) !important; font-weight: 700 !important; }
 
 .session-chip, .badge, .tag {
   background: var(--acc-soft) !important; color: var(--acc) !important;
@@ -1952,127 +1971,3 @@ a:not(.btn-primary):not(.btn-secondary):not(.btn-ghost):not(.jd-btn):not(.link):
 .adm-lib-tag.heavy { color: var(--st-warn); border-color: color-mix(in srgb, var(--st-warn) 40%, transparent); }
 .adm-lib-tag.watch { color: var(--st-danger); border-color: color-mix(in srgb, var(--st-danger) 40%, transparent); }
 
-/* ================= 25. GLASS SURFACES ================================= */
-/*
- * ONE definition of "glass", applied through tokens, so every surface stays
- * consistent instead of each component inventing its own blur.
- *
- * WHY THIS SECTION HAD TO OVERRIDE THINGS: commit f0773ec deliberately set
- * `backdrop-filter: none !important` on .nav and .dash-bar and replaced them
- * with a solid --band. That was the right call at the time (a half-blurred
- * bar over a hardcoded-dark app looked broken). Glass is now the intended
- * look, so those two rules are reversed HERE rather than edited in place —
- * the original decision and its reasoning stay readable in context.
- *
- * Glass is a SURFACE treatment only. It never carries meaning: the accent
- * stays the only accent, and status colours keep their jobs. A blurred
- * surface that also signalled something would break that rule.
- */
-:root {
-  /* Tuned per theme below. Light needs a whiter veil and more saturation to
-     stop the blur reading as grey mud; dark needs a lift, not a tint. */
-  --glass-bg:      rgba(255, 255, 255, .62);
-  --glass-bg-2:    rgba(255, 255, 255, .48);
-  --glass-line:    rgba(17, 17, 19, .10);
-  --glass-blur:    18px;
-  --glass-sat:     150%;
-  --glass-shadow:  0 8px 30px rgba(17, 17, 19, .08);
-}
-html[data-theme="dark"] {
-  --glass-bg:      rgba(27, 27, 31, .58);
-  --glass-bg-2:    rgba(19, 19, 22, .52);
-  --glass-line:    rgba(255, 255, 255, .09);
-  --glass-shadow:  0 8px 30px rgba(0, 0, 0, .38);
-}
-
-/* The single reusable treatment. Everything below just points at it. */
-.glass,
-.dash-bar,
-.dash-tabs.open,
-.profile-card, .stat-card, .quick-card, .job-card, .job-form,
-.jobs-empty, .session-item, .history-item,
-.adm-panel, .adm-stat,
-.ah-modal-card,
-.side-menu, .more-sheet {
-  background: var(--glass-bg) !important;
-  background-image: none !important;
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) !important;
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) !important;
-  border: 1px solid var(--glass-line) !important;
-  box-shadow: var(--glass-shadow) !important;
-}
-
-/* Bars sit ON content, so they need the stronger veil and only a bottom edge. */
-.dash-bar {
-  background: var(--glass-bg-2) !important;
-  border: 0 !important;
-  border-bottom: 1px solid var(--glass-line) !important;
-}
-.nav {
-  background: var(--glass-bg-2) !important;
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) !important;
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) !important;
-  border-bottom: 1px solid var(--glass-line) !important;
-  box-shadow: none !important;
-}
-html[data-theme="light"] .nav { background: var(--glass-bg-2) !important; }
-
-/* Buttons. The PRIMARY button keeps its solid accent fill — it is the one
-   element whose job is to be unmissable, and a translucent call-to-action is
-   a weaker one. Secondary/ghost buttons become glass. */
-.btn-secondary, .btn-ghost, .adm-act, .dash-tab, .cs-act:not(.primary) {
-  background: var(--glass-bg) !important;
-  backdrop-filter: blur(12px) saturate(var(--glass-sat)) !important;
-  -webkit-backdrop-filter: blur(12px) saturate(var(--glass-sat)) !important;
-  border: 1px solid var(--glass-line) !important;
-}
-.dash-tab { box-shadow: none !important; }
-/* The active tab must still read as active THROUGH the glass, so it keeps the
-   solid accent it always had. */
-.dash-tab.active {
-  background: var(--btn) !important;
-  color: var(--btn-fg) !important;
-  backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
-  border-color: transparent !important;
-}
-
-/* Inputs stay legible: a blurred field with text in it is hard to read, so
-   they get the veil but no saturation boost. */
-.input-text, .field input, .field select, .field textarea {
-  background: var(--glass-bg-2) !important;
-  backdrop-filter: blur(10px) !important;
-  -webkit-backdrop-filter: blur(10px) !important;
-  border: 1px solid var(--glass-line) !important;
-}
-
-/* Modal scrim: darken AND blur what is behind, so the card floats. */
-.ah-modal { backdrop-filter: blur(6px) !important; -webkit-backdrop-filter: blur(6px) !important; }
-.ah-modal-card { background: var(--glass-bg) !important; }
-
-/* WITHOUT backdrop-filter (older WebKit, Firefox with the flag off) a
-   translucent surface renders as washed-out text on whatever is behind it.
-   Fall back to the opaque panels the app already ships. */
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .glass, .dash-bar, .nav, .dash-tabs.open,
-  .profile-card, .stat-card, .quick-card, .job-card, .job-form,
-  .jobs-empty, .session-item, .history-item,
-  .adm-panel, .adm-stat, .ah-modal-card, .side-menu, .more-sheet,
-  .btn-secondary, .btn-ghost, .adm-act, .dash-tab, .cs-act:not(.primary),
-  .input-text, .field input, .field select, .field textarea {
-    background: var(--panel) !important;
-    border-color: var(--line) !important;
-  }
-  .dash-bar, .nav { background: var(--band) !important; }
-}
-
-/* Reduced transparency is an accessibility setting, not a preference to
-   override: honour it by going solid. */
-@media (prefers-reduced-transparency: reduce) {
-  .glass, .dash-bar, .nav, .dash-tabs.open,
-  .profile-card, .stat-card, .quick-card, .job-card, .job-form,
-  .adm-panel, .adm-stat, .ah-modal-card, .side-menu, .more-sheet {
-    background: var(--panel) !important;
-    backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
-  }
-  .dash-bar, .nav { background: var(--band) !important; }
-}

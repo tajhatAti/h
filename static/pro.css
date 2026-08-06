@@ -16,7 +16,7 @@
   --bg: #08090d;
   --bg-2: #0b0d14;
   --bg-3: #10131c;
-  --surface: rgba(255, 255, 255, 0.03);
+  --surface: #1a1a1e;
   --surface-2: rgba(255, 255, 255, 0.06);
   --border: rgba(255, 255, 255, 0.08);
   --border-strong: rgba(255, 255, 255, 0.14);
@@ -182,7 +182,7 @@ html.booting .auth, html.booting .dashboard { display: none !important; }
    ============================================================ */
 .nav {
   position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
-  background: rgba(8, 9, 13, 0.7); backdrop-filter: blur(18px);
+  background: #0f0f11;
   border-bottom: 1px solid var(--border);
 }
 .nav-inner {
@@ -327,7 +327,7 @@ html.booting .auth, html.booting .dashboard { display: none !important; }
 .dashboard.hidden { display: none; }
 .dash-bar {
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
-  padding: 12px 24px; background: rgba(11, 13, 20, .8); backdrop-filter: blur(16px);
+  padding: 12px 24px; background: #131316;
   border-bottom: 1px solid var(--border);
 }
 .dash-tabs { display: flex; gap: 3px; background: var(--surface); padding: 4px; border-radius: 11px; border: 1px solid var(--border); max-width: 100%; overflow-x: auto; scrollbar-width: thin; }
@@ -490,7 +490,7 @@ html.booting .auth, html.booting .dashboard { display: none !important; }
    ============================================================ */
 .bottom-nav {
   display: none; position: fixed; bottom: 0; left: 0; right: 0; z-index: 1500;
-  background: rgba(11, 13, 20, .92); backdrop-filter: blur(18px);
+  background: #131316;
   border-top: 1px solid var(--border);
   padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
   justify-content: space-around;
@@ -787,7 +787,7 @@ html.booting .auth, html.booting .dashboard { display: none !important; }
 /* ============================================================
    COMMAND PALETTE
    ============================================================ */
-.cmd-overlay { position: fixed; inset: 0; z-index: 7000; background: rgba(0,0,0,.6); backdrop-filter: blur(6px); display: flex; justify-content: center; align-items: flex-start; padding-top: 12vh; opacity: 0; transition: opacity .2s; }
+.cmd-overlay { position: fixed; inset: 0; z-index: 7000; background: rgba(0,0,0,.72); display: flex; justify-content: center; align-items: flex-start; padding-top: 12vh; opacity: 0; transition: opacity .2s; }
 .cmd-overlay.hidden { display: none; }
 .cmd-overlay:not(.hidden) { opacity: 1; }
 .cmd-box { width: 560px; max-width: calc(100vw - 32px); background: var(--bg-3); border: 1px solid var(--border-strong); border-radius: 16px; box-shadow: var(--shadow); overflow: hidden; animation: rise .2s ease; }
@@ -840,9 +840,9 @@ html[data-theme="light"] body {
     radial-gradient(900px 600px at 8% -6%, rgba(255,255,255, 0.10), transparent 60%),
     radial-gradient(820px 500px at 96% 0%, rgba(168, 85, 247, 0.08), transparent 55%);
 }
-html[data-theme="light"] .nav { background: rgba(255,255,255,0.75); }
-html[data-theme="light"] .dash-bar { background: rgba(255,255,255,.82); }
-html[data-theme="light"] .bottom-nav { background: rgba(255,255,255,.92); }
+html[data-theme="light"] .nav { background: #ffffff; }
+html[data-theme="light"] .dash-bar { background: #ffffff; }
+html[data-theme="light"] .bottom-nav { background: #ffffff; }
 html[data-theme="light"] .activity-panel { background: var(--bg-2); }
 html[data-theme="light"] .more-sheet { background: var(--bg-2); }
 html[data-theme="light"] .toast { background: var(--bg-2); }

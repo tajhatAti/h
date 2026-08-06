@@ -133,14 +133,23 @@ ok('links keep a visible focus ring', /\.link:focus-visible/.test(classic));
 
 // ── D. bottom navigation ────────────────────────────────────────────────
 console.log('[D] bottom navigation');
-ok('translucent dark bar', /\.bottom-nav,\s*\.bn \{[^}]*rgba\(9,\s*9,\s*11/.test(classic));
-ok('blur is no longer disabled by the last sheet',
-   !/\.bottom-nav,\s*\.bn \{[^}]*backdrop-filter:\s*none/.test(classic));
-ok('blur enabled', /\.bottom-nav,\s*\.bn \{[^}]*backdrop-filter:\s*blur/.test(classic));
+// REVERSED: these three used to require a translucent, blurred bar. The
+// frosted-glass treatment is now removed from the product entirely — a nav
+// bar over scrolling content is the worst case for it, because the text
+// behind keeps changing what the labels sit on. Solid means the labels have
+// one predictable background, and no @supports fallback is needed because
+// there is nothing to fall back from.
+ok('the bar is SOLID, not translucent',
+   /\.bottom-nav,\s*\.bn \{[^}]*background:\s*var\(--surface-1\)/.test(classic));
+ok('no blur on it', !/\.bottom-nav,\s*\.bn \{[^}]*backdrop-filter:\s*blur/.test(classic));
 ok('has a hairline top border',
    /\.bottom-nav,\s*\.bn \{[^}]*border-top:\s*1px solid/.test(classic));
-ok('opaque fallback when blur is unsupported',
-   /@supports not \(backdrop-filter/.test(classic));
+// `backdrop-filter: none` is fine and in fact desirable — it is what forces
+// the effect off. Only a real blur is a failure. My first version of this
+// regex flagged the `none` declarations too.
+ok('no BLUR survives anywhere in the sheet',
+   !/backdrop-filter:\s*blur/.test(classic),
+   (classic.match(/backdrop-filter:\s*blur[^;]*/g) || []).join(' | '));
 
 console.log(`\ntest_dark_surfaces: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
