@@ -174,8 +174,11 @@ console.log('[7] dark-only screens get the same treatment');
 // RunSpace and Code Studio never read data-theme, so classic.css cannot reach
 // them; they need their own glass expressed in their own tokens.
 ok('RunSpace has a glass section', /GLASS SURFACES \(RunSpace\)/.test(RS_CSS));
-ok('its bars and rails are glass',
-   /#tab-jobs \.rs-head[\s\S]{0,300}backdrop-filter:\s*blur/.test(RS_CSS));
+// NOT .rs-head — that is the toolbar, and section [9] requires it to stay
+// opaque. This assertion originally targeted it and directly contradicted
+// that rule; the rails behind content are what should have been checked.
+ok('its side rails are glass',
+   /#tab-jobs \.rs-side,[\s\S]{0,300}backdrop-filter:\s*blur/.test(RS_CSS));
 ok('the editor pane is explicitly NOT blurred',
    /#tab-jobs \.rs-ws[\s\S]{0,220}backdrop-filter:\s*none/.test(RS_CSS));
 ok('nor is the log console',
@@ -194,6 +197,55 @@ ok('dark overrides them',
    /html\[data-theme="dark"\][\s\S]{0,300}--glass-bg:\s*rgba\(27, 27, 31/.test(RAW_CSS));
 ok('the dark hairline is a light tint, not a dark one',
    /html\[data-theme="dark"\][\s\S]{0,400}--glass-line:\s*rgba\(255, 255, 255/.test(RAW_CSS));
+
+console.log('[9] a toolbar is never translucent');
+// REPORTED: "Run, Stop, Env, Metrics, Logs" vanished. Those controls live
+// inside .rs-head, and glass on that surface let the near-black canvas show
+// through, so the buttons stopped reading against it. A toolbar is exactly
+// the surface that must not recede — the panels BEHIND content still get
+// glass, because nothing sits on top of them competing for contrast.
+{
+  const dom = new JSDOM(HTML, { pretendToBeVisual: true });
+  const d = dom.window.document, w = dom.window;
+  d.querySelectorAll('link[rel=stylesheet]').forEach(l => l.remove());
+  const st = d.createElement('style'); st.textContent = RS_CSS; d.head.appendChild(st);
+  const head = d.querySelector('#tab-jobs .rs-head');
+  ok('control: the toolbar buttons really are inside .rs-head',
+     !!head && head.contains(d.getElementById('btnStartJob')));
+  ok('.rs-head is opaque',
+     !/blur/.test(w.getComputedStyle(head).backdropFilter || ''),
+     w.getComputedStyle(head).backdropFilter);
+  // …while the panels behind content keep it.
+  for (const sel of ['#tab-jobs .rs-side', '#tab-jobs .rs-insp']) {
+    const e = d.querySelector(sel);
+    if (!e) continue;
+    ok(`${sel} still has glass`,
+       /blur/.test(w.getComputedStyle(e).backdropFilter || ''),
+       w.getComputedStyle(e).backdropFilter);
+  }
+}
+ok('the code-studio toolbar is opaque too',
+   /\.code-studio \.cs-bar \{[^}]*backdrop-filter:\s*none/.test(CS_CSS));
+ok('job rows are not double-veiled over a glass rail',
+   /#tab-jobs \.job-item \{[^}]*backdrop-filter:\s*none/.test(RS_CSS));
+
+console.log('[10] the theme is decided before the first paint');
+// REPORTED: "Dashboard middle is white". data-theme was only set once pro.js
+// ran, so the first paint used the :root defaults — which are the LIGHT glass
+// values. On a dark app that is a white sheet until the script catches up.
+ok('an inline script sets data-theme', /setAttribute\("data-theme"/.test(HTML));
+ok('it runs before pro.js',
+   HTML.indexOf('setAttribute("data-theme"') < HTML.indexOf('/static/pro.js'),
+   String(HTML.indexOf('setAttribute("data-theme"')));
+ok('it runs before the stylesheets are even linked',
+   HTML.indexOf('setAttribute("data-theme"') < HTML.indexOf('classic.css'),
+   `theme@${HTML.indexOf('setAttribute("data-theme"')} css@${HTML.indexOf('classic.css')}`);
+ok('it falls back to dark, matching initTheme',
+   /"light" : "dark"/.test(HTML));
+ok('and a thrown error still yields a theme',
+   /catch \(e\) \{[\s\S]{0,120}data-theme", "dark"/.test(HTML));
+ok('the light values are still the :root default (light users get them)',
+   /:root \{[\s\S]{0,600}--glass-bg:\s*rgba\(255, 255, 255/.test(RAW_CSS));
 
 console.log(`\ntest_glass_theme: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

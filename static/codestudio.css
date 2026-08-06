@@ -754,7 +754,13 @@ body.ed-full { overflow: hidden !important; }
   --cs-glass:      rgba(22, 27, 34, .62);
   --cs-glass-line: rgba(255, 255, 255, .08);
 }
-.code-studio .cs-bar,
+/* .cs-bar holds the toolbar buttons. Same lesson as RunSpace's .rs-head: a
+ * translucent toolbar lets the dark canvas through and the controls stop
+ * reading. It stays solid; the panels behind content keep the glass. */
+.code-studio .cs-bar {
+  background: #161b22 !important;
+  backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+}
 .code-studio .cs-explorer,
 .code-studio .cs-tabs,
 .code-studio .ah-term-head {

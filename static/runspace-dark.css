@@ -1972,15 +1972,31 @@ html[data-theme="light"] #tab-jobs .jd {
   --rs-glass-2:    rgba(13, 17, 23, .55);
   --rs-glass-line: rgba(255, 255, 255, .08);
 }
-#tab-jobs .rs-head,
+/* BUG THIS FIXES: .rs-head is the TOOLBAR — Run, Stop, Env, Metrics, Logs all
+ * live inside it. Making it translucent let the near-black canvas show
+ * through, and the controls stopped being visible against it. A toolbar is
+ * exactly the surface that must NOT recede.
+ *
+ * .rs-head keeps a solid background. The panels behind content still get
+ * glass, because nothing sits on top of them competing for contrast. */
 #tab-jobs .rs-side,
 #tab-jobs .rs-insp,
-#tab-jobs .job-item,
 #tab-jobs .wb-card {
   background: var(--rs-glass) !important;
   backdrop-filter: blur(18px) saturate(150%) !important;
   -webkit-backdrop-filter: blur(18px) saturate(150%) !important;
   border-color: var(--rs-glass-line) !important;
+}
+/* The toolbar: a light lift on the SOLID surface, no transparency. */
+#tab-jobs .rs-head {
+  background: var(--bg-2) !important;
+  backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+}
+/* Job rows must keep their own hover/selected states readable, so they stay
+ * on the solid palette too — a translucent row over a translucent rail is two
+ * veils stacked, and the text underneath both is what suffers. */
+#tab-jobs .job-item {
+  backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
 }
 /* The editor pane and the log console stay OPAQUE. Code and streaming logs
    must read cleanly, and a blur behind moving text is both slower and
@@ -1992,14 +2008,12 @@ html[data-theme="light"] #tab-jobs .jd {
 }
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  #tab-jobs .rs-head, #tab-jobs .rs-side, #tab-jobs .rs-insp,
-  #tab-jobs .job-item, #tab-jobs .wb-card {
+  #tab-jobs .rs-side, #tab-jobs .rs-insp, #tab-jobs .wb-card {
     background: var(--bg-2) !important;
   }
 }
 @media (prefers-reduced-transparency: reduce) {
-  #tab-jobs .rs-head, #tab-jobs .rs-side, #tab-jobs .rs-insp,
-  #tab-jobs .job-item, #tab-jobs .wb-card {
+  #tab-jobs .rs-side, #tab-jobs .rs-insp, #tab-jobs .wb-card {
     background: var(--bg-2) !important;
     backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
   }

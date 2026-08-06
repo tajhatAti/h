@@ -11,6 +11,27 @@
 <link rel="stylesheet" href="/static/pro.css?v=20260724m">
 <link rel="stylesheet" href="/static/emoji.css?v=20260724m">
 <!-- Ahad Classic theme (editorial minimal) — base styles first -->
+<script>
+/* THEME BEFORE PAINT.
+ * data-theme was only set once pro.js ran, so the very first paint used the
+ * :root defaults — which are the LIGHT glass values. On a dark app that
+ * rendered the dashboard's middle as a white sheet until the script caught
+ * up. Setting the attribute here, inline and before any stylesheet is
+ * applied, removes the window entirely.
+ * Mirrors initTheme(): explicit choice > OS preference > dark. */
+(function () {
+  try {
+    var t = localStorage.getItem("ahad_theme");
+    if (t !== "light" && t !== "dark") {
+      t = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches
+        ? "light" : "dark";
+    }
+    document.documentElement.setAttribute("data-theme", t);
+  } catch (e) {
+    document.documentElement.setAttribute("data-theme", "dark");
+  }
+})();
+</script>
 <link rel="stylesheet" href="/static/classic.css?v=20260724m">
 <!-- CodeNest · RunSpace workbench UI -->
 <link rel="stylesheet" href="/static/workbench.css?v=20260724m">
