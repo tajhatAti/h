@@ -49,7 +49,7 @@ body {
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   /* SOLID canvas. Two radial washes used to sit here -- a white one and a
-     purple one (rgba(166,166,166,.12)). classic.css masked them on <body>
+     purple one, 168/85/247 at .12 alpha. classic.css masked them on <body>
      with background-image:none, but the purple was still the only hue in
      the file and it leaked wherever that mask did not apply. The brief
      asks for a solid near-black page, so there is no gradient at all. */
