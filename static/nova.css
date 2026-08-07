@@ -1,0 +1,383 @@
+/* ════════════════════════════════════════════════════════════════════════
+   CODENEST — NOVA
+   A different design LANGUAGE, on the same grey/black palette.
+   ────────────────────────────────────────────────────────────────────────
+   The palette was never the problem. Four rounds were spent retuning
+   colours while the SHAPE of the UI stayed identical, so nothing looked
+   new. What the old sheets are made of, counted:
+
+       23  pill radii (99px) + 8/10/12px rounded boxes everywhere
+      127  box-shadows -- floating cards on every surface
+       14  Fraunces serif headings -- editorial, soft
+       15  decorative gradients
+
+   That vocabulary IS the old look: soft, rounded, floating, magazine-ish.
+   Nova replaces it wholesale:
+
+       SHAPE      square. radius 0 on structure, 2px only where a control
+                  would otherwise clip its own focus ring.
+       DEPTH      none. no shadow anywhere. separation comes from a 1px
+                  rule and a step in surface value -- the way a terminal,
+                  a spreadsheet or a CAD tool separates things.
+       TYPE       one family. grotesque UI + mono for anything a machine
+                  produced. No serif. Headings are SMALL and uppercase
+                  with wide tracking; scale comes from weight, not size.
+       RHYTHM     hard 8px grid, dense. Generous padding was what made the
+                  old build feel like a brochure rather than a console.
+       COLOUR     unchanged: grey / black, hueless. Status keeps its
+                  green / amber / red because there colour means something.
+
+   Loaded LAST so it owns the cascade. Everything here is presentational --
+   no layout is restructured, no element hidden, no behaviour touched.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ─────────────────────────── 1. TOKENS ─────────────────────────────────
+   A 7-step neutral ramp. Every surface in the app maps onto one of these,
+   so there is no longer a separate palette per sheet (which is what let
+   RunSpace and Code Studio drift blue while the tokens said grey). */
+:root {
+  --n-0:  #000000;   /* true black — page behind everything */
+  --n-1:  #0a0a0a;   /* canvas                              */
+  --n-2:  #121212;   /* raised: bars, rails, headers        */
+  --n-3:  #1a1a1a;   /* panels, cards, inputs               */
+  --n-4:  #242424;   /* hover / pressed                     */
+  --n-5:  #333333;   /* hairline, strong                    */
+  --n-6:  #4d4d4d;   /* disabled ink                        */
+
+  --i-1:  #fafafa;   /* primary ink   — 19.3:1 on --n-1     */
+  --i-2:  #b4b4b4;   /* secondary     —  8.6:1              */
+  --i-3:  #8a8a8a;   /* tertiary/meta —  5.2:1              */
+
+  /* The one accent is ink itself: a solid light block with dark text.
+     Emphasis by contrast, never by hue. */
+  --n-acc:    #fafafa;
+  --n-acc-fg: #0a0a0a;
+
+  /* Status is the ONLY place a hue is allowed, because it carries meaning. */
+  --st-ok:     #4ade80;
+  --st-warn:   #fbbf24;
+  --st-danger: #f87171;
+
+  /* Structure */
+  --n-line: 1px solid var(--n-5);
+  --n-r:    0px;      /* square by default */
+  --n-r-c:  2px;      /* controls only     */
+
+  /* 8px rhythm */
+  --n-1x: 8px;  --n-2x: 16px;  --n-3x: 24px;  --n-4x: 32px;
+
+  /* One family for UI, one for machine output. No serif. */
+  --n-ui:   'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --n-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* Bridge: the old sheets read their own token names. Repointing them here
+   means every existing rule adopts Nova without being rewritten. */
+html[data-theme="dark"],
+html[data-theme="light"],
+:root {
+  --paper: var(--n-1);  --paper-2: var(--n-0);  --panel: var(--n-3);
+  --surface-1: var(--n-2); --surface-2: var(--n-3); --edge: var(--n-5);
+  --ink: var(--i-1); --ink-2: var(--i-2); --muted: var(--i-3);
+  --line: var(--n-5); --line-2: var(--n-5);
+  --acc: var(--n-acc); --acc-soft: var(--n-4);
+  --btn: var(--n-acc); --btn-fg: var(--n-acc-fg); --btn-hover: #ffffff;
+  --band: var(--n-0); --code-bg: var(--n-1);
+  --cream: var(--i-1); --cream-dim: var(--i-3); --cream-line: var(--n-5);
+  --on-cream: var(--n-0); --acc-ink: var(--i-1);
+  --scrim: rgba(0, 0, 0, .8);
+  --bg: var(--n-1); --bg-2: var(--n-2); --bg-3: var(--n-4);
+  --surface: var(--n-3); --border: var(--n-5); --border-strong: var(--n-5);
+  --text: var(--i-1); --muted-2: var(--i-3);
+  --brand-1: var(--n-acc); --brand-2: var(--n-acc); --brand-3: var(--n-acc);
+  --grad: var(--n-acc);
+  --serif: var(--n-ui);          /* kill the serif at the source */
+  --sans: var(--n-ui);
+  --mono: var(--n-mono);
+  --fg: var(--i-1); --fg-2: var(--i-2); --fg-3: var(--i-3);
+  --bg-sunken: var(--n-0);
+  --accent: var(--n-acc);
+  --ok: var(--st-ok); --warn: var(--st-warn); --danger: var(--st-danger);
+  --shadow-s: none; --shadow-m: none; --shadow-l: none; --shadow: none;
+
+  /* The radius tokens the old sheets round themselves with. classic.css
+     alone applies `border-radius: var(--r-md) !important` to .stat-card,
+     .quick-card and friends, so squaring the corners is impossible without
+     repointing these -- an !important on the element loses to an
+     !important that is more specific, but wins nothing against a token it
+     never reads. Collapsing them here squares every rule at once.
+     --radius/--radius-sm are pro.css's equivalents; --r-pill is RunSpace's,
+     kept round only where a dot or avatar uses it. */
+  --r-lg: var(--n-r); --r-md: var(--n-r); --r-sm: var(--n-r-c);
+  --radius: var(--n-r); --radius-sm: var(--n-r-c);
+  --ring: 0 0 0 2px var(--i-1);
+}
+
+/* ─────────────────────── 2. FLATTEN THE DEPTH ──────────────────────────
+   127 shadows across 7 sheets is what makes every panel read as a card
+   hovering over a page. A console has no floating cards: things sit in a
+   plane and are divided by rules. Focus rings are re-added below, so this
+   removes decoration only, not affordance. */
+*, *::before, *::after {
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+
+/* ─────────────────────── 3. SQUARE THE CORNERS ─────────────────────────
+   Structure is square. Controls keep 2px so a 2px focus ring does not
+   look clipped at the corner. Genuinely round things stay round. */
+*:not(.brand-mark):not(.boot-logo):not([class*="dot"]):not([class*="avatar"]):not(.rs-status-dot) {
+  border-radius: var(--n-r) !important;
+}
+button, input, select, textarea, .btn, [class*="btn"], [class*="chip"],
+[class*="pill"], [class*="badge"], [class*="tag"] {
+  border-radius: var(--n-r-c) !important;
+}
+/* Round by nature: identity marks and state dots. */
+.brand-mark, .boot-logo, [class*="dot"], [class*="avatar"], .rs-status-dot,
+.boot-spinner, [class*="spinner"] {
+  border-radius: 50% !important;
+}
+
+/* ───────────────────────── 4. BASE / CANVAS ────────────────────────────*/
+html, body {
+  background: var(--n-1) !important;
+  background-image: none !important;
+  color: var(--i-1) !important;
+  font-family: var(--n-ui) !important;
+  font-feature-settings: "cv02" 1, "cv03" 1, "cv04" 1, "tnum" 1;
+  letter-spacing: -0.006em;
+}
+
+/* ─────────────────────────── 5. TYPE SCALE ─────────────────────────────
+   The old build shouted with 40px serif display type. Nova is quiet: the
+   loudest thing on screen is 22px, and hierarchy is carried by weight,
+   tracking and case. This is the single biggest reason it reads as a
+   different product rather than a recolour. */
+h1, .hero h1 {
+  font-family: var(--n-ui) !important;
+  font-size: clamp(24px, 4.5vw, 38px) !important;
+  font-weight: 680 !important;
+  letter-spacing: -0.03em !important;
+  line-height: 1.05 !important;
+}
+h2 { font-size: clamp(19px, 2.6vw, 24px) !important; font-weight: 640 !important;
+     letter-spacing: -0.02em !important; line-height: 1.15 !important; }
+h3 { font-size: 15px !important; font-weight: 620 !important;
+     letter-spacing: -0.01em !important; }
+h1, h2, h3, h4, h5, h6 { font-family: var(--n-ui) !important; }
+
+/* Section labels: the console idiom — tiny, uppercase, widely tracked. */
+.eyebrow, .section-label, .dash-section-label, .settings-label,
+[class*="eyebrow"], [class*="section-title"] {
+  font-family: var(--n-mono) !important;
+  font-size: 10px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.16em !important;
+  text-transform: uppercase !important;
+  color: var(--i-3) !important;
+}
+
+/* Anything a machine produced is mono: ids, counts, sizes, timers, code. */
+code, kbd, pre, samp, .mono, [class*="count"], [class*="uptime"],
+[class*="metric"], [class*="stat-value"], [class*="-id"], time {
+  font-family: var(--n-mono) !important;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ──────────────────────── 6. SURFACES & RULES ──────────────────────────
+   One rule, one value step. No shadow, no gradient, no glass. */
+.card, .stat-card, .quick-card, .panel, .settings-card, .job-card,
+.snippet-item, .activity-panel, .modal, .sheet, .dropdown, .popover,
+[class*="-card"], [class*="-panel"], [class*="-modal"] {
+  background: var(--n-3) !important;
+  border: var(--n-line) !important;
+  background-image: none !important;
+}
+
+/* Bars, rails and headers sit one step below panels so the eye reads them
+   as chrome rather than content. */
+.nav, .dash-bar, .dash-side, .bottom-nav, .rs-head, .rs-side, .wb-head,
+.cs-bar, .ah-term-head, [class*="-toolbar"], [class*="-header"] {
+  background: var(--n-2) !important;
+  background-image: none !important;
+  border-color: var(--n-5) !important;
+}
+
+hr, .divider, .sep { border: 0 !important; border-top: var(--n-line) !important; }
+
+/* ──────────────────────────── 7. CONTROLS ──────────────────────────────
+   Buttons are rectangles that fill on hover. No lift, no glow, no
+   transform — a console does not bounce. */
+button, .btn, [class*="btn-"] {
+  font-family: var(--n-ui) !important;
+  font-weight: 550 !important;
+  letter-spacing: -0.005em !important;
+  transition: background-color .12s linear, border-color .12s linear,
+              color .12s linear !important;
+  transform: none !important;
+}
+button:hover, .btn:hover, [class*="btn-"]:hover { transform: none !important; }
+
+.btn-primary, .cs-act.primary, [class*="btn-primary"] {
+  background: var(--n-acc) !important;
+  color: var(--n-acc-fg) !important;
+  border: 1px solid var(--n-acc) !important;
+  background-image: none !important;
+}
+.btn-primary:hover, [class*="btn-primary"]:hover {
+  background: #ffffff !important;
+  border-color: #ffffff !important;
+}
+
+.btn-secondary, .btn-ghost, [class*="btn-secondary"], [class*="btn-ghost"] {
+  background: transparent !important;
+  color: var(--i-1) !important;
+  border: var(--n-line) !important;
+}
+.btn-secondary:hover, .btn-ghost:hover,
+[class*="btn-secondary"]:hover, [class*="btn-ghost"]:hover {
+  background: var(--n-4) !important;
+  border-color: var(--n-6) !important;
+}
+
+.btn-danger, [class*="btn-danger"] {
+  background: transparent !important;
+  color: var(--st-danger) !important;
+  border: 1px solid var(--st-danger) !important;
+}
+.btn-danger:hover, [class*="btn-danger"]:hover {
+  background: var(--st-danger) !important; color: var(--n-0) !important;
+}
+
+input, select, textarea {
+  background: var(--n-1) !important;
+  border: var(--n-line) !important;
+  color: var(--i-1) !important;
+  font-family: var(--n-ui) !important;
+}
+input::placeholder, textarea::placeholder { color: var(--n-6) !important; }
+input:focus, select:focus, textarea:focus {
+  border-color: var(--i-1) !important;
+  outline: none !important;
+}
+
+/* Focus must survive the shadow purge — outline, not box-shadow. */
+:focus-visible {
+  outline: 2px solid var(--i-1) !important;
+  outline-offset: 1px !important;
+}
+
+/* ────────────────────────────── 8. TABS ────────────────────────────────
+   Underline, not a filled pill. Pills were the most recognisable part of
+   the old language. */
+.dash-tab, .tab-secondary, .cs-tab, [class*="tab-btn"] {
+  background: transparent !important;
+  border: 0 !important;
+  border-bottom: 2px solid transparent !important;
+  color: var(--i-3) !important;
+  font-weight: 550 !important;
+  letter-spacing: -0.005em !important;
+}
+.dash-tab:hover, .cs-tab:hover { color: var(--i-2) !important; background: transparent !important; }
+.dash-tab.active, .tab-secondary.active, .cs-tab.active,
+[class*="tab-btn"].active {
+  background: transparent !important;
+  color: var(--i-1) !important;
+  border-bottom-color: var(--i-1) !important;
+}
+
+/* ───────────────────────── 9. STATUS SIGNALS ───────────────────────────
+   A 6px square, not a glowing round pill. Colour still carries the
+   meaning; the shape is what changed. */
+[class*="status"], [class*="chip"], [class*="badge"] {
+  font-family: var(--n-mono) !important;
+  font-size: 10px !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
+  background: transparent !important;
+  border: var(--n-line) !important;
+  color: var(--i-2) !important;
+}
+[class*="dot"] { width: 6px !important; height: 6px !important; }
+
+.is-running, .running, .ok, [class*="--ok"]      { color: var(--st-ok) !important; }
+.is-crashed, .crashed, .error, [class*="--danger"]{ color: var(--st-danger) !important; }
+.is-starting, .starting, .warn, [class*="--warn"] { color: var(--st-warn) !important; }
+
+/* ─────────────────────────── 10. TABLES / LISTS ────────────────────────*/
+table { border-collapse: collapse !important; }
+th {
+  font-family: var(--n-mono) !important;
+  font-size: 10px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.12em !important;
+  text-transform: uppercase !important;
+  color: var(--i-3) !important;
+  text-align: left !important;
+  border-bottom: var(--n-line) !important;
+}
+td { border-bottom: 1px solid var(--n-3) !important; }
+tr:hover td { background: var(--n-2) !important; }
+
+/* ──────────────────────────── 11. MOTION ───────────────────────────────
+   The old build slid, rose and popped on every tab change. Nova only
+   fades, quickly. Instant UI reads as a tool; animated UI reads as a
+   brochure. */
+* { animation-duration: .14s !important; }
+.dash-tab-content.active, #tab-jobs.active,
+#tab-jobs.active .rs-side, #tab-jobs.active .rs-main,
+#tab-jobs.active .job-item, #tab-jobs.active .rs-empty {
+  animation: novaIn .14s linear both !important;
+}
+@keyframes novaIn { from { opacity: 0 } to { opacity: 1 } }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
+
+/* ───────────────────────────── 12. SCROLLBAR ───────────────────────────*/
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--n-1) !important; }
+::-webkit-scrollbar-thumb {
+  background: var(--n-5) !important; border: 2px solid var(--n-1) !important;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--n-6) !important; }
+::selection { background: var(--i-1) !important; color: var(--n-0) !important; }
+
+/* ───────────────────── 13. IDE SURFACES (RunSpace etc.) ────────────────
+   These sheets hardcode GitHub's palette with !important and never read
+   the tokens, which is why earlier passes could not reach them. Pinned
+   onto the same ramp so the whole app is one material. */
+#tab-jobs, .code-studio, .wb-cm-host, .ah-term-body, .workbench {
+  background: var(--n-1) !important;
+  color: var(--i-2) !important;
+}
+#tab-jobs .rs-head, #tab-jobs .rs-side, .cs-bar, .wb-head {
+  background: var(--n-2) !important;
+  border-color: var(--n-5) !important;
+}
+.job-item, .rs-inp, .cs-name {
+  background: transparent !important;
+  border-color: var(--n-5) !important;
+}
+.job-item:hover  { background: var(--n-2) !important; }
+.job-item.active {
+  background: var(--n-3) !important;
+  border-left: 2px solid var(--i-1) !important;
+}
+/* Console output is the deepest surface — true black, mono, tight. */
+.log, .logs, pre.output, [class*="log-body"], [class*="console"], .ah-term-body {
+  background: var(--n-0) !important;
+  font-family: var(--n-mono) !important;
+  font-size: 12px !important;
+  line-height: 1.5 !important;
+}
+
+/* ───────────────────────────── 14. MOBILE ──────────────────────────────
+   Density is the point, but touch targets must stay 44px. */
+@media (max-width: 720px) {
+  .bottom-nav { background: var(--n-0) !important; border-top: var(--n-line) !important; }
+  button, .btn, [class*="btn-"] { min-height: 44px !important; }
+  h1 { letter-spacing: -0.02em !important; }
+}
