@@ -26,10 +26,9 @@ const path = require('path');
 const { JSDOM } = require('jsdom');
 
 const ROOT = path.resolve(__dirname, '../../');
-const ORDER = ['pro.css', 'emoji.css', 'classic.css', 'workbench.css',
-               'codestudio.css', 'terminal.css', 'runspace-dark.css', 'landing.css'];
+const ORDER = ['app.css'];
 const read = f => fs.readFileSync(path.join(ROOT, 'static', f), 'utf8');
-const CSS = read('runspace-dark.css');
+const CSS = read('app.css');
 const ALLCSS = ORDER.map(read).join('\n');
 const JS = fs.readFileSync(path.join(ROOT, 'static/pro.js'), 'utf8');
 const HTML = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
@@ -72,15 +71,28 @@ for (const tok of ['--panel', '--muted', '--line-2', '--ink']) {
   const a = gd.getPropertyValue(tok).trim(), b = gl.getPropertyValue(tok).trim();
   ok(`${tok} identical in light and dark inside RunSpace`, a === b, `${a} vs ${b}`);
 }
-// Control: prove the leak was real, i.e. these tokens DO differ at :root.
+/* CONTROL (rewritten 2026-08).
+ *
+ * This used to assert that --line-2 DIFFERS between themes at :root, to
+ * prove the leak the pin defends against was real. That was true when the
+ * app shipped a full light theme in classic.css.
+ *
+ * app.css is single-theme: one dark ramp, and data-theme is honoured only
+ * so pro.js can keep writing it. There is no light value left to leak, so
+ * demanding the tokens differ would be demanding a light theme back.
+ *
+ * The control now proves the pin is REACHABLE instead -- the token resolves
+ * to a real value inside RunSpace under both attribute values. If the pin
+ * were dropped and :root ever regained a light pass, the identity checks
+ * above would start failing, which is the protection that matters. */
 {
   const dark = build('dark'), light = build('light');
-  const a = dark.window.getComputedStyle(dark.window.document.documentElement)
-    .getPropertyValue('--line-2').trim();
-  const b = light.window.getComputedStyle(light.window.document.documentElement)
-    .getPropertyValue('--line-2').trim();
-  ok('control: --line-2 really does flip at :root (so the pin matters)',
-     a !== b, `${a} vs ${b}`);
+  const inDark = dark.window.getComputedStyle(
+    dark.window.document.getElementById('tab-jobs')).getPropertyValue('--line-2').trim();
+  const inLight = light.window.getComputedStyle(
+    light.window.document.getElementById('tab-jobs')).getPropertyValue('--line-2').trim();
+  ok('control: the pin resolves inside RunSpace in both themes',
+     !!inDark && inDark === inLight, `${inDark} vs ${inLight}`);
 }
 
 // ── 2. the blue focus glow is kept ──────────────────────────────────────

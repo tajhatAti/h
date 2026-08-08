@@ -8,9 +8,12 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/pro.css?v=20260724m">
-<link rel="stylesheet" href="/static/emoji.css?v=20260724m">
-<!-- Ahad Classic theme (editorial minimal) — base styles first -->
+<!-- THE stylesheet. Nine sheets (pro/emoji/classic/workbench/codestudio/
+     terminal/runspace-dark/landing/nova) were replaced by this one file:
+     layering a tenth sheet over them could only ever be a coat of paint,
+     because 1,973 lines of classic.css and 1,959 of runspace-dark.css
+     kept asserting the old shape underneath. -->
+<link rel="stylesheet" href="/static/app.css?v=20260724m">
 <script>
 /* THEME BEFORE PAINT.
  * data-theme was only set once pro.js ran, so the very first paint used the
@@ -42,21 +45,9 @@
   }
 })();
 </script>
-<link rel="stylesheet" href="/static/classic.css?v=20260724m">
-<!-- CodeNest · RunSpace workbench UI -->
-<link rel="stylesheet" href="/static/workbench.css?v=20260724m">
-<!-- Code Studio signature editor (warm amber, fixes white-flash) -->
-<link rel="stylesheet" href="/static/codestudio.css?v=20260724m">
-<!-- Termux-style PTY terminal panel -->
-<link rel="stylesheet" href="/static/terminal.css?v=20260724m">
-<!-- RunSpace GitHub-dark raw theme -->
-<link rel="stylesheet" href="/static/runspace-dark.css?v=20260724m">
-<!-- Landing page styles — loaded last so they own the marketing pages. -->
-<link rel="stylesheet" href="/static/landing.css?v=20260724m">
 <!-- NOVA — the design language. Loaded after every other sheet because it
      re-points the tokens each of them reads, so they adopt it without
      being rewritten. Square, flat, mono-labelled, no serif, no shadow. -->
-<link rel="stylesheet" href="/static/nova.css?v=20260724m">
 <!-- xterm.js (browser terminal emulator for the live PTY) -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css">
 <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>

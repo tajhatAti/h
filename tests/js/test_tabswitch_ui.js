@@ -4,7 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const ROOT = path.join(__dirname, "..", "..");
 const js = fs.readFileSync(path.join(ROOT, "static", "pro.js"), "utf8");
-const css = fs.readFileSync(path.join(ROOT, "static", "runspace-dark.css"), "utf8");
+const css = fs.readFileSync(path.join(ROOT, "static", 'app.css'), "utf8");
 
 const results = [];
 const check = (n, c, x) => {

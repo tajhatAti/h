@@ -20,10 +20,9 @@ const path = require('path');
 const { JSDOM } = require('jsdom');
 
 const ROOT = path.resolve(__dirname, '../../');
-const SHEETS = ['classic.css', 'pro.css', 'codestudio.css', 'emoji.css',
-                'workbench.css', 'terminal.css', 'runspace-dark.css', 'landing.css'];
+const SHEETS = ['app.css'];
 const read = f => fs.readFileSync(path.join(ROOT, 'static', f), 'utf8');
-const CLASSIC = read('classic.css');
+const CLASSIC = read('app.css');
 const ALL = SHEETS.map(read).join('\n');
 
 let pass = 0, fail = 0;
@@ -140,7 +139,7 @@ ok('still six pill tabs', !!panel && panel.querySelectorAll('.jd-tab').length ==
 ok('still exactly one active tab',
    !!panel && panel.querySelectorAll('.jd-tab.is-active').length === 1);
 ok('detail page reads the shared accent',
-   /--jd-accent:\s*var\(--accent\)/.test(read('runspace-dark.css')));
+   /--jd-accent:\s*var\(--accent\)/.test(read('app.css')));
 
 console.log(`\ntest_design_system_sitewide: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

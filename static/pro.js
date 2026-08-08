@@ -374,7 +374,7 @@ function setLoading(btn, loading) {
    Continue buttons: press (CSS scale .97) → centered spinner (same
    size, no text) → ✓ for a short beat → the next screen fades in.
    On error the label returns with a short horizontal shake.
-   Fintech-style: subtle, fast, no glitter. CSS lives in classic.css. */
+   Fintech-style: subtle, fast, no glitter. CSS lives in app.css. */
 function btnBusy(btn) {
   if (!btn) return;
   if (!btn.dataset.origHtml) btn.dataset.origHtml = btn.innerHTML;

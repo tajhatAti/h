@@ -24,7 +24,7 @@ const { JSDOM } = require('jsdom');
 const ROOT = path.resolve(__dirname, '../../');
 const HTML = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 const JS = fs.readFileSync(path.join(ROOT, 'static/pro.js'), 'utf8');
-const CSS = fs.readFileSync(path.join(ROOT, 'static/pro.css'), 'utf8');
+const CSS = fs.readFileSync(path.join(ROOT, 'static/app.css'), 'utf8');
 const APP = fs.readFileSync(path.join(ROOT, 'app.py'), 'utf8');
 
 let pass = 0, fail = 0;

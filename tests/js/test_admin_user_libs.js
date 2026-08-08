@@ -28,7 +28,7 @@ const { JSDOM } = require('jsdom');
 
 const ROOT = path.resolve(__dirname, '../../');
 const JS = fs.readFileSync(path.join(ROOT, 'static/pro.js'), 'utf8');
-const CSS = fs.readFileSync(path.join(ROOT, 'static/classic.css'), 'utf8');
+const CSS = fs.readFileSync(path.join(ROOT, 'static/app.css'), 'utf8');
 const FRAG = fs.readFileSync(path.join(ROOT, 'templates/admin_panel.html'), 'utf8');
 const PYADMIN = fs.readFileSync(path.join(ROOT, 'routes/admin.py'), 'utf8');
 

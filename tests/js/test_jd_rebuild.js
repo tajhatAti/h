@@ -23,7 +23,7 @@ const { JSDOM } = require('jsdom');
 
 const ROOT = path.resolve(__dirname, '../../');
 const HTML = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
-const CSS = fs.readFileSync(path.join(ROOT, 'static/runspace-dark.css'), 'utf8');
+const CSS = fs.readFileSync(path.join(ROOT, 'static/app.css'), 'utf8');
 const JS = fs.readFileSync(path.join(ROOT, 'static/pro.js'), 'utf8');
 
 const dom = new JSDOM(HTML, { pretendToBeVisual: true });

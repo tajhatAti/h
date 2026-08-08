@@ -10,7 +10,7 @@ const { JSDOM } = require("jsdom");
 const ROOT = path.join(__dirname, "..", "..");
 const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8");
 const js = fs.readFileSync(path.join(ROOT, "static", "pro.js"), "utf8");
-const css = fs.readFileSync(path.join(ROOT, "static", "runspace-dark.css"), "utf8");
+const css = fs.readFileSync(path.join(ROOT, "static", 'app.css'), "utf8");
 
 const results = [];
 const check = (n, c, x) => {

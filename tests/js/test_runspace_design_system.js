@@ -11,12 +11,42 @@
 const fs = require("fs");
 const path = require("path");
 const ROOT = path.join(__dirname, "..", "..");
-const css = fs.readFileSync(path.join(ROOT, "static", "runspace-dark.css"), "utf8");
+/* SCOPE (2026-08): this suite was written when runspace-dark.css was a
+ * separate, RunSpace-only sheet, so "the whole file" and "the RunSpace
+ * views" were the same thing. The nine sheets are now one app.css, and
+ * reading the whole file made every legitimate literal elsewhere on the
+ * site -- landing type sizes, syntax-highlighting colours -- look like
+ * RunSpace drift. The scale being locked here is RunSpace's, so only
+ * rules that target the RunSpace subtree are examined. */
+const full = fs.readFileSync(path.join(ROOT, "static", 'app.css'), "utf8");
 
-// Everything after the token block is the code that must USE the tokens.
-const tokenEnd = css.indexOf("*/", css.indexOf("DESIGN TOKENS")) + 2;
-const tokens = css.slice(0, css.indexOf("}", css.indexOf("--dur")) + 1);
-const body = css.slice(css.indexOf("}", tokenEnd));
+const tokenEnd = full.indexOf("*/", full.indexOf("DESIGN TOKENS")) + 2;
+const tokens = full.slice(0, full.indexOf("}", full.indexOf("--dur")) + 1);
+
+// Collect only the rules whose selector mentions a RunSpace surface.
+const postcss = require(path.join(process.env.NODE_PATH || '/tmp/csstest/node_modules', 'postcss'));
+/* A rule belongs to RunSpace only if EVERY selector in it targets RunSpace.
+ * Matching "any selector" swept in the app-wide pill rule -- which lists
+ * .rs-chip alongside a dozen non-RunSpace classes -- and then reported its
+ * perfectly legitimate literals as RunSpace drift. That is how two guards
+ * ended up demanding opposite things about the same declaration. */
+const SCOPE = /#tab-jobs|\.rs-|\.jd-|\.job-item/;
+let scoped = '';
+postcss.parse(full).walkRules(r => {
+  if (!r.selectors.every(sel => SCOPE.test(sel))) return;
+  // A rule that only DECLARES custom properties is the scale itself --
+  // literals belong there and nowhere else, so it is not part of the body
+  // being audited for hardcoded values.
+  const decls = [];
+  r.walkDecls(dcl => decls.push(dcl.prop));
+  // `color-scheme` travels with a token pin (it makes native controls
+  // follow the same theme) so it does not make the rule a styling rule.
+  const meaningful = decls.filter(pr => pr !== 'color-scheme');
+  if (meaningful.length && meaningful.every(pr => pr.startsWith('--'))) return;
+  scoped += r.toString() + '\n';
+});
+const css = scoped;
+const body = scoped;
 
 const results = [];
 const check = (n, c, x) => {

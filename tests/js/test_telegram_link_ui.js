@@ -14,7 +14,7 @@ const { JSDOM } = require('jsdom');
 
 const ROOT = path.resolve(__dirname, '../../');
 const JS = fs.readFileSync(path.join(ROOT, 'static/pro.js'), 'utf8');
-const CSS = fs.readFileSync(path.join(ROOT, 'static/classic.css'), 'utf8');
+const CSS = fs.readFileSync(path.join(ROOT, 'static/app.css'), 'utf8');
 const HTML = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 const PROFILE = fs.readFileSync(path.join(ROOT, 'routes/profile.py'), 'utf8');
 const PINGBOT = fs.readFileSync(path.join(ROOT, 'services/pingbot.py'), 'utf8');

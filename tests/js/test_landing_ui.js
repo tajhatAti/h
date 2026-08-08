@@ -13,7 +13,7 @@ const { JSDOM } = require("jsdom");
 const ROOT = path.join(__dirname, "..", "..");
 const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8");
 const js = fs.readFileSync(path.join(ROOT, "static", "pro.js"), "utf8");
-const css = fs.readFileSync(path.join(ROOT, "static", "pro.css"), "utf8");
+const css = fs.readFileSync(path.join(ROOT, "static", 'app.css'), "utf8");
 const d = new JSDOM(html).window.document;
 
 const results = [];

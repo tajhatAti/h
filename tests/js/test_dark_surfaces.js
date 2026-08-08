@@ -27,8 +27,7 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.resolve(__dirname, '../../');
-const SHEETS = ['classic.css', 'pro.css', 'codestudio.css', 'emoji.css',
-                'workbench.css', 'terminal.css', 'runspace-dark.css', 'landing.css'];
+const SHEETS = ['app.css'];
 const JS = fs.readFileSync(path.join(ROOT, 'static/pro.js'), 'utf8');
 
 /* Dark-theme resolved values (html[data-theme="dark"] block in classic.css). */
@@ -118,7 +117,7 @@ ok('no pair below 3:1', offenders.length === 0, offenders.join(' | '));
 
 // ── C. inline links carry no fill ───────────────────────────────────────
 console.log('[C] inline links');
-const classic = fs.readFileSync(path.join(ROOT, 'static/classic.css'), 'utf8');
+const classic = fs.readFileSync(path.join(ROOT, 'static/app.css'), 'utf8');
 ok('link rule strips any background',
    /\.link,[^{]*\{[^}]*background:\s*none\s*!important/.test(classic));
 ok('links inherit the surrounding text colour',

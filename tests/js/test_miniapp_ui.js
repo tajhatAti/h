@@ -17,7 +17,7 @@ const { JSDOM } = require('jsdom');
 
 const ROOT = path.resolve(__dirname, '../../');
 const SRC = fs.readFileSync(path.join(ROOT, 'static/miniapp.js'), 'utf8');
-const CSS = fs.readFileSync(path.join(ROOT, 'static/classic.css'), 'utf8');
+const CSS = fs.readFileSync(path.join(ROOT, 'static/app.css'), 'utf8');
 const HTML = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 const PRO = fs.readFileSync(path.join(ROOT, 'static/pro.js'), 'utf8');
 

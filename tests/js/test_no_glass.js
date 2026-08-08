@@ -21,8 +21,7 @@ const { JSDOM } = require('jsdom');
 const postcss = require('postcss');
 
 const R = path.resolve(__dirname, '../../');
-const ORDER = ['pro.css', 'emoji.css', 'classic.css', 'workbench.css',
-               'codestudio.css', 'terminal.css', 'runspace-dark.css', 'landing.css'];
+const ORDER = ['app.css'];
 const SHEETS = Object.fromEntries(
   ORDER.map(f => [f, fs.readFileSync(path.join(R, 'static', f), 'utf8')]));
 const CSS = ORDER.map(f => SHEETS[f]).join('\n');

@@ -170,7 +170,7 @@ for (const bad of ['#58a6ff', '#0969da', '#388bfd', '56,139,253', '168,85,247', 
 }
 
 // The dark canvas must sit in the range the brief names.
-const cls = fs.readFileSync(path.join(R, 'static', 'classic.css'), 'utf8');
+const cls = fs.readFileSync(path.join(R, 'static', 'app.css'), 'utf8');
 const dark = cls.slice(cls.indexOf('html[data-theme="dark"]'));
 for (const [tok, lo, hi] of [['--paper', 0.02, 0.09], ['--panel', 0.07, 0.16]]) {
   const m = new RegExp(tok + ':\\s*(#[0-9a-f]{6})', 'i').exec(dark);

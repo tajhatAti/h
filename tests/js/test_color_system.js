@@ -23,10 +23,9 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.resolve(__dirname, '../../');
-const SHEETS = ['classic.css', 'pro.css', 'codestudio.css', 'emoji.css',
-                'workbench.css', 'terminal.css', 'runspace-dark.css', 'landing.css'];
+const SHEETS = ['app.css'];
 const read = f => fs.readFileSync(path.join(ROOT, 'static', f), 'utf8');
-const CLASSIC = read('classic.css');
+const CLASSIC = read('app.css');
 const ALL = SHEETS.map(read).join('\n');
 
 let pass = 0, fail = 0;
@@ -113,8 +112,7 @@ ok('destructive stays red', /\.btn-danger \{[^}]*--st-danger/.test(CLASSIC));
 // up on the SAME token. A grep count is not enough — a more specific rule
 // elsewhere can silently win, which is exactly how .publish-btn kept its
 // gradient after the first pass of this audit.
-const ORDER = ['pro.css','emoji.css','classic.css','workbench.css',
-               'codestudio.css','terminal.css','runspace-dark.css','landing.css'];
+const ORDER = ['app.css'];
 const CASCADE = ORDER.map(read).join('\n');
 function effectiveBg(target) {
   let best = null;

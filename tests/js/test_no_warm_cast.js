@@ -19,8 +19,7 @@ const path = require('path');
 const { JSDOM } = require('jsdom');
 
 const R = path.resolve(__dirname, '../../');
-const ORDER = ['pro.css','emoji.css','classic.css','workbench.css',
-               'codestudio.css','terminal.css','runspace-dark.css','landing.css'];
+const ORDER = ['app.css'];
 
 function build(theme) {
   const css = ORDER.map(f => fs.readFileSync(path.join(R,'static',f),'utf8')).join('\n');
@@ -102,6 +101,11 @@ for (const theme of [null, 'dark']) {
   for (const t of TOKENS) {
     const v = root.getPropertyValue(t).trim();
     if (!v) continue;
+    /* Tokens now alias each other (--ink: var(--fg)), and jsdom does not
+       resolve var(), so rgb() returns null for them. A null is "unknown",
+       not "hued": the literal ramp is audited from source by test_app_css
+       and test_one_accent_no_hue. Skip rather than crash on it. */
+    if (!rgb(v)) continue;
     ok(`[${label}] token ${t} is not warm`, !isWarm(rgb(v)), v);
     // Round 2: and not blue, or any other hue either.
     ok(`[${label}] token ${t} has no hue`, !hasHue(rgb(v)),
