@@ -1790,3 +1790,137 @@ html[data-theme="dark"] {
   background: rgba(0,0,0,.6);
 }
 .activity-overlay { z-index: 945; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   RUNSPACE / TERMINAL — the four defects reported together
+
+   "Runspace a dhukle উপর দিয়ে পর্দার মতো কি জানি একটা থাকে কোন কাজ করা
+    যায় না ... মেইন ডাই বোটে অনেকগুলা অগোছালো লেখা ... ট্যাব ESC এগুলা আছে
+    ... ডেস্কটপ এর জন্য বানাতে পারো নাই মোবাইলের জন্য বানাতে পারো নাই
+    দুইটাকে একত্রে ঘেঁটে ঘ করে ফেলছো ... মেনু বাটনে ক্লিক করলে কোন কাজ হয় না"
+
+   Every one of these is mine, and they share a single cause: when the nine
+   sheets became one I wrote the OPEN/ACTIVE state of several components and
+   never wrote the closed/inactive state, so each of them is permanently on.
+
+   1. THE SHEET OVER EVERYTHING  —  .rs-menu-backdrop
+      `position:fixed; inset:0; z-index:855; background:rgba(0,0,0,.6)`
+      and nothing that ever hides it. #wbBackdrop sits at the very top of
+      #tab-jobs, so entering RunSpace drops an opaque scrim across the whole
+      view. It also explains "menu button does nothing": the button DOES
+      toggle the rail, but the scrim is above everything and eats the click
+      before it lands, and the rail it opens is underneath the scrim anyway.
+
+   2. THE TERMINAL AND ITS KEYPAD ON TOP OF THE EDITOR
+      `.term, .term-page, .term-standalone { display: flex }` came AFTER
+      `.dash-tab-content { display: none }`, so the standalone terminal page
+      -- ESC/TAB/CTRL keypad and all -- won the cascade and rendered inside
+      whatever tab was open. That is the "অগোছালো লেখা" under the editor.
+
+   3. DESKTOP AND MOBILE FIGHTING
+      .rs-side is a 268px column at :root and a fixed off-canvas drawer
+      under 760px, but `#tab-jobs.rs-side-collapsed .rs-side { width: 0 }`
+      only reached the desktop form. pro.js toggles BOTH rs-side-open and
+      rs-side-collapsed on <body> from the measured width, so on a phone the
+      collapsed class landed with no rule to answer it.
+
+   4. ESCAPE HATCH
+      With the scrim swallowing pointer events there was no way out of the
+      view at all, which is why it read as completely stuck.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 1. The backdrop only exists while the drawer is open ──────────────── */
+.rs-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 855;
+  background: rgba(0, 0, 0, .6);
+  opacity: 0;
+  visibility: hidden;                 /* cannot eat clicks while closed */
+  pointer-events: none;
+  transition: opacity var(--med), visibility var(--med);
+}
+/* Only a phone gets a scrim: on desktop the rail is a column beside the
+   editor, not something laid over it. */
+@media (max-width: 760px) {
+  body.rs-side-open .rs-menu-backdrop {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+}
+
+/* ── 2. The standalone terminal is a TAB, and obeys the tab rules ──────── */
+/* `.term-page` is a .dash-tab-content; it must stay hidden until its tab is
+   active. The earlier blanket `display:flex` is overridden here rather than
+   edited in place so the flex layout still applies once it IS shown. */
+.dash-tab-content.term-page { display: none; }
+.dash-tab-content.term-page.active,
+.term-page.term-active,
+body.term-open .term-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+/* The keypad belongs to that page and never floats free of it. */
+.wb-term-kbd, .term-kbd { display: none; }
+.term-page.active .wb-term-kbd,
+.term-page.term-active .wb-term-kbd,
+body.term-open .wb-term-kbd { display: flex; }
+
+/* ── 3. One rail, two presentations, no overlap ────────────────────────── */
+/* DESKTOP: a real column. Collapsing folds it to zero width. */
+@media (min-width: 761px) {
+  #tab-jobs .rs-side {
+    position: static;
+    transform: none;
+    visibility: visible;
+    width: 210px;
+    flex: 0 0 210px;
+  }
+  body.rs-side-collapsed #tab-jobs .rs-side,
+  #tab-jobs.rs-side-collapsed .rs-side {
+    flex: 0 0 0;
+    width: 0;
+    overflow: hidden;
+    border-right: 0;
+  }
+  /* An explicit open still wins over a stale collapsed class. */
+  body.rs-side-open #tab-jobs .rs-side {
+    flex: 0 0 210px;
+    width: 210px;
+  }
+  /* No scrim, and the close button is pointless next to a visible column. */
+  .rs-menu-backdrop { display: none; }
+}
+
+/* MOBILE: an off-canvas drawer. `rs-side-collapsed` must resolve to the
+   SAME closed state here, because pro.js sets both classes together. */
+@media (max-width: 760px) {
+  #tab-jobs .rs-side {
+    position: fixed;
+    top: 0; bottom: 0; left: 0;
+    z-index: 860;
+    width: min(280px, 82vw);
+    flex: 0 0 auto;
+    transform: translateX(-100%);
+    visibility: hidden;
+    box-shadow: var(--e3);
+    transition: transform var(--med), visibility var(--med);
+  }
+  body.rs-side-collapsed #tab-jobs .rs-side,
+  #tab-jobs.rs-side-collapsed .rs-side {
+    transform: translateX(-100%);
+    visibility: hidden;
+    width: min(280px, 82vw);          /* NOT width:0 — it slides, not shrinks */
+  }
+  body.rs-side-open #tab-jobs .rs-side {
+    transform: translateX(0);
+    visibility: visible;
+  }
+  /* The editor keeps the full width; the drawer floats above it. */
+  #tab-jobs .rs-main { width: 100%; min-width: 0; }
+}
+
+/* ── 4. The header stays reachable no matter what is open ──────────────── */
+#tab-jobs .rs-head { position: relative; z-index: 870; }

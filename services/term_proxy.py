@@ -26,8 +26,26 @@ log = logging.getLogger("term_proxy")
 
 class TermCreateRequest(BaseModel):
     shell: Optional[str] = "bash"
-    cols: Optional[int] = 90
-    rows: Optional[int] = 28
+    # cols/rows are floats on the wire, not ints.
+    #
+    # REPRODUCED: creating a shell failed with a 422 whose body is
+    #   {"type": "int_from_float",
+    #    "msg": "Input should be a valid integer, got a number with a
+    #            fractional part"}
+    # which the frontend surfaces as an uncaught parameter-type error and
+    # then silently retries forever, so the terminal never opens.
+    #
+    # The value comes from xterm's FitAddon, which divides the element box
+    # by the measured cell size and does NOT round: a 100px-wide pane with
+    # a 9.6px cell is 10.416 columns. It lands fractional whenever the
+    # viewport is not an exact multiple of the cell -- most often on a
+    # phone, where the browser toolbar and the on-screen keyboard resize
+    # the pane constantly. That is why it looked intermittent.
+    #
+    # float accepts both 80 and 80.5; the handler floors it. Rejecting the
+    # request over a rendering detail the user cannot control is the bug.
+    cols: Optional[float] = 90
+    rows: Optional[float] = 28
     slot: Optional[int] = None
     name: Optional[str] = ""
     persist: Optional[bool] = None
@@ -53,8 +71,10 @@ def create_terminal(payload: TermCreateRequest, authorization: Optional[str] = H
     shell = (payload.shell or "bash").strip().lower()
     if shell not in ("bash", "python", "node"):
         raise HTTPException(400, "shell must be bash / python / node")
-    cols = max(40, min(payload.cols or 90, 240))
-    rows = max(10, min(payload.rows or 28, 80))
+    # Floor after clamping: a PTY takes whole cells, and int() on a value
+    # that is already inside the range cannot push it back out.
+    cols = int(max(40, min(payload.cols or 90, 240)))
+    rows = int(max(10, min(payload.rows or 28, 80)))
     slot = payload.slot if payload.slot and payload.slot > 0 else None
 
     try:

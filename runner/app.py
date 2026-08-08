@@ -2203,9 +2203,13 @@ except ModuleNotFoundError:
 
 
 class TerminalCreateRequest(BaseModel):
+    # float, not int — same reason as services/term_proxy.TermCreateRequest:
+    # xterm's FitAddon reports a fractional column count whenever the pane
+    # is not an exact multiple of the cell width, and a strict int rejects
+    # the request with a 422 so the terminal never opens. Floored below.
+    cols: Optional[float] = 90
+    rows: Optional[float] = 28
     shell: Optional[str] = "bash"
-    cols: Optional[int] = 90
-    rows: Optional[int] = 28
 
 
 class TerminalListRequest(BaseModel):
@@ -2222,7 +2226,8 @@ def terminal_create(req: TerminalCreateRequest, authorization: Optional[str] = H
         raise HTTPException(400, detail="x-user-id required.")
     if user_id <= 0:
         raise HTTPException(400, detail="auth required.")
-    info = _term.manager.create(user_id, shell=req.shell or "bash", cols=req.cols or 90, rows=req.rows or 28)
+    info = _term.manager.create(user_id, shell=req.shell or "bash",
+                                cols=int(req.cols or 90), rows=int(req.rows or 28))
     # Build a connect URL relative to this runner
     return {
         "id": info["id"],
