@@ -1708,3 +1708,85 @@ html[data-theme="dark"] {
 .jd-pill.crashed { color: var(--danger); }
 .jd-pill.starting { color: var(--warn); }
 .dash-main { padding-bottom: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom) + 12px); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CLOSED BY DEFAULT — the `.open` contract
+
+   BUG (reported: "all time Activity Log Page asce kno?? admin ba dashboard
+   open korleu same ase"). The Activity panel covered the whole app on every
+   screen and could not be dismissed.
+
+   Cause, and it is mine: pro.js opens these by ADDING `.open` and closes
+   them by REMOVING it, but when I rewrote the stylesheet I gave
+   .activity-panel `position:fixed; display:flex; z-index:950` with no
+   closed state and no `.open` rule at all. So it painted itself over the
+   dashboard and the admin console permanently, and removing the class did
+   nothing because nothing depended on it. The nine deleted sheets carried
+   that hidden default; rewriting from scratch dropped it.
+
+   Four elements use this same open/close protocol, so all four are given
+   an explicit closed state here rather than fixing only the one reported.
+
+   `visibility` is animated alongside `transform` on purpose: a panel that
+   is only translated off-screen still takes pointer events and is still
+   read by screen readers, which is the subtler version of the same bug.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* 1. Activity log — slides in from the right. */
+.activity-panel, .ap-panel {
+  transform: translateX(100%);
+  visibility: hidden;
+  animation: none;                     /* the slide-in keyframe would fight this */
+  transition: transform var(--med), visibility var(--med);
+}
+.activity-panel.open, .ap-panel.open {
+  transform: translateX(0);
+  visibility: visible;
+}
+
+/* 2. Left drawer on mobile — the tab rail slides over the content.
+      On desktop .dash-tabs is a normal inline row and must not be touched. */
+@media (max-width: 760px) {
+  .dash-tabs {
+    display: flex;
+    position: fixed; top: 0; bottom: 0; left: 0; z-index: 940;
+    width: min(280px, 82vw);
+    margin: 0; padding: var(--s3);
+    flex-direction: column; align-items: stretch; gap: 6px;
+    background: var(--bar); border-right: 1px solid var(--line);
+    box-shadow: var(--e3);
+    transform: translateX(-100%);
+    visibility: hidden;
+    transition: transform var(--med), visibility var(--med);
+    overflow-y: auto;
+  }
+  .dash-tabs.open { transform: translateX(0); visibility: visible; }
+}
+
+/* 3. Code Studio preview — collapsed until asked for. */
+.cs-preview-zone {
+  display: none;
+}
+.cs-preview-zone.open { display: flex; }
+
+/* 4. Integrated terminal — grows out of the bottom edge. */
+.ah-term {
+  max-height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  border-top: 0;
+  transition: max-height var(--med), visibility var(--med);
+}
+.ah-term.open {
+  max-height: 46vh;
+  visibility: visible;
+  border-top: 1px solid var(--line);
+}
+
+/* The scrims these panels sit on. pro.js toggles `.hidden` on them, which
+   the global rule already handles; this only gives them a look. */
+.side-overlay, .activity-overlay {
+  position: fixed; inset: 0; z-index: 930;
+  background: rgba(0,0,0,.6);
+}
+.activity-overlay { z-index: 945; }
