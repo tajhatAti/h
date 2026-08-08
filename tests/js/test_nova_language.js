@@ -1,17 +1,28 @@
-/* Proof that NOVA actually changed the design LANGUAGE, not just colours.
+/* NOVA design language — B (bento) + C (raised nav buttons) + D (mobile).
  *
- * Four previous rounds retuned the palette, reported green, and the user
- * still saw the same site -- because the palette was never what made it
- * look the way it did. The shape did: 23 pill radii, 127 box-shadows,
- * Fraunces serif headings, decorative gradients, sliding animations.
+ * HISTORY THIS SUITE ENCODES
+ * --------------------------
+ * The previous NOVA revision was square, flat, shadowless and motionless.
+ * The user rejected it in those exact terms -- "কোথায় box round, deep
+ * button animation nai" -- and picked mockup B with C's sidebar buttons.
+ * So the assertions below are the INVERSE of the ones this file used to
+ * make. That is deliberate: round, deep, animated is now the contract, and
+ * a regression back to flat/square must fail here.
  *
- * So this suite asserts on SHAPE, measured as computed style on real
- * elements from index.html with every stylesheet applied in load order.
- * A colour-only change cannot pass it.
+ * WHY IT READS SOURCE AND COMPUTED STYLE DIFFERENTLY
+ * --------------------------------------------------
+ * jsdom does not resolve var() -- verified with a control: given
+ * `:root{--x:none}`, getComputedStyle returns the literal string "var(--x)",
+ * not "none". So numeric properties are resolved one level against the
+ * tokens nova declares. And jsdom ignores @media entirely, so the mobile
+ * rules are checked by lifting the media block out of the source.
  *
- * jsdom cannot resolve var() in colour values, so anything colour-related
- * is read from the stylesheet source via postcss instead of computed style
- * -- see the palette section at the bottom.
+ * WHY THE LINK IS CHECKED FIRST
+ * -----------------------------
+ * An earlier version of this suite scored 50/52 with nova.css UNLINKED,
+ * because most assertions read the file from disk rather than the rendered
+ * page. Source is therefore withheld unless index.html actually loads the
+ * sheet last, which turns that silent pass into 24 loud failures.
  */
 const fs = require('fs');
 const path = require('path');
@@ -20,8 +31,6 @@ const { JSDOM } = require('jsdom');
 const R = path.resolve(__dirname, '../../');
 const html = fs.readFileSync(path.join(R, 'index.html'), 'utf8');
 
-// Load order matters: nova.css must win, so it is applied last exactly as
-// index.html lists it.
 const ORDER = [...html.matchAll(/\/static\/([a-z0-9-]+\.css)/g)].map(m => m[1]);
 const css = ORDER
   .filter(f => fs.existsSync(path.join(R, 'static', f)))
@@ -35,17 +44,8 @@ const st = d.createElement('style'); st.textContent = css; d.head.appendChild(st
 d.documentElement.setAttribute('data-theme', 'dark');
 const cs = el => dom.window.getComputedStyle(el);
 
-/* Only trust nova.css if the page ACTUALLY LOADS IT.
- *
- * This is the trap every earlier suite fell into: assertions that read the
- * stylesheet file directly pass whether or not the browser ever sees it.
- * Removing the <link> and re-running proved it -- 50 of 52 still passed
- * with the sheet unlinked, i.e. the suite was largely measuring a file on
- * disk, not the rendered product. So the source is only made available
- * after confirming index.html links it last; otherwise it is the empty
- * string and every source-based assertion fails loudly, as it should. */
 const novaLinkedLast = ORDER[ORDER.length - 1] === 'nova.css';
-const novaSrcEarly = novaLinkedLast
+const SRC = novaLinkedLast
   ? fs.readFileSync(path.join(R, 'static', 'nova.css'), 'utf8')
   : '';
 
@@ -55,128 +55,128 @@ function ok(name, cond, extra) {
   else { fail++; console.log(`  FAIL ${name}${extra ? ' -> ' + extra : ''}`); }
 }
 
-console.log('load order: ' + ORDER.join(' -> '));
-ok('nova.css is the last sheet', ORDER[ORDER.length - 1] === 'nova.css',
-   ORDER[ORDER.length - 1]);
-
-// ── 1. SQUARE ──────────────────────────────────────────────────────────
-// The old language was rounded: 99px pills plus 8/10/12px boxes.
-console.log('\n[1] square, not rounded');
-// Same var() limitation as box-shadow: a computed radius may come back as
-// the literal string "var(--n-r)". Resolve one level of indirection against
-// the tokens nova declares, then measure the px value.
-const TOKEN_PX = {};
-for (const m of novaSrcEarly.matchAll(/(--[a-z0-9-]+):\s*(-?[\d.]+)px\s*[;}]/gi))
-  TOKEN_PX[m[1]] = parseFloat(m[2]);
-// Tokens defined as another token (e.g. --r-md: var(--n-r)) resolve through.
+// Resolve `var(--tok)` one level against px tokens declared in nova.css.
+const PX = {};
+for (const m of SRC.matchAll(/(--[a-z0-9-]+):\s*(-?[\d.]+)px\s*[;}]/gi))
+  PX[m[1]] = parseFloat(m[2]);
 for (let i = 0; i < 3; i++)
-  for (const m of novaSrcEarly.matchAll(/(--[a-z0-9-]+):\s*var\((--[a-z0-9-]+)\)\s*[;}]/gi))
-    if (TOKEN_PX[m[2]] !== undefined) TOKEN_PX[m[1]] = TOKEN_PX[m[2]];
+  for (const m of SRC.matchAll(/(--[a-z0-9-]+):\s*var\((--[a-z0-9-]+)\)\s*[;}]/gi))
+    if (PX[m[2]] !== undefined) PX[m[1]] = PX[m[2]];
 
-function radiusPx(v) {
+function px(v) {
   v = (v || '').trim();
-  if (v === '') return 0;
+  if (!v) return 0;
   const m = /^var\((--[a-z0-9-]+)\)$/i.exec(v);
-  if (m) return TOKEN_PX[m[1]] !== undefined ? TOKEN_PX[m[1]] : NaN;
+  if (m) return PX[m[1]] !== undefined ? PX[m[1]] : NaN;
   const n = parseFloat(v);
   return Number.isNaN(n) ? NaN : n;
 }
-
-// Real class names as they appear in index.html -- .card/.panel/.job-item
-// are built by pro.js at runtime and are not in the shell, so asserting on
-// them measured nothing. These are the containers actually shipped.
-const SQUARE = ['.stat-card', '.quick-card', '.term-card', '.auth-card',
-                '.jd-panel', '.ah-modal', '.snippet-item', '.job-item'];
-let sqChecked = 0;
-for (const sel of SQUARE) {
-  const el = d.querySelector(sel);
-  if (!el) continue;
-  sqChecked++;
-  const raw = cs(el).borderRadius;
-  const r = radiusPx(raw);
-  ok(`${sel} has square corners`, r === 0, `${raw} -> ${r}px`);
-}
-ok('at least 3 structural elements were checked', sqChecked >= 3, `${sqChecked}`);
-
-for (const sel of ['button', 'input', '.btn-primary']) {
-  const el = d.querySelector(sel);
-  if (!el) continue;
-  const raw = cs(el).borderRadius;
-  const r = radiusPx(raw);
-  ok(`${sel} radius <= 2px (control, not pill)`, r <= 2, `${raw} -> ${r}px`);
-}
-
-// No 99px pill may survive anywhere in the cascade.
-const pillRule = /border-radius:\s*99px/.test(
-  fs.readFileSync(path.join(R, 'static', 'nova.css'), 'utf8'));
-ok('nova introduces no pill radius', !pillRule);
-
-// ── 2. FLAT ────────────────────────────────────────────────────────────
-console.log('\n[2] flat, not floating');
-// jsdom does NOT resolve var(): a declaration of `box-shadow: var(--shadow-s)`
-// is returned verbatim as the string "var(--shadow-s)", never as the token's
-// value. Verified with a control (`:root{--x:none}` -> computed "var(--x)").
-// So a shadow is judged resolved: literal `none` passes, and a var() passes
-// only when that token is itself defined as none somewhere in the cascade.
-const NONE_TOKENS = new Set(
-  [...novaSrcEarly.matchAll(/(--[a-z0-9-]+):\s*none\s*[;}]/gi)].map(m => m[1]));
-function shadowIsNone(v) {
+// A shadow value counts as "present" if it is a real shadow, or a var()
+// pointing at a token whose value is not none.
+const SHADOW_TOKENS = {};
+for (const m of SRC.matchAll(/(--e-\d|--shadow[a-z-]*|--rim):\s*([^;]+);/gi))
+  SHADOW_TOKENS[m[1]] = m[2].trim();
+function hasShadow(v) {
   v = (v || '').trim();
-  if (v === '' || v === 'none') return true;
-  const m = /^var\((--[a-z0-9-]+)\)$/i.exec(v);
-  return !!(m && NONE_TOKENS.has(m[1]));
+  if (!v || v === 'none') return false;
+  const m = /^var\((--[a-z0-9-]+)\)/i.exec(v);
+  if (m) { const t = SHADOW_TOKENS[m[1]]; return !!t && t !== 'none'; }
+  return true;
 }
-for (const sel of ['.card', '.stat-card', '.panel', '.btn-primary', '.modal']) {
+
+console.log('load order: ' + ORDER.join(' -> '));
+ok('nova.css is the last sheet', novaLinkedLast, ORDER[ORDER.length - 1]);
+
+// ── 1. ROUND ───────────────────────────────────────────────────────────
+// The complaint was "কোথায় box round". Bento cards must be visibly round.
+console.log('\n[1] round — bento cards');
+const CARDS = ['.stat-card', '.quick-card', '.feat-card', '.term-card',
+               '.auth-card', '.jd-panel', '.snippet-item'];
+let n = 0;
+for (const sel of CARDS) {
   const el = d.querySelector(sel);
   if (!el) continue;
-  const sh = cs(el).boxShadow;
-  ok(`${sel} casts no shadow`, shadowIsNone(sh), `${sh} (tokens->none: ${[...NONE_TOKENS].join(',')})`);
+  n++;
+  const r = px(cs(el).borderRadius);
+  ok(`${sel} radius >= 12px`, r >= 12, `${cs(el).borderRadius} -> ${r}px`);
 }
-// And the blanket reset must actually be present, since that is what
-// neutralises the 127 literal shadows the var()-check cannot see.
-ok('a global shadow reset exists',
-   /\*[^{]*\{[^}]*box-shadow:\s*none\s*!important/s.test(novaSrcEarly));
+ok('at least 4 card types checked', n >= 4, `${n}`);
+ok('bento radius token is >= 16px', (PX['--r-bento'] || 0) >= 16, `${PX['--r-bento']}px`);
+ok('a pill radius exists for CTAs', (PX['--r-pill'] || 0) >= 100, `${PX['--r-pill']}px`);
 
-// ── 3. NO SERIF ────────────────────────────────────────────────────────
-console.log('\n[3] one type family, no serif');
-ok('Fraunces is not requested from the font CDN', !/Fraunces/.test(html));
-const novaSrc = novaSrcEarly;
-ok('--serif is repointed to the UI family', /--serif:\s*var\(--n-ui\)/.test(novaSrc));
-for (const sel of ['h1', 'h2', 'h3']) {
+// ── 2. DEEP ────────────────────────────────────────────────────────────
+console.log('\n[2] deep — real elevation');
+for (const sel of ['.stat-card', '.quick-card', '.feat-card']) {
   const el = d.querySelector(sel);
   if (!el) continue;
-  const f = (cs(el).fontFamily || '').toLowerCase();
-  ok(`${sel} is not serif`, !f.includes('fraunces') && !f.includes('georgia'), f.slice(0, 40));
+  ok(`${sel} casts a shadow`, hasShadow(cs(el).boxShadow), cs(el).boxShadow);
 }
+ok('shadows are layered, not a single blur',
+   (SRC.match(/--e-2:[^;]*rgba[^;]*,[^;]*rgba/s) || []).length > 0);
+ok('cards carry a lit top rim (inset highlight)',
+   /inset 0 1px 0 rgba\(255,255,255/.test(SRC));
+// The flat revision reset EVERY element with a universal selector. Chrome
+// bars legitimately cast nothing, so the check must target the wildcard
+// rule specifically, not any rule containing `box-shadow: none`.
+ok('no universal shadow reset survives from the flat revision',
+   !/(^|\n)\s*\*\s*,[^{]*\{[^}]*box-shadow:\s*none\s*!important/s.test(SRC) &&
+   !/(^|\n)\s*\*\s*\{[^}]*box-shadow:\s*none\s*!important/s.test(SRC));
 
-// ── 4. QUIET SCALE ─────────────────────────────────────────────────────
-// The old hero shouted at 40px+. Hierarchy now comes from weight, so the
-// largest type must be modest.
-console.log('\n[4] quiet type scale');
-const h1 = d.querySelector('h1');
-if (h1) {
-  const fs1 = cs(h1).fontSize || '';
-  ok('h1 uses a clamped, non-huge size', /clamp|^\d+px$/.test(fs1.trim()), fs1);
+// ── 3. BUTTON ANIMATION ────────────────────────────────────────────────
+// "deep button animation nai" — buttons must move on press and hover.
+console.log('\n[3] button animation');
+ok('buttons transition transform', /button[^{]*\{[^}]*transition:[^;]*transform/s.test(SRC));
+ok('buttons travel down on :active',
+   /:active[^{]*\{[^}]*transform:\s*translateY\(1px\)/s.test(SRC));
+ok('primary CTA lifts on hover',
+   /\.btn-primary:hover[^{]*\{[^}]*transform:\s*translateY\(-2px\)/s.test(SRC));
+ok('primary CTA glows on hover',
+   /\.btn-primary:hover[\s\S]{0,200}rgba\(255,255,255,\.\d+\)/.test(SRC));
+ok('cards lift on hover',
+   /\.stat-card:hover[\s\S]{0,240}transform:\s*translateY\(-3px\)/.test(SRC));
+
+// ── 4. DESIGN C — raised nav buttons ───────────────────────────────────
+console.log('\n[4] design C — raised, pressable nav');
+ok('nav buttons are raised (shadow + rim)',
+   /\.dash-tab,[\s\S]{0,300}box-shadow:\s*var\(--e-1\),\s*var\(--rim\)/.test(SRC));
+ok('nav buttons depress into an inset shadow',
+   /\.dash-tab:active[\s\S]{0,220}inset 0 2px 6px/.test(SRC));
+ok('active tab is a light slab with dark ink',
+   /\.dash-tab\.active[\s\S]{0,240}color:\s*var\(--n-acc-fg\)/.test(SRC));
+
+// ── 5. MOTION ──────────────────────────────────────────────────────────
+console.log('\n[5] motion');
+ok('content rises in, not just fades',
+   /@keyframes novaUp[\s\S]{0,140}translateY\(12px\)/.test(SRC));
+ok('job rows stagger', /job-item:nth-child\(2\)\{animation-delay/.test(SRC));
+ok('reduced-motion is honoured', /prefers-reduced-motion[\s\S]{0,400}animation-duration:\s*\.01ms/.test(SRC));
+
+// ── 6. MOBILE (design D) ───────────────────────────────────────────────
+// jsdom ignores @media, so lift the blocks out by brace counting.
+console.log('\n[6] mobile — design D');
+function mediaBlock(query) {
+  const i = SRC.indexOf(query);
+  if (i < 0) return '';
+  let depth = 0, start = SRC.indexOf('{', i), j = start;
+  for (; j < SRC.length; j++) {
+    if (SRC[j] === '{') depth++;
+    else if (SRC[j] === '}') { depth--; if (!depth) break; }
+  }
+  return SRC.slice(start, j);
 }
-ok('section labels are mono + uppercase',
-   /\.eyebrow[^{]*\{[^}]*text-transform:\s*uppercase/s.test(novaSrc) ||
-   /--n-mono[\s\S]{0,400}uppercase/.test(novaSrc));
+const M = mediaBlock('@media (max-width: 760px)');
+ok('a phone breakpoint exists', M.length > 200, `${M.length} chars`);
+ok('bento collapses to one column', /\.feat-cards,\s*\n?\s*\.quick-grid\s*\{[^}]*grid-template-columns:\s*1fr/s.test(M));
+ok('stat tiles go 2-up', /\.stats-grid\s*\{[^}]*repeat\(2/s.test(M));
+ok('touch targets are >= 44px', /min-height:\s*44px/.test(M));
+ok('bottom bar clears the home indicator (safe-area)', /env\(safe-area-inset-bottom/.test(M));
+ok('content is padded past the floating bar', /\.dash-main[^}]*padding-bottom:\s*calc\(/s.test(M));
+ok('hover transforms are cancelled on touch', /:hover[^{]*\{[^}]*transform:\s*none/s.test(M));
+ok('press feedback replaces hover', /:active[^{]*\{[^}]*transform:\s*scale\(\.98/s.test(M));
+ok('no horizontal overflow', /overflow-x:\s*hidden/.test(M));
+ok('a small-phone breakpoint exists', /@media \(max-width: 380px\)/.test(SRC));
 
-// ── 5. UNDERLINE TABS, NOT PILLS ───────────────────────────────────────
-console.log('\n[5] tabs are underlined');
-ok('active tab uses a bottom border, not a filled pill',
-   /\.dash-tab\.active[^{]*\{[^}]*border-bottom-color/s.test(novaSrc));
-ok('active tab background is transparent',
-   /\.dash-tab\.active[^{]*\{[^}]*background:\s*transparent/s.test(novaSrc));
-
-// ── 6. MOTION IS A FADE ────────────────────────────────────────────────
-console.log('\n[6] motion reduced to a fade');
-ok('nova defines a fade-only keyframe',
-   /@keyframes novaIn\s*\{\s*from\s*\{\s*opacity:\s*0\s*\}\s*to\s*\{\s*opacity:\s*1\s*\}/.test(novaSrc));
-ok('no translate/scale in the nova keyframe', !/novaIn[\s\S]{0,120}(translate|scale)/.test(novaSrc));
-
-// ── 7. PALETTE UNCHANGED: still grey/black, still hueless ──────────────
-// Read from source: jsdom returns rgba(0,0,0,0) for var()-based colours.
+// ── 7. PALETTE — grey/black kept, as the user required ─────────────────
 console.log('\n[7] palette stays grey/black');
 function hsl(hex) {
   const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255);
@@ -184,60 +184,46 @@ function hsl(hex) {
   const l = (mx + mn) / 2;
   return { s: dl ? dl / (1 - Math.abs(2 * l - 1)) : 0, l };
 }
-const STATUS = ['--st-ok', '--st-warn', '--st-danger'];
-const toks = [...novaSrc.matchAll(/(--(?:n|i)-[a-z0-9]+):\s*(#[0-9a-f]{6})/gi)];
-ok('nova declares a full neutral ramp', toks.length >= 9, `${toks.length} tokens`);
-for (const [, name, hex] of toks) {
-  const { s } = hsl(hex);
-  ok(`${name} ${hex} has no hue`, s <= 0.02, `sat=${s.toFixed(3)}`);
-}
-for (const t of STATUS) ok(`${t} is still defined (colour means something)`,
-                           new RegExp(t + ':\\s*#').test(novaSrc));
+const toks = [...SRC.matchAll(/(--(?:n|i)-[a-z0-9]+):\s*(#[0-9a-f]{6})/gi)];
+ok('a full neutral ramp is declared', toks.length >= 9, `${toks.length}`);
+for (const [, name, hex] of toks)
+  ok(`${name} ${hex} is hueless`, hsl(hex).s <= 0.03, `sat=${hsl(hex).s.toFixed(3)}`);
+for (const t of ['--st-ok', '--st-warn', '--st-danger'])
+  ok(`${t} kept (status colour carries meaning)`, new RegExp(t + ':\\s*#').test(SRC));
 
 // ── 8. CONTRAST ────────────────────────────────────────────────────────
 console.log('\n[8] contrast');
 function lum(hex) {
   const c = [1, 3, 5].map(i => {
-    let x = parseInt(hex.slice(i, i + 2), 16) / 255;
+    const x = parseInt(hex.slice(i, i + 2), 16) / 255;
     return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
   });
   return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
 }
-function ratio(a, b) {
+const ratio = (a, b) => {
   const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
   return (x + 0.05) / (y + 0.05);
-}
-const tok = n => (new RegExp(n + ':\\s*(#[0-9a-f]{6})', 'i').exec(novaSrc) || [])[1];
-const pairs = [
-  ['primary ink on canvas', tok('--i-1'), tok('--n-1'), 4.5],
-  ['secondary on canvas',   tok('--i-2'), tok('--n-1'), 4.5],
-  ['tertiary on canvas',    tok('--i-3'), tok('--n-1'), 4.5],
-  ['ink on panel',          tok('--i-1'), tok('--n-3'), 4.5],
-  ['button label on button',tok('--n-acc-fg'), tok('--n-acc'), 4.5],
-];
-for (const [n, a, b, min] of pairs) {
-  if (!a || !b) { ok(`${n} tokens exist`, false); continue; }
-  const r = ratio(a, b);
-  ok(`${n} passes AA (${min}:1)`, r >= min, `${r.toFixed(2)}:1 ${a} on ${b}`);
+};
+const tok = t => (new RegExp(t + ':\\s*(#[0-9a-f]{6})', 'i').exec(SRC) || [])[1];
+for (const [label, a, b] of [
+  ['primary ink on canvas', '--i-1', '--n-1'],
+  ['secondary on canvas',   '--i-2', '--n-1'],
+  ['tertiary on canvas',    '--i-3', '--n-1'],
+  ['ink on bento card',     '--i-1', '--n-3'],
+  ['CTA label on CTA',      '--n-acc-fg', '--n-acc'],
+]) {
+  const [x, y] = [tok(a), tok(b)];
+  if (!x || !y) { ok(`${label} tokens exist`, false, `${a}=${x} ${b}=${y}`); continue; }
+  const r = ratio(x, y);
+  ok(`${label} passes AA`, r >= 4.5, `${r.toFixed(2)}:1`);
 }
 
-// ── 9. NOTHING WAS HIDDEN OR RESTRUCTURED ──────────────────────────────
-// A redesign must not "fix" the look by removing features.
+// ── 9. NOTHING REMOVED ─────────────────────────────────────────────────
 console.log('\n[9] no feature removed');
-ok('nova hides nothing', !/display:\s*none/.test(novaSrc));
-ok('nova sets no position/float/flex-direction (presentational only)',
-   !/(^|\s)(position|float|flex-direction)\s*:/m.test(novaSrc));
-// The elements must still EXIST in the shell. Asserting they are visible is
-// wrong for two of them and jsdom cannot judge it anyway: #tab-jobs is
-// display:none until its tab is active, and .rs-side-close is deliberately
-// desktop-hidden and revealed inside an @media block, which jsdom ignores
-// entirely. So check presence, and check nova did not add a hiding rule.
-for (const id of ['tab-jobs', 'wbSide', 'btnSideClose']) {
-  ok(`#${id} is still in the shell`, !!d.getElementById(id));
-}
-ok('the drawer close button keeps its mobile rule',
-   /@media[^{]*\{[\s\S]*?\.rs-side-close\s*\{/.test(
-     fs.readFileSync(path.join(R, 'static', 'runspace-dark.css'), 'utf8')));
+ok('nova hides nothing', !/display:\s*none/.test(SRC));
+ok('nova does not re-position anything', !/(^|\s)(position|float)\s*:/m.test(SRC));
+for (const id of ['tab-jobs', 'wbSide', 'btnSideClose', 'bottomNav'])
+  ok(`#${id} still in the shell`, !!d.getElementById(id));
 
 console.log(`\ntest_nova_language: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

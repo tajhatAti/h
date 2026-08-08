@@ -72,3 +72,6 @@ tests/e2e/pydeps/
 
 # CodeMirror 6 build deps (the built bundle in static/ IS committed)
 editor-src/node_modules/
+
+# Scratch: reference images pulled while designing, not part of the app
+image-search/

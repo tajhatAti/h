@@ -72,7 +72,7 @@ const blurs     = [];   // frosted glass
 for (const f of SHEETS) {
   const src = fs.readFileSync(path.join(R, 'static', f), 'utf8');
   const lines = src.split('\n');
-  let sel = '';
+  let sel = "", openProp = "";
   lines.forEach((line, idx) => {
     const n = idx + 1;
     if (line.includes('{')) sel = line.split('{')[0].trim();
@@ -90,12 +90,17 @@ for (const f of SHEETS) {
         blurs.push(`${f}:${n} ${decl.trim()}`);
     }
 
-    // A translucent white layer IS frosted glass, with or without a blur.
-    let m;
-    const WHITE = /rgba\(\s*255\s*,\s*255\s*,\s*255\s*,\s*(0?\.[0-9]+)\s*\)/g;
-    while ((m = WHITE.exec(code))) {
-      if (parseFloat(m[1]) > 0.01) glass.push(`${f}:${n} ${m[0]}  [${sel}]`);
-    }
+    // A translucent white FILL is frosted glass. A translucent white in a
+    // shadow or a border is not: it is an edge highlight or a glow, which
+    // is how a raised control is drawn, and the user explicitly asked for
+    // that ("deep button animation nai"). So judge by the property, not by
+    // the colour alone -- checking only for rgba(255,255,255,a) flagged
+    // nova's --rim and the CTA glow as glass and would have forced the
+    // flat look back.
+    /* Glass detection moved out of this line loop -- see the postcss pass
+       below. Declarations such as `--e-2:` span three physical lines, so
+       nothing that reads one line at a time can tell whether a white rgba
+       belongs to a shadow or to a background. */
 
     if (SYNTAX.test(sel)) return;
 
@@ -120,6 +125,35 @@ console.log('scanned ' + SHEETS.length + ' stylesheets');
 
 ok('no backdrop-filter anywhere', blurs.length === 0,
    blurs.slice(0, 6).join(' | '));
+/* Frosted glass = a translucent white FILL. A translucent white inside a
+   box-shadow, outline or border-colour is an edge highlight or a glow --
+   that is how a raised, pressable control is drawn, and it is exactly what
+   the user asked for after rejecting the flat revision. Parsed with
+   postcss because a declaration can span multiple lines (`--e-2:` spans
+   three), which defeats any line-by-line scan. */
+{
+  const postcss = require('postcss');
+  const FILL = /^(background|background-color|background-image|border|fill|color)$/;
+  const WHITE_RGBA = /rgba\(\s*255\s*,\s*255\s*,\s*255\s*,\s*(0?\.[0-9]+)\s*\)/g;
+  for (const f of SHEETS) {
+    let root;
+    try { root = postcss.parse(fs.readFileSync(path.join(R, 'static', f), 'utf8'), { from: f }); }
+    catch (e) { continue; }
+    root.walkDecls(decl => {
+      const p = decl.prop.toLowerCase();
+      const isToken = p.startsWith('--');
+      // A custom property is judged by what it is plainly for.
+      if (isToken && /(shadow|rim|ring|glow|e-\d|elev)/.test(p)) return;
+      if (!isToken && !FILL.test(p)) return;
+      let m;
+      WHITE_RGBA.lastIndex = 0;
+      while ((m = WHITE_RGBA.exec(decl.value)))
+        if (parseFloat(m[1]) > 0.01)
+          glass.push(`${f} ${decl.prop}: ${m[0]}`);
+    });
+  }
+}
+
 ok('no semi-transparent white overlays', glass.length === 0,
    `${glass.length} left: ` + glass.slice(0, 6).join(' | '));
 ok('no hued UI colour outside the status set', offenders.length === 0,

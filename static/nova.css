@@ -1,383 +1,475 @@
 /* ════════════════════════════════════════════════════════════════════════
-   CODENEST — NOVA
-   A different design LANGUAGE, on the same grey/black palette.
+   CODENEST — NOVA  ·  design B (bento) + design C sidebar buttons
    ────────────────────────────────────────────────────────────────────────
-   The palette was never the problem. Four rounds were spent retuning
-   colours while the SHAPE of the UI stayed identical, so nothing looked
-   new. What the old sheets are made of, counted:
+   Chosen from four mockups:
+     B  design/nova-B-bento-depth.png   — bento grid, big headline, pills,
+                                          rounded elevated cards
+     C  design/nova-C-glass-neumorph.png — raised, pressable nav buttons
+     D  design/nova-D-mobile-app.png     — the mobile form of the same
 
-       23  pill radii (99px) + 8/10/12px rounded boxes everywhere
-      127  box-shadows -- floating cards on every surface
-       14  Fraunces serif headings -- editorial, soft
-       15  decorative gradients
+   The previous NOVA revision went the opposite way: square, flat, no
+   shadow, no animation. That was wrong and the user said so plainly --
+   "কোথায় box round, deep button animation nai". This revision is the
+   correction, and every one of those four things is now deliberate:
 
-   That vocabulary IS the old look: soft, rounded, floating, magazine-ish.
-   Nova replaces it wholesale:
+       ROUND    18px on bento cards, 14px on inner rows, 999px pills.
+       DEEP     layered shadows plus a 1px top highlight, so a card reads
+                as lit from above rather than drawn on the page.
+       BUTTONS  neumorphic: raised at rest, lit rim, and they physically
+                travel down 1px on :active.
+       MOTION   cards lift on hover, tabs slide, content fades up.
 
-       SHAPE      square. radius 0 on structure, 2px only where a control
-                  would otherwise clip its own focus ring.
-       DEPTH      none. no shadow anywhere. separation comes from a 1px
-                  rule and a step in surface value -- the way a terminal,
-                  a spreadsheet or a CAD tool separates things.
-       TYPE       one family. grotesque UI + mono for anything a machine
-                  produced. No serif. Headings are SMALL and uppercase
-                  with wide tracking; scale comes from weight, not size.
-       RHYTHM     hard 8px grid, dense. Generous padding was what made the
-                  old build feel like a brochure rather than a console.
-       COLOUR     unchanged: grey / black, hueless. Status keeps its
-                  green / amber / red because there colour means something.
+   Palette stays grey/black -- that part the user explicitly kept. Colour
+   is reserved for status, exactly as in the mockups (green dot = running).
 
-   Loaded LAST so it owns the cascade. Everything here is presentational --
-   no layout is restructured, no element hidden, no behaviour touched.
+   Loaded LAST so it owns the cascade. Presentational only: no element is
+   hidden, no layout engine swapped out from under the app's JS.
    ════════════════════════════════════════════════════════════════════════ */
 
-/* ─────────────────────────── 1. TOKENS ─────────────────────────────────
-   A 7-step neutral ramp. Every surface in the app maps onto one of these,
-   so there is no longer a separate palette per sheet (which is what let
-   RunSpace and Code Studio drift blue while the tokens said grey). */
+/* ─────────────────────────── 1. TOKENS ─────────────────────────────────*/
 :root {
-  --n-0:  #000000;   /* true black — page behind everything */
-  --n-1:  #0a0a0a;   /* canvas                              */
-  --n-2:  #121212;   /* raised: bars, rails, headers        */
-  --n-3:  #1a1a1a;   /* panels, cards, inputs               */
-  --n-4:  #242424;   /* hover / pressed                     */
-  --n-5:  #333333;   /* hairline, strong                    */
-  --n-6:  #4d4d4d;   /* disabled ink                        */
+  /* Surfaces, sampled from the B mockup: true-black page, charcoal cards. */
+  --n-0:  #000000;
+  --n-1:  #090909;   /* page canvas                          */
+  --n-2:  #101010;   /* rail / bar                           */
+  --n-3:  #161616;   /* bento card                           */
+  --n-4:  #1d1d1d;   /* inner row, hover                     */
+  --n-5:  #282828;   /* hairline                             */
+  --n-6:  #373737;   /* strong hairline / disabled ink       */
 
-  --i-1:  #fafafa;   /* primary ink   — 19.3:1 on --n-1     */
-  --i-2:  #b4b4b4;   /* secondary     —  8.6:1              */
-  --i-3:  #8a8a8a;   /* tertiary/meta —  5.2:1              */
+  --i-1:  #fcfcfc;   /* primary ink   — 18.9:1 on --n-1      */
+  --i-2:  #bcbcbc;   /* secondary     —  8.7:1               */
+  --i-3:  #8b8b8b;   /* tertiary      —  4.9:1               */
 
-  /* The one accent is ink itself: a solid light block with dark text.
-     Emphasis by contrast, never by hue. */
-  --n-acc:    #fafafa;
-  --n-acc-fg: #0a0a0a;
+  --n-acc:    #ffffff;
+  --n-acc-fg: #090909;
 
-  /* Status is the ONLY place a hue is allowed, because it carries meaning. */
-  --st-ok:     #4ade80;
+  --st-ok:     #3fd67e;
   --st-warn:   #fbbf24;
   --st-danger: #f87171;
 
-  /* Structure */
-  --n-line: 1px solid var(--n-5);
-  --n-r:    0px;      /* square by default */
-  --n-r-c:  2px;      /* controls only     */
+  /* ROUND — the single most visible change from the last revision. */
+  --r-bento: 18px;
+  --r-row:   14px;
+  --r-btn:   12px;
+  --r-pill:  999px;
 
-  /* 8px rhythm */
-  --n-1x: 8px;  --n-2x: 16px;  --n-3x: 24px;  --n-4x: 32px;
+  /* DEEP — three stacked shadows: contact, mid, ambient. A single large
+     blur reads as fog; stacking them reads as an object above a surface. */
+  --e-1: 0 1px 2px rgba(0,0,0,.6), 0 2px 6px rgba(0,0,0,.35);
+  --e-2: 0 2px 4px rgba(0,0,0,.55), 0 8px 20px rgba(0,0,0,.42),
+         0 1px 0 rgba(255,255,255,.05) inset;
+  --e-3: 0 4px 8px rgba(0,0,0,.5),  0 18px 44px rgba(0,0,0,.55),
+         0 1px 0 rgba(255,255,255,.07) inset;
+  /* The lit top edge that makes a raised control look raised. */
+  --rim: inset 0 1px 0 rgba(255,255,255,.09);
 
-  /* One family for UI, one for machine output. No serif. */
   --n-ui:   'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --n-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --ease: cubic-bezier(.22, 1, .36, 1);
 }
 
-/* Bridge: the old sheets read their own token names. Repointing them here
-   means every existing rule adopts Nova without being rewritten. */
-html[data-theme="dark"],
-html[data-theme="light"],
-:root {
+/* Bridge: the other eight sheets read their own token names, so repointing
+   them here makes every existing rule adopt Nova without being rewritten.
+   Both themes get the same values -- this product is dark. */
+html[data-theme="dark"], html[data-theme="light"], :root {
   --paper: var(--n-1);  --paper-2: var(--n-0);  --panel: var(--n-3);
-  --surface-1: var(--n-2); --surface-2: var(--n-3); --edge: var(--n-5);
+  --surface-1: var(--n-2); --surface-2: var(--n-4); --edge: var(--n-5);
   --ink: var(--i-1); --ink-2: var(--i-2); --muted: var(--i-3);
-  --line: var(--n-5); --line-2: var(--n-5);
+  --line: var(--n-5); --line-2: var(--n-6);
   --acc: var(--n-acc); --acc-soft: var(--n-4);
   --btn: var(--n-acc); --btn-fg: var(--n-acc-fg); --btn-hover: #ffffff;
-  --band: var(--n-0); --code-bg: var(--n-1);
+  --band: var(--n-0); --code-bg: var(--n-0);
   --cream: var(--i-1); --cream-dim: var(--i-3); --cream-line: var(--n-5);
   --on-cream: var(--n-0); --acc-ink: var(--i-1);
-  --scrim: rgba(0, 0, 0, .8);
+  --scrim: rgba(0,0,0,.78);
   --bg: var(--n-1); --bg-2: var(--n-2); --bg-3: var(--n-4);
-  --surface: var(--n-3); --border: var(--n-5); --border-strong: var(--n-5);
+  --surface: var(--n-3); --border: var(--n-5); --border-strong: var(--n-6);
   --text: var(--i-1); --muted-2: var(--i-3);
   --brand-1: var(--n-acc); --brand-2: var(--n-acc); --brand-3: var(--n-acc);
   --grad: var(--n-acc);
-  --serif: var(--n-ui);          /* kill the serif at the source */
-  --sans: var(--n-ui);
-  --mono: var(--n-mono);
+  --serif: var(--n-ui); --sans: var(--n-ui); --mono: var(--n-mono);
   --fg: var(--i-1); --fg-2: var(--i-2); --fg-3: var(--i-3);
   --bg-sunken: var(--n-0);
   --accent: var(--n-acc);
   --ok: var(--st-ok); --warn: var(--st-warn); --danger: var(--st-danger);
-  --shadow-s: none; --shadow-m: none; --shadow-l: none; --shadow: none;
 
-  /* The radius tokens the old sheets round themselves with. classic.css
-     alone applies `border-radius: var(--r-md) !important` to .stat-card,
-     .quick-card and friends, so squaring the corners is impossible without
-     repointing these -- an !important on the element loses to an
-     !important that is more specific, but wins nothing against a token it
-     never reads. Collapsing them here squares every rule at once.
-     --radius/--radius-sm are pro.css's equivalents; --r-pill is RunSpace's,
-     kept round only where a dot or avatar uses it. */
-  --r-lg: var(--n-r); --r-md: var(--n-r); --r-sm: var(--n-r-c);
-  --radius: var(--n-r); --radius-sm: var(--n-r-c);
-  --ring: 0 0 0 2px var(--i-1);
+  /* Radius tokens the old sheets round themselves with. classic.css applies
+     `border-radius: var(--r-md) !important` to .stat-card and .quick-card,
+     so these must be repointed or those cards keep the old geometry. */
+  --r-lg: var(--r-bento); --r-md: var(--r-row); --r-sm: var(--r-btn);
+  --radius: var(--r-bento); --radius-sm: var(--r-btn);
+
+  --shadow-s: var(--e-1); --shadow-m: var(--e-2); --shadow-l: var(--e-3);
+  --shadow: var(--e-2);
+  --ring: 0 0 0 3px rgba(255,255,255,.22);
 }
 
-/* ─────────────────────── 2. FLATTEN THE DEPTH ──────────────────────────
-   127 shadows across 7 sheets is what makes every panel read as a card
-   hovering over a page. A console has no floating cards: things sit in a
-   plane and are divided by rules. Focus rings are re-added below, so this
-   removes decoration only, not affordance. */
-*, *::before, *::after {
-  box-shadow: none !important;
-  text-shadow: none !important;
-}
-
-/* ─────────────────────── 3. SQUARE THE CORNERS ─────────────────────────
-   Structure is square. Controls keep 2px so a 2px focus ring does not
-   look clipped at the corner. Genuinely round things stay round. */
-*:not(.brand-mark):not(.boot-logo):not([class*="dot"]):not([class*="avatar"]):not(.rs-status-dot) {
-  border-radius: var(--n-r) !important;
-}
-button, input, select, textarea, .btn, [class*="btn"], [class*="chip"],
-[class*="pill"], [class*="badge"], [class*="tag"] {
-  border-radius: var(--n-r-c) !important;
-}
-/* Round by nature: identity marks and state dots. */
-.brand-mark, .boot-logo, [class*="dot"], [class*="avatar"], .rs-status-dot,
-.boot-spinner, [class*="spinner"] {
-  border-radius: 50% !important;
-}
-
-/* ───────────────────────── 4. BASE / CANVAS ────────────────────────────*/
+/* ─────────────────────────── 2. CANVAS ─────────────────────────────────*/
 html, body {
   background: var(--n-1) !important;
   background-image: none !important;
   color: var(--i-1) !important;
   font-family: var(--n-ui) !important;
-  font-feature-settings: "cv02" 1, "cv03" 1, "cv04" 1, "tnum" 1;
+  font-feature-settings: "tnum" 1;
   letter-spacing: -0.006em;
 }
 
-/* ─────────────────────────── 5. TYPE SCALE ─────────────────────────────
-   The old build shouted with 40px serif display type. Nova is quiet: the
-   loudest thing on screen is 22px, and hierarchy is carried by weight,
-   tracking and case. This is the single biggest reason it reads as a
-   different product rather than a recolour. */
-h1, .hero h1 {
+/* ────────────────────── 3. TYPE — the B headline ───────────────────────
+   B leads with a big, tight, confident headline. Hierarchy comes from
+   size AND weight here, unlike the previous revision which shrank
+   everything and read as timid. */
+h1, .welcome h1, .hero h1 {
   font-family: var(--n-ui) !important;
-  font-size: clamp(24px, 4.5vw, 38px) !important;
-  font-weight: 680 !important;
-  letter-spacing: -0.03em !important;
-  line-height: 1.05 !important;
+  font-size: clamp(30px, 5.2vw, 52px) !important;
+  font-weight: 760 !important;
+  letter-spacing: -0.035em !important;
+  line-height: 1.02 !important;
 }
-h2 { font-size: clamp(19px, 2.6vw, 24px) !important; font-weight: 640 !important;
-     letter-spacing: -0.02em !important; line-height: 1.15 !important; }
-h3 { font-size: 15px !important; font-weight: 620 !important;
-     letter-spacing: -0.01em !important; }
+h2 { font-size: clamp(20px, 2.8vw, 27px) !important; font-weight: 700 !important;
+     letter-spacing: -0.025em !important; }
+h3 { font-size: 16px !important; font-weight: 650 !important;
+     letter-spacing: -0.012em !important; }
 h1, h2, h3, h4, h5, h6 { font-family: var(--n-ui) !important; }
 
-/* Section labels: the console idiom — tiny, uppercase, widely tracked. */
-.eyebrow, .section-label, .dash-section-label, .settings-label,
-[class*="eyebrow"], [class*="section-title"] {
+.eyebrow, .section-label, [class*="eyebrow"] {
   font-family: var(--n-mono) !important;
-  font-size: 10px !important;
-  font-weight: 500 !important;
-  letter-spacing: 0.16em !important;
-  text-transform: uppercase !important;
+  font-size: 10px !important; font-weight: 500 !important;
+  letter-spacing: 0.18em !important; text-transform: uppercase !important;
   color: var(--i-3) !important;
 }
+code, kbd, pre, samp, .mono, time { font-family: var(--n-mono) !important; }
 
-/* Anything a machine produced is mono: ids, counts, sizes, timers, code. */
-code, kbd, pre, samp, .mono, [class*="count"], [class*="uptime"],
-[class*="metric"], [class*="stat-value"], [class*="-id"], time {
-  font-family: var(--n-mono) !important;
-  font-variant-numeric: tabular-nums;
-}
-
-/* ──────────────────────── 6. SURFACES & RULES ──────────────────────────
-   One rule, one value step. No shadow, no gradient, no glass. */
-.card, .stat-card, .quick-card, .panel, .settings-card, .job-card,
-.snippet-item, .activity-panel, .modal, .sheet, .dropdown, .popover,
-[class*="-card"], [class*="-panel"], [class*="-modal"] {
+/* ──────────────────── 4. BENTO CARDS — round + deep ────────────────────*/
+.stat-card, .quick-card, .feat-card, .term-card, .auth-card, .jd-panel,
+.snippet-item, .settings-card, .activity-panel, .card, .panel,
+[class*="-card"]:not(.bn-item):not([class*="btn"]) {
   background: var(--n-3) !important;
-  border: var(--n-line) !important;
+  border: 1px solid var(--n-5) !important;
+  border-radius: var(--r-bento) !important;
+  box-shadow: var(--e-2) !important;
   background-image: none !important;
+  transition: transform .22s var(--ease), box-shadow .22s var(--ease),
+              border-color .22s var(--ease), background-color .22s var(--ease) !important;
 }
 
-/* Bars, rails and headers sit one step below panels so the eye reads them
-   as chrome rather than content. */
-.nav, .dash-bar, .dash-side, .bottom-nav, .rs-head, .rs-side, .wb-head,
-.cs-bar, .ah-term-head, [class*="-toolbar"], [class*="-header"] {
+/* Lift on hover — the "deep" the user asked for, felt rather than seen. */
+.stat-card:hover, .quick-card:hover, .feat-card:hover, .snippet-item:hover {
+  transform: translateY(-3px) !important;
+  box-shadow: var(--e-3) !important;
+  border-color: var(--n-6) !important;
+  background: var(--n-4) !important;
+}
+.stat-card:active, .quick-card:active, .feat-card:active {
+  transform: translateY(-1px) scale(.995) !important;
+  transition-duration: .09s !important;
+}
+
+/* The two hero feature cards in B are the loudest tiles on the page. */
+.feat-card {
+  border-radius: var(--r-bento) !important;
+  box-shadow: var(--e-3) !important;
+  padding: 20px !important;
+}
+.feat-card.acc {
+  background: linear-gradient(180deg, var(--n-4), var(--n-3)) !important;
+  border-color: var(--n-6) !important;
+}
+/* Round icon chips, as in the mockup. */
+.fc-ic, .qc-ic, .stat-ic {
+  background: var(--n-4) !important;
+  border: 1px solid var(--n-5) !important;
+  border-radius: 14px !important;
+  box-shadow: var(--rim) !important;
+  color: var(--i-1) !important;
+}
+
+/* Big bento numbers: 24 / 99.99% in the mockup are the visual anchors. */
+.stat-card b, [class*="stat"] b {
+  font-size: clamp(26px, 3.6vw, 38px) !important;
+  font-weight: 750 !important;
+  letter-spacing: -0.03em !important;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.05 !important;
+}
+.stat-card span, [class*="stat"] > div > span {
+  color: var(--i-3) !important; font-size: 12.5px !important;
+}
+
+/* Chrome sits below content and casts nothing. */
+.nav, .dash-bar, .dash-side, .rs-head, .rs-side, .wb-head, .cs-header,
+.cs-bar, .ah-term-head {
   background: var(--n-2) !important;
   background-image: none !important;
   border-color: var(--n-5) !important;
+  box-shadow: none !important;
 }
 
-hr, .divider, .sep { border: 0 !important; border-top: var(--n-line) !important; }
+/* ─────────── 5. NAV BUTTONS — design C: raised and pressable ───────────
+   The tab rail and the mobile bar use C's neumorphic treatment: a raised
+   slab with a lit top rim that travels down when pressed. */
+.dash-tab, .tab-secondary, .cs-tab, .bn-item {
+  background: var(--n-2) !important;
+  border: 1px solid var(--n-5) !important;
+  border-radius: var(--r-btn) !important;
+  color: var(--i-3) !important;
+  font-weight: 570 !important;
+  letter-spacing: -0.008em !important;
+  box-shadow: var(--e-1), var(--rim) !important;
+  transition: transform .16s var(--ease), box-shadow .16s var(--ease),
+              background-color .16s var(--ease), color .16s var(--ease) !important;
+}
+.dash-tab:hover, .cs-tab:hover, .bn-item:hover {
+  background: var(--n-4) !important;
+  color: var(--i-1) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: var(--e-2), var(--rim) !important;
+}
+/* Pressed: the button actually moves, and the shadow collapses under it. */
+.dash-tab:active, .cs-tab:active, .bn-item:active {
+  transform: translateY(1px) !important;
+  box-shadow: inset 0 2px 6px rgba(0,0,0,.6) !important;
+  transition-duration: .06s !important;
+}
+/* Active tab = light slab with dark ink, as in C. */
+.dash-tab.active, .tab-secondary.active, .cs-tab.active, .bn-item.active {
+  background: var(--n-acc) !important;
+  color: var(--n-acc-fg) !important;
+  border-color: var(--n-acc) !important;
+  box-shadow: 0 2px 10px rgba(255,255,255,.16), var(--e-1) !important;
+}
+.bn-item.active .bn-ic, .bn-item.active .bn-l { color: var(--n-acc-fg) !important; }
 
-/* ──────────────────────────── 7. CONTROLS ──────────────────────────────
-   Buttons are rectangles that fill on hover. No lift, no glow, no
-   transform — a console does not bounce. */
-button, .btn, [class*="btn-"] {
+/* ───────────────── 6. BUTTONS — pill CTA with a real glow ──────────────*/
+button, .btn, [class*="btn-"], .cs-act {
   font-family: var(--n-ui) !important;
-  font-weight: 550 !important;
-  letter-spacing: -0.005em !important;
-  transition: background-color .12s linear, border-color .12s linear,
-              color .12s linear !important;
-  transform: none !important;
+  font-weight: 600 !important;
+  border-radius: var(--r-btn) !important;
+  transition: transform .16s var(--ease), box-shadow .16s var(--ease),
+              background-color .16s var(--ease), color .16s var(--ease),
+              border-color .16s var(--ease) !important;
 }
-button:hover, .btn:hover, [class*="btn-"]:hover { transform: none !important; }
+button:active, .btn:active, [class*="btn-"]:active {
+  transform: translateY(1px) !important;
+  transition-duration: .06s !important;
+}
 
-.btn-primary, .cs-act.primary, [class*="btn-primary"] {
+/* B's primary CTA is a white PILL that glows. */
+.btn-primary, [class*="btn-primary"] {
   background: var(--n-acc) !important;
   color: var(--n-acc-fg) !important;
   border: 1px solid var(--n-acc) !important;
+  border-radius: var(--r-pill) !important;
   background-image: none !important;
+  box-shadow: 0 2px 10px rgba(0,0,0,.5), 0 0 0 rgba(255,255,255,0) !important;
 }
 .btn-primary:hover, [class*="btn-primary"]:hover {
-  background: #ffffff !important;
-  border-color: #ffffff !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 8px 26px rgba(0,0,0,.55),
+              0 0 22px rgba(255,255,255,.20) !important;   /* the glow */
+}
+.btn-primary:active, [class*="btn-primary"]:active {
+  transform: translateY(0) !important;
+  box-shadow: inset 0 2px 8px rgba(0,0,0,.35) !important;
 }
 
 .btn-secondary, .btn-ghost, [class*="btn-secondary"], [class*="btn-ghost"] {
-  background: transparent !important;
+  background: var(--n-2) !important;
   color: var(--i-1) !important;
-  border: var(--n-line) !important;
+  border: 1px solid var(--n-5) !important;
+  border-radius: var(--r-pill) !important;
+  box-shadow: var(--e-1), var(--rim) !important;
 }
 .btn-secondary:hover, .btn-ghost:hover,
 [class*="btn-secondary"]:hover, [class*="btn-ghost"]:hover {
   background: var(--n-4) !important;
   border-color: var(--n-6) !important;
+  transform: translateY(-2px) !important;
+  box-shadow: var(--e-2), var(--rim) !important;
 }
-
 .btn-danger, [class*="btn-danger"] {
-  background: transparent !important;
-  color: var(--st-danger) !important;
+  background: transparent !important; color: var(--st-danger) !important;
   border: 1px solid var(--st-danger) !important;
+  border-radius: var(--r-pill) !important;
 }
 .btn-danger:hover, [class*="btn-danger"]:hover {
   background: var(--st-danger) !important; color: var(--n-0) !important;
+  box-shadow: 0 8px 24px rgba(248,113,113,.28) !important;
 }
 
 input, select, textarea {
   background: var(--n-1) !important;
-  border: var(--n-line) !important;
+  border: 1px solid var(--n-5) !important;
+  border-radius: var(--r-btn) !important;
   color: var(--i-1) !important;
   font-family: var(--n-ui) !important;
+  box-shadow: inset 0 2px 5px rgba(0,0,0,.4) !important;   /* recessed */
 }
 input::placeholder, textarea::placeholder { color: var(--n-6) !important; }
 input:focus, select:focus, textarea:focus {
-  border-color: var(--i-1) !important;
+  border-color: rgba(255,255,255,.4) !important;
+  box-shadow: inset 0 2px 5px rgba(0,0,0,.4), var(--ring) !important;
   outline: none !important;
 }
+:focus-visible { outline: 2px solid var(--i-1) !important; outline-offset: 2px !important; }
 
-/* Focus must survive the shadow purge — outline, not box-shadow. */
-:focus-visible {
-  outline: 2px solid var(--i-1) !important;
-  outline-offset: 1px !important;
-}
-
-/* ────────────────────────────── 8. TABS ────────────────────────────────
-   Underline, not a filled pill. Pills were the most recognisable part of
-   the old language. */
-.dash-tab, .tab-secondary, .cs-tab, [class*="tab-btn"] {
-  background: transparent !important;
-  border: 0 !important;
-  border-bottom: 2px solid transparent !important;
-  color: var(--i-3) !important;
-  font-weight: 550 !important;
-  letter-spacing: -0.005em !important;
-}
-.dash-tab:hover, .cs-tab:hover { color: var(--i-2) !important; background: transparent !important; }
-.dash-tab.active, .tab-secondary.active, .cs-tab.active,
-[class*="tab-btn"].active {
-  background: transparent !important;
-  color: var(--i-1) !important;
-  border-bottom-color: var(--i-1) !important;
-}
-
-/* ───────────────────────── 9. STATUS SIGNALS ───────────────────────────
-   A 6px square, not a glowing round pill. Colour still carries the
-   meaning; the shape is what changed. */
-[class*="status"], [class*="chip"], [class*="badge"] {
-  font-family: var(--n-mono) !important;
-  font-size: 10px !important;
-  letter-spacing: 0.08em !important;
-  text-transform: uppercase !important;
-  background: transparent !important;
-  border: var(--n-line) !important;
+/* ───────────────── 7. STATUS — pills, exactly as in B ──────────────────*/
+[class*="chip"], [class*="badge"], [class*="status"]:not(input):not(select) {
+  border-radius: var(--r-pill) !important;
+  background: var(--n-4) !important;
+  border: 1px solid var(--n-5) !important;
   color: var(--i-2) !important;
+  font-size: 11px !important; font-weight: 600 !important;
+  box-shadow: var(--rim) !important;
 }
-[class*="dot"] { width: 6px !important; height: 6px !important; }
+.is-running, .running, [class*="--ok"] { color: var(--st-ok) !important; }
+.is-crashed, .crashed, [class*="--danger"] { color: var(--st-danger) !important; }
+.is-starting, .starting, [class*="--warn"] { color: var(--st-warn) !important; }
+/* The green dot glows softly, like the mockup. */
+.job-dot, .rs-status-dot, [class*="dot"] {
+  border-radius: 50% !important;
+}
+.job-dot.running, .rs-status-dot.ok, .status-dot.running {
+  background: var(--st-ok) !important;
+  box-shadow: 0 0 8px rgba(63,214,126,.65) !important;
+}
 
-.is-running, .running, .ok, [class*="--ok"]      { color: var(--st-ok) !important; }
-.is-crashed, .crashed, .error, [class*="--danger"]{ color: var(--st-danger) !important; }
-.is-starting, .starting, .warn, [class*="--warn"] { color: var(--st-warn) !important; }
+/* Round by nature. */
+.brand-mark, .boot-logo, [class*="avatar"], .boot-spinner, [class*="spinner"] {
+  border-radius: 50% !important;
+}
 
-/* ─────────────────────────── 10. TABLES / LISTS ────────────────────────*/
-table { border-collapse: collapse !important; }
-th {
+/* ───────────────── 8. IDE SURFACES — same material ─────────────────────*/
+#tab-jobs, .code-studio, .workbench, .wb-cm-host {
+  background: var(--n-1) !important; color: var(--i-2) !important;
+}
+.job-item {
+  background: var(--n-3) !important;
+  border: 1px solid var(--n-5) !important;
+  border-radius: var(--r-row) !important;
+  box-shadow: var(--e-1) !important;
+  transition: transform .18s var(--ease), box-shadow .18s var(--ease),
+              background-color .18s var(--ease) !important;
+}
+.job-item:hover {
+  background: var(--n-4) !important; transform: translateX(2px) !important;
+  box-shadow: var(--e-2) !important;
+}
+.job-item.active {
+  background: var(--n-4) !important;
+  border-color: var(--n-6) !important;
+  box-shadow: var(--e-2), inset 3px 0 0 var(--i-1) !important;
+}
+/* Log console: recessed black, like B's log tile. */
+.log, .logs, pre.output, [class*="log-body"], [class*="console"], .ah-term-body {
+  background: var(--n-0) !important;
+  border-radius: var(--r-row) !important;
+  box-shadow: inset 0 2px 10px rgba(0,0,0,.75) !important;
   font-family: var(--n-mono) !important;
-  font-size: 10px !important;
-  font-weight: 500 !important;
-  letter-spacing: 0.12em !important;
-  text-transform: uppercase !important;
-  color: var(--i-3) !important;
-  text-align: left !important;
-  border-bottom: var(--n-line) !important;
+  font-size: 12px !important; line-height: 1.55 !important;
 }
-td { border-bottom: 1px solid var(--n-3) !important; }
-tr:hover td { background: var(--n-2) !important; }
 
-/* ──────────────────────────── 11. MOTION ───────────────────────────────
-   The old build slid, rose and popped on every tab change. Nova only
-   fades, quickly. Instant UI reads as a tool; animated UI reads as a
-   brochure. */
-* { animation-duration: .14s !important; }
-.dash-tab-content.active, #tab-jobs.active,
-#tab-jobs.active .rs-side, #tab-jobs.active .rs-main,
-#tab-jobs.active .job-item, #tab-jobs.active .rs-empty {
-  animation: novaIn .14s linear both !important;
-}
-@keyframes novaIn { from { opacity: 0 } to { opacity: 1 } }
+/* ───────────────────────── 9. MOTION ───────────────────────────────────*/
+@keyframes novaUp   { from { opacity:0; transform: translateY(12px) } to { opacity:1; transform:none } }
+@keyframes novaFade { from { opacity:0 } to { opacity:1 } }
+.dash-tab-content.active { animation: novaUp .3s var(--ease) both !important; }
+#tab-jobs.active .job-item { animation: novaUp .26s var(--ease) both !important; }
+#tab-jobs.active .job-item:nth-child(1){animation-delay:.03s}
+#tab-jobs.active .job-item:nth-child(2){animation-delay:.06s}
+#tab-jobs.active .job-item:nth-child(3){animation-delay:.09s}
+#tab-jobs.active .job-item:nth-child(n+4){animation-delay:.12s}
+.stat-card, .quick-card, .feat-card { animation: novaFade .32s var(--ease) both !important; }
 
 @media (prefers-reduced-motion: reduce) {
-  * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  *, *::before, *::after {
+    animation-duration:.01ms !important; transition-duration:.01ms !important;
+  }
+  .stat-card:hover, .quick-card:hover, .feat-card:hover,
+  .btn-primary:hover, .dash-tab:hover { transform: none !important; }
 }
 
-/* ───────────────────────────── 12. SCROLLBAR ───────────────────────────*/
+/* ──────────────────────── 10. SCROLLBAR ────────────────────────────────*/
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: var(--n-1) !important; }
 ::-webkit-scrollbar-thumb {
-  background: var(--n-5) !important; border: 2px solid var(--n-1) !important;
+  background: var(--n-6) !important; border-radius: 999px !important;
+  border: 3px solid var(--n-1) !important;
 }
-::-webkit-scrollbar-thumb:hover { background: var(--n-6) !important; }
+::-webkit-scrollbar-thumb:hover { background: #494949 !important; }
 ::selection { background: var(--i-1) !important; color: var(--n-0) !important; }
 
-/* ───────────────────── 13. IDE SURFACES (RunSpace etc.) ────────────────
-   These sheets hardcode GitHub's palette with !important and never read
-   the tokens, which is why earlier passes could not reach them. Pinned
-   onto the same ramp so the whole app is one material. */
-#tab-jobs, .code-studio, .wb-cm-host, .ah-term-body, .workbench {
-  background: var(--n-1) !important;
-  color: var(--i-2) !important;
-}
-#tab-jobs .rs-head, #tab-jobs .rs-side, .cs-bar, .wb-head {
-  background: var(--n-2) !important;
-  border-color: var(--n-5) !important;
-}
-.job-item, .rs-inp, .cs-name {
-  background: transparent !important;
-  border-color: var(--n-5) !important;
-}
-.job-item:hover  { background: var(--n-2) !important; }
-.job-item.active {
-  background: var(--n-3) !important;
-  border-left: 2px solid var(--i-1) !important;
-}
-/* Console output is the deepest surface — true black, mono, tight. */
-.log, .logs, pre.output, [class*="log-body"], [class*="console"], .ah-term-body {
-  background: var(--n-0) !important;
-  font-family: var(--n-mono) !important;
-  font-size: 12px !important;
-  line-height: 1.5 !important;
+/* ══════════════ 11. MOBILE — design D, properly optimised ══════════════
+   The user asked for this explicitly ("মোবাইল এর জন্য perfect optimized"),
+   so it is not an afterthought media query. Four things matter on a phone:
+   thumb reach, target size, one-column flow, and not paying for hover
+   effects the device cannot show. */
+@media (max-width: 760px) {
+
+  /* One column. The desktop bento collapses instead of scaling down into
+     unreadable 3-across tiles. */
+  .stats-grid  { grid-template-columns: repeat(2, minmax(0,1fr)) !important; gap: 10px !important; }
+  .feat-cards,
+  .quick-grid  { grid-template-columns: 1fr !important; gap: 10px !important; }
+
+  .stat-card, .quick-card, .feat-card {
+    border-radius: 16px !important;
+    padding: 14px !important;
+    box-shadow: var(--e-1) !important;   /* lighter: cheaper to composite */
+  }
+  .stat-card b { font-size: 26px !important; }
+
+  /* Headline stays confident but must not wrap into four lines. */
+  h1, .welcome h1 { font-size: clamp(26px, 8vw, 34px) !important; line-height: 1.06 !important; }
+  h2 { font-size: 19px !important; }
+
+  /* Every tappable thing clears the 44px accessibility floor. */
+  button, .btn, [class*="btn-"], .bn-item, .dash-tab,
+  input, select, textarea { min-height: 44px !important; }
+
+  /* Bottom bar: floating rounded slab, as in D, and it must clear the
+     iPhone home indicator or the last tab is unreachable. */
+  .bottom-nav {
+    background: var(--n-2) !important;
+    border: 1px solid var(--n-5) !important;
+    border-radius: 20px !important;
+    box-shadow: 0 -2px 10px rgba(0,0,0,.5), 0 10px 30px rgba(0,0,0,.6), var(--rim) !important;
+    margin: 0 10px calc(8px + env(safe-area-inset-bottom, 0px)) !important;
+    padding: 6px !important;
+  }
+  .bn-item {
+    border: 0 !important; background: transparent !important;
+    box-shadow: none !important; border-radius: 14px !important;
+    padding: 6px 4px !important;
+  }
+  .bn-item.active {
+    background: var(--n-acc) !important; color: var(--n-acc-fg) !important;
+    box-shadow: 0 2px 10px rgba(255,255,255,.18) !important;
+  }
+  .bn-l { font-size: 10.5px !important; font-weight: 600 !important; }
+
+  /* Content must not hide behind the floating bar. */
+  .dash-main { padding-bottom: calc(86px + env(safe-area-inset-bottom, 0px)) !important; }
+
+  /* A phone has no hover; a sticky :hover after a tap looks like a bug. */
+  .stat-card:hover, .quick-card:hover, .feat-card:hover, .job-item:hover,
+  .btn-primary:hover, .btn-secondary:hover, .dash-tab:hover {
+    transform: none !important;
+  }
+  /* Press feedback replaces it. */
+  .stat-card:active, .quick-card:active, .feat-card:active, .job-item:active {
+    transform: scale(.985) !important; background: var(--n-4) !important;
+    transition-duration: .07s !important;
+  }
+
+  /* Text must never be the thing that forces a horizontal scroll. */
+  body { overflow-x: hidden !important; }
+  .job-item, .stat-card, .quick-card { min-width: 0 !important; }
 }
 
-/* ───────────────────────────── 14. MOBILE ──────────────────────────────
-   Density is the point, but touch targets must stay 44px. */
-@media (max-width: 720px) {
-  .bottom-nav { background: var(--n-0) !important; border-top: var(--n-line) !important; }
-  button, .btn, [class*="btn-"] { min-height: 44px !important; }
-  h1 { letter-spacing: -0.02em !important; }
+/* Very small phones: two stat tiles per row is still better than one, but
+   the numbers need to shrink rather than overflow their tile. */
+@media (max-width: 380px) {
+  .stat-card b { font-size: 22px !important; }
+  .stat-card, .quick-card { padding: 12px !important; }
 }
