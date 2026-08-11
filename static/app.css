@@ -1924,3 +1924,222 @@ body.term-open .wb-term-kbd { display: flex; }
 
 /* ── 4. The header stays reachable no matter what is open ──────────────── */
 #tab-jobs .rs-head { position: relative; z-index: 870; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   SIGN-IN: strip the filler, line up the three controls
+
+   "SignIn page a অতিরিক্ত কিছু লেখা আছে, সেগুলা মুছে দেও. Remember me,
+    Forget Password, Creat Account এগুলা ভালো ভাবে সাজাও"
+
+   Two sentences on that card explain the app to itself rather than telling
+   the user anything: the Telegram hint under a button that already says
+   what it does, and the "unavailable right now" note.
+
+   The note is HIDDEN, not deleted. It is the only thing that appears when
+   Telegram's widget script is blocked, and deleting it once already locked
+   a user out of their own account with an empty card. It stays in the DOM
+   and JS still un-hides it on that failure path.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* The hint duplicates the button. */
+#screen-signin .telegram-hint,
+#screen-signup .telegram-hint { display: none; }
+
+/* Remember me / Forgot password: one row, opposite ends, aligned baselines.
+   They were stacking because .field-row inherits column direction from
+   .auth-form on narrow cards. */
+#screen-signin .field-row,
+.auth-form .field-row {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  flex-wrap: nowrap;
+  margin: 2px 0 var(--s2);
+}
+.auth-form .check {
+  margin: 0;
+  font-size: 13px;
+  color: var(--fg-2);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.auth-form .check input {
+  width: 16px; height: 16px; min-height: 0;
+  margin: 0; flex: 0 0 auto;
+  accent-color: var(--acc);
+  box-shadow: none;
+}
+.auth-form .field-row .link {
+  font-size: 13px;
+  color: var(--fg-2);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.auth-form .field-row .link:hover { color: var(--fg); text-decoration: underline; }
+
+/* "New here? Create an account" — a quiet footer, separated by a rule so it
+   does not read as part of the form. */
+.auth-switch {
+  margin-top: var(--s4);
+  padding-top: var(--s4);
+  border-top-width: 1px;
+  border-top-style: solid;
+  border-top-color: var(--line);
+  text-align: center;
+  font-size: 13px;
+  color: var(--fg-3);
+}
+.auth-switch a { color: var(--fg); font-weight: 600; text-decoration: none; }
+.auth-switch a:hover { text-decoration: underline; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   RUNSPACE: the editor gets the screen, everything else gets one menu
+
+   "জব লিস্ট অনেক বড় হয়ে গেছে অনেকটা জায়গা খেয়ে ফেলছে ফলে ইডিটর একপাশে সরে
+    গিয়ে ছোট হয়ে গেছে ... এডিটর ফুল স্ক্রিন লাগবে ... বাকি সব থাকবে একটা
+    বাটনে, ক্লিক করলে ছোট ছোট বাটন উপর থেকে নিচ বরাবর সারি সারি নামবে ...
+    রান, সেভ, ডিটেলস বাটন একটার উপর আরেকটা হয়ে গেছে, পাশাপাশি নাই"
+
+   Two separate problems.
+
+   (a) The rail was a permanent 210px column, so the editor never had the
+       width. It is now an overlay at EVERY size — the same drawer the phone
+       already used — so the editor is full width the moment nothing is
+       open, instead of only when collapsed.
+
+   (b) The header packed a breadcrumb, a 3-button segmented group, and two
+       icon buttons into a fixed 52px row with nothing stopping them from
+       shrinking. Below roughly 900px they overlapped, which is the
+       "একটার উপর আরেকটা" report. The controls now collapse into the single
+       menu the user asked for: one button, and the actions drop straight
+       down beneath it in a column.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── (a) full-width editor: the rail floats, never occupies ────────────── */
+@media (min-width: 761px) {
+  /* Overrides the desktop column rule written earlier in this file. */
+  #tab-jobs .rs-side {
+    position: absolute;
+    top: 52px;                        /* below the header, not under it */
+    bottom: 0;
+    left: 0;
+    z-index: 860;
+    width: 260px;
+    flex: 0 0 auto;
+    transform: translateX(-100%);
+    visibility: hidden;
+    box-shadow: var(--e3);
+    border-right: 1px solid var(--line);
+    transition: transform var(--med), visibility var(--med);
+  }
+  body.rs-side-open #tab-jobs .rs-side {
+    transform: translateX(0);
+    visibility: visible;
+    width: 260px;
+    flex: 0 0 auto;
+  }
+  body.rs-side-collapsed #tab-jobs .rs-side,
+  #tab-jobs.rs-side-collapsed .rs-side {
+    transform: translateX(-100%);
+    visibility: hidden;
+    width: 260px;                     /* slides away; does not shrink to 0 */
+  }
+  /* The scrim is wanted on desktop too now that the rail overlays. */
+  .rs-menu-backdrop { display: block; }
+  body.rs-side-open .rs-menu-backdrop {
+    opacity: 1; visibility: visible; pointer-events: auto;
+  }
+}
+
+/* The editor owns the full width at every size. */
+#tab-jobs .rs-body { position: relative; }
+#tab-jobs .rs-main { flex: 1 1 100%; width: 100%; min-width: 0; }
+
+/* ── (b) one menu, buttons in a column ─────────────────────────────────── */
+/* Nothing in the header may shrink into its neighbour. */
+#tab-jobs .rs-head > * { flex-shrink: 0; }
+/* grow to fill, but NEVER shrink: `flex: 1 1 auto` resets flex-shrink to 1
+   and overrode the `> *` guard above, which is how the buttons ended up
+   crushed into each other. The long job name is truncated by overflow
+   instead of by squeezing the controls next to it. */
+#tab-jobs .rs-crumb { flex: 1 0 auto; min-width: 0; overflow: hidden; }
+
+/* Below 900px the action group leaves the header and becomes a dropdown
+   anchored to the menu button, opening downward as a column. */
+@media (max-width: 900px) {
+  #tab-jobs .rs-head { position: relative; z-index: 870; }
+
+  #tab-jobs .rs-head-right {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: var(--s3);
+    z-index: 875;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--s-1);
+    width: 210px;
+    padding: var(--s-1);
+    background: var(--card);
+    border: 1px solid var(--line-2);
+    border-radius: var(--r-row);
+    box-shadow: var(--e3), var(--rim);
+    /* Closed: folded up into the header, invisible, untouchable. */
+    transform: scaleY(.96) translateY(-6px);
+    transform-origin: top right;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: transform var(--fast), opacity var(--fast), visibility var(--fast);
+  }
+  /* The same class pro.js already toggles for the rail opens this menu, so
+     no script change is needed and the two can never disagree. */
+  body.rs-side-open #tab-jobs .rs-head-right {
+    transform: none;
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  /* Inside the menu every control is a full-width row, stacked. */
+  #tab-jobs .rs-head-right .rs-seg {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    padding: 0;
+    gap: var(--s-1);
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    overflow: visible;
+  }
+  #tab-jobs .rs-head-right .rs-seg-btn,
+  #tab-jobs .rs-head-right .rs-ghost-btn {
+    width: 100%;
+    height: 40px;
+    justify-content: flex-start;
+    gap: var(--s3);
+    padding: 0 var(--s3);
+    border-radius: var(--r-sm);
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    font-size: var(--t-md);
+  }
+  #tab-jobs .rs-head-right .rs-seg-btn:hover,
+  #tab-jobs .rs-head-right .rs-ghost-btn:hover { background: var(--card-2); }
+  /* Icon-only buttons get their label back once they are list rows. */
+  #tab-jobs .rs-head-right .rs-sq { width: 100%; }
+  #tab-jobs .rs-head-right .rs-seg-label { font-size: var(--t-md); color: inherit; }
+  #tab-jobs #btnInspector::after { content: "Details"; }
+  #tab-jobs #btnDeselect::after  { content: "Close job"; }
+}
+
+/* Wide screens keep the controls inline, but with real spacing so they can
+   never touch. */
+@media (min-width: 901px) {
+  #tab-jobs .rs-head-right { gap: var(--s2); }
+  #tab-jobs .rs-head-right .rs-seg { flex: 0 0 auto; overflow: visible; }
+  #tab-jobs .rs-seg-btn { white-space: nowrap; }
+}

@@ -108,11 +108,23 @@ console.log('\n[2] the menu button is reachable and the rail responds');
   const side = d.getElementById('wbSide');
   const btn = d.getElementById('wbMenuBtn');
   ok('menu button exists', !!btn);
-  ok('desktop: rail is visible by default', !offCanvasOrHidden(win, side),
-     win.getComputedStyle(side).width);
-  ok('desktop: rail is a column, not an overlay',
-     win.getComputedStyle(side).position === 'static',
+  /* CHANGED 2026-08. These two asserted that the rail is a permanent
+     visible COLUMN on desktop. That was the behaviour until the user
+     reported it as the actual problem -- "জব লিস্ট অনেক বড় হয়ে গেছে অনেকটা
+     জায়গা খেয়ে ফেলছে ফলে ইডিটর ছোট হয়ে গেছে, এডিটর ফুল স্ক্রিন লাগবে".
+     The rail is an overlay at every width now, so the editor always has
+     the full row. Keeping the old assertions would have pinned the bug.
+     What still matters is that it OPENS on desktop, which is checked
+     immediately below. */
+  ok('desktop: rail starts closed so the editor is full width',
+     offCanvasOrHidden(win, side), win.getComputedStyle(side).transform);
+  ok('desktop: rail overlays rather than taking a column',
+     win.getComputedStyle(side).position === 'absolute' ||
+     win.getComputedStyle(side).position === 'fixed',
      win.getComputedStyle(side).position);
+  d.body.classList.add('rs-side-open');
+  ok('desktop: it still opens on demand', !offCanvasOrHidden(win, side));
+  d.body.classList.remove('rs-side-open');
 
   d.body.classList.add('rs-side-collapsed');
   d.body.classList.remove('rs-side-open');
