@@ -2516,3 +2516,68 @@ body.rs-menu-open .rs-menu-scrim { opacity: 1; visibility: visible; pointer-even
    during a fetch. */
 #tab-jobs .rs-empty { position: relative; z-index: 5; }
 #tab-jobs .rs-empty-btn { position: relative; z-index: 6; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   RUNSPACE FILE BROWSER
+   Same overlay behaviour as the job rail so the editor keeps the full width,
+   and the row styling is inherited from .cs-fp-item rather than duplicated.
+   ══════════════════════════════════════════════════════════════════════════ */
+#tab-jobs .rs-files {
+  position: absolute;
+  top: 52px; bottom: 0; left: 0;
+  z-index: 858;                    /* under the job rail (860), over content */
+  width: 280px;
+  display: flex; flex-direction: column;
+  background: var(--bar);
+  border-right: 1px solid var(--line);
+  box-shadow: var(--e3);
+}
+#tab-jobs .rs-files[hidden] { display: none; }
+#tab-jobs .rs-files-head {
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  border-bottom: 1px solid var(--line);
+}
+#tab-jobs .rs-files-head .rs-side-title { flex: 1 1 auto; }
+#tab-jobs .rs-files-list {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  padding: var(--s-1);
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+#tab-jobs .rs-file-row {
+  display: flex; align-items: center; gap: var(--s-2);
+  min-height: 40px; padding: 0 var(--s-2);
+  border-radius: var(--r-sm);
+  font-size: var(--t-sm); color: var(--fg-2);
+  cursor: pointer;
+}
+#tab-jobs .rs-file-row:hover { background: var(--bg-3); color: var(--fg); }
+#tab-jobs .rs-file-row.is-entry { color: var(--fg); background: var(--bg-3); }
+#tab-jobs .rs-file-row[data-binary="1"] { opacity: .55; }
+#tab-jobs .rs-file-ic { flex: 0 0 auto; width: 16px; text-align: center; color: var(--fg-3); }
+#tab-jobs .rs-file-row .cs-fpi-name {
+  flex: 1 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: var(--mono); font-size: var(--t-xs);
+}
+#tab-jobs .rs-file-entry {
+  flex: 0 0 auto; padding: 0 var(--s-1);
+  border: 1px solid var(--line-2); border-radius: var(--r-pill);
+  font-size: var(--t-xs); text-transform: uppercase; letter-spacing: .1em; color: var(--fg-3);
+}
+#tab-jobs .rs-file-size { flex: 0 0 auto; font-size: var(--t-xs); color: var(--fg-3); font-variant-numeric: tabular-nums; }
+#tab-jobs .rs-file-pin {
+  width: 28px; height: 28px; padding: 0;
+  background: transparent; border: 0; border-radius: var(--r-sm);
+  color: var(--fg-3); font-size: var(--t-md); cursor: pointer;
+}
+#tab-jobs .rs-file-pin:hover { background: var(--line); color: var(--fg); }
+
+@media (max-width: 760px) {
+  /* Full-width sheet on a phone: a 280px column beside a 375px screen is
+     not a browser, it is a nuisance. */
+  #tab-jobs .rs-files { width: 100%; z-index: 8980; }
+  #tab-jobs .rs-file-row { min-height: 46px; }
+}

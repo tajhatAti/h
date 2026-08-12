@@ -25,6 +25,10 @@ class JobUpdateRequest(BaseModel):
     env: Optional[dict] = None
 
 
+class EntryPinPayload(BaseModel):
+    path: str
+
+
 class GithubImportRequest(BaseModel):
     url: str
 
@@ -426,6 +430,70 @@ def get_job(job_id: int, authorization: Optional[str] = Header(None)):
         row["status"] = "offline"
     row["env"] = _row_env(row)
     return row
+
+
+# ── FILE BROWSER ───────────────────────────────────────────────────────────
+# Thin pass-throughs to the runner. Ownership is checked here via
+# _get_own_job(); the runner only ever sees its own job id, so one user can
+# never read another's workspace.
+
+@router.get("/api/jobs/{job_id}/files")
+def job_files(job_id: int, authorization: Optional[str] = Header(None)):
+    user, _ = get_current_user_and_session(authorization)
+    row = _get_own_job(job_id, user)
+    rid = row.get("runner_job_id")
+    if not rid:
+        return {"files": [], "entry": None, "truncated": False}
+    resp = runner_client._runner_http("GET", f"/internal/jobs/{rid}/files",
+                                      worker=_worker_of(row))
+    if resp.status_code == 404:
+        return {"files": [], "entry": None, "truncated": False,
+                "note": "runner restarted — press Restart to relaunch"}
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail="Could not list files.")
+    return resp.json()
+
+
+@router.get("/api/jobs/{job_id}/file")
+def job_file_read(job_id: int, path: str, authorization: Optional[str] = Header(None)):
+    user, _ = get_current_user_and_session(authorization)
+    row = _get_own_job(job_id, user)
+    rid = row.get("runner_job_id")
+    if not rid:
+        raise HTTPException(status_code=409, detail="Job is not running.")
+    from urllib.parse import quote
+    resp = runner_client._runner_http(
+        "GET", f"/internal/jobs/{rid}/file?path={quote(path, safe='')}",
+        worker=_worker_of(row))
+    if resp.status_code != 200:
+        # Forward the runner's own explanation (too big / binary / missing)
+        # rather than flattening every case into one unhelpful 502.
+        try:
+            detail = resp.json().get("detail") or "Could not read that file."
+        except Exception:
+            detail = "Could not read that file."
+        raise HTTPException(status_code=resp.status_code, detail=detail)
+    return resp.json()
+
+
+@router.post("/api/jobs/{job_id}/entry")
+def job_set_entry(job_id: int, payload: EntryPinPayload,
+                  authorization: Optional[str] = Header(None)):
+    user, _ = get_current_user_and_session(authorization)
+    row = _get_own_job(job_id, user)
+    rid = row.get("runner_job_id")
+    if not rid:
+        raise HTTPException(status_code=409, detail="Start the job once first.")
+    resp = runner_client._runner_http(
+        "POST", f"/internal/jobs/{rid}/entry", json_body={"path": payload.path},
+        worker=_worker_of(row))
+    if resp.status_code != 200:
+        try:
+            detail = resp.json().get("detail") or "Could not set the entry point."
+        except Exception:
+            detail = "Could not set the entry point."
+        raise HTTPException(status_code=resp.status_code, detail=detail)
+    return resp.json()
 
 
 @router.get("/api/jobs/{job_id}/logs")

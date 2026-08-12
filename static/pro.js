@@ -6751,3 +6751,156 @@ function _initCsUpload() {
 if (document.readyState === "loading")
   document.addEventListener("DOMContentLoaded", () => setTimeout(_initCsUpload, 40));
 else setTimeout(_initCsUpload, 40);
+
+/* ══════════════════════════════════════════════════════════════════════════
+   RUNSPACE FILE BROWSER  —  cloned repos are multi-file
+
+   Until now only one file of a cloned repo was reachable, so a user could
+   not even open the requirements.txt whose install had failed. This lists
+   the job's working directory, opens any text file in the editor, and lets
+   the user pin which file Run executes when auto-detection guessed wrong.
+
+   Row markup reuses the .cs-fp-* classes from Code Studio's file popover
+   rather than introducing a second file-row component.
+
+   The listing is fetched fresh on every open. There is no client cache on
+   purpose: a stale tree is the same class of bug as the stale entry scan
+   this work fixed on the server.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+let _rsFilesEntry = null;   // entry path as the RUNNER currently sees it
+
+function _rsFilesPanel() { return document.getElementById("rsFiles"); }
+
+function _rsFileIcon(path) {
+  const ext = (path.split(".").pop() || "").toLowerCase();
+  if (["py","js","mjs","ts","rb","php","sh","go","java","c","cpp","rs"].includes(ext)) return "‹›";
+  if (["json","yml","yaml","toml","ini","cfg","env"].includes(ext)) return "⚙";
+  if (["md","txt","rst"].includes(ext)) return "¶";
+  if (ext === "txt" || path === "requirements.txt") return "≡";
+  return "•";
+}
+
+async function rsLoadFiles(force) {
+  const panel = _rsFilesPanel();
+  const list = document.getElementById("rsFilesList");
+  if (!panel || !list) return;
+  if (!_selectedJobId) {
+    list.innerHTML = '<div class="rs-log-empty">Select a job first.</div>';
+    return;
+  }
+  list.innerHTML = '<div class="rs-log-empty">Loading…</div>';
+  try {
+    const data = await api("/api/jobs/" + _selectedJobId + "/files", "GET", null, true);
+    const files = data.files || [];
+    _rsFilesEntry = data.entry || null;
+    const count = document.getElementById("rsFileCount");
+    if (count) count.textContent = String(files.length);
+
+    if (!files.length) {
+      list.innerHTML = '<div class="rs-log-empty">' +
+        (data.note || "No files yet — start the job once.") + "</div>";
+      return;
+    }
+
+    list.innerHTML = files.map(f => {
+      const isEntry = f.path === _rsFilesEntry;
+      const openable = f.text !== false;
+      // textContent-safe: build with escaped text, never raw interpolation.
+      const safe = f.path.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+      const kb = f.size < 1024 ? f.size + " B" : Math.round(f.size / 1024) + " KB";
+      return '<div class="cs-fp-item rs-file-row' + (isEntry ? " is-entry" : "") + '"' +
+             ' data-path="' + safe + '"' + (openable ? "" : ' data-binary="1"') + '>' +
+               '<span class="rs-file-ic" aria-hidden="true">' + _rsFileIcon(f.path) + "</span>" +
+               '<span class="cs-fpi-name">' + safe + "</span>" +
+               (isEntry ? '<span class="rs-file-entry" title="Runs on Start">entry</span>' : "") +
+               '<span class="rs-file-size">' + kb + "</span>" +
+               '<span class="cs-fpi-act">' +
+                 (isEntry || !openable ? "" :
+                   '<button class="rs-file-pin" data-pin="' + safe + '" title="Set as entry point">⌖</button>') +
+               "</span>" +
+             "</div>";
+    }).join("");
+
+    if (data.truncated) {
+      list.insertAdjacentHTML("beforeend",
+        '<div class="rs-log-empty">Listing truncated — this repo has a lot of files.</div>');
+    }
+  } catch (err) {
+    list.innerHTML = '<div class="rs-log-empty">' +
+      String(err.message || "Could not list files").replace(/</g, "&lt;") + "</div>";
+  }
+}
+
+async function rsOpenFile(path) {
+  if (!_selectedJobId) return;
+  try {
+    const data = await api("/api/jobs/" + _selectedJobId + "/file?path=" +
+                           encodeURIComponent(path), "GET", null, true);
+    // Reuse the ordinary editor setter — an opened repo file is just code.
+    _jobCmSetValue(data.content || "");
+    const ext = (path.split(".").pop() || "").toLowerCase();
+    const map = { py: "python", js: "javascript", mjs: "javascript",
+                  rb: "ruby", php: "php", sh: "bash", json: "javascript" };
+    if (map[ext]) _jobCmSetMode(map[ext]);
+    _setHint("", "Viewing " + path);
+    toast("Opened " + path, "info");
+  } catch (err) {
+    toast(err.message || "Could not open that file", "error");
+  }
+}
+
+async function rsPinEntry(path) {
+  if (!_selectedJobId) return;
+  try {
+    const res = await api("/api/jobs/" + _selectedJobId + "/entry", "POST",
+                          { path }, true);
+    _rsFilesEntry = res.entry || path;
+    toast("Entry point set to " + _rsFilesEntry + " — press Restart to apply", "success");
+    await rsLoadFiles(true);
+  } catch (err) {
+    toast(err.message || "Could not set the entry point", "error");
+  }
+}
+
+function _initRsFiles() {
+  const panel = document.getElementById("rsFiles");
+  if (!panel || panel.dataset.wired === "1") return;
+  panel.dataset.wired = "1";
+
+  const open = () => { panel.hidden = false; rsLoadFiles(true); };
+  const close = () => { panel.hidden = true; };
+
+  const menuItem = document.getElementById("btnFilesInMenu");
+  if (menuItem) menuItem.addEventListener("click", (e) => {
+    e.preventDefault(); e.stopPropagation();
+    open();
+  });
+  const closeBtn = document.getElementById("rsFilesClose");
+  if (closeBtn) closeBtn.addEventListener("click", (e) => { e.preventDefault(); close(); });
+  const refresh = document.getElementById("rsFilesRefresh");
+  if (refresh) refresh.addEventListener("click", (e) => { e.preventDefault(); rsLoadFiles(true); });
+
+  // One delegated listener: rows are rebuilt on every refresh, so binding
+  // per row would leak handlers and miss anything added later.
+  const list = document.getElementById("rsFilesList");
+  if (list) list.addEventListener("click", (e) => {
+    const pin = e.target.closest("[data-pin]");
+    if (pin) { e.preventDefault(); e.stopPropagation(); rsPinEntry(pin.getAttribute("data-pin")); return; }
+    const row = e.target.closest(".rs-file-row");
+    if (!row) return;
+    if (row.getAttribute("data-binary") === "1") {
+      toast("That file is binary — it cannot be opened in the editor.", "error");
+      return;
+    }
+    rsOpenFile(row.getAttribute("data-path"));
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !panel.hidden) { e.stopPropagation(); close(); }
+  });
+}
+
+if (document.readyState === "loading")
+  document.addEventListener("DOMContentLoaded", () => setTimeout(_initRsFiles, 50));
+else setTimeout(_initRsFiles, 50);

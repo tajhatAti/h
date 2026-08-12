@@ -990,6 +990,77 @@ def _installed_version(name: str, pylibs: str) -> str:
         return "?"
 
 
+def _resolve_entry_now(j: dict) -> Optional[str]:
+    """Re-derive this job's entry file from the CURRENT contents of its dir.
+
+    BUG (reported: renamed n.py to main.py, runner still said "code is empty").
+    j["file"] was decided once at create time and reused forever. Renaming,
+    adding or deleting a file in the editor never invalidated it, so restart
+    kept launching a path that no longer existed -- or an empty stub that had
+    been left behind.
+
+    Re-scanning is cheap (one listdir of a shallow checkout) and, per the
+    brief, is the robust option: there is no cache to invalidate because
+    there is no cache. Returns None only when the directory holds nothing
+    runnable, which the caller reports rather than silently starting.
+    """
+    jdir = j.get("dir")
+    if not jdir or not os.path.isdir(jdir):
+        return None
+    cfg = LANGS.get(j.get("lang") or "python") or LANGS["python"]
+    ext = cfg["ext"]
+
+    def _usable(path):
+        # A file that exists but is empty is exactly the "code is empty"
+        # state the user hit; treat it as not-an-entry so a real file wins.
+        try:
+            return os.path.isfile(path) and os.path.getsize(path) > 0
+        except OSError:
+            return False
+
+    # 1. An explicit choice from the file browser always wins.
+    pinned = j.get("entry_rel")
+    if pinned:
+        fp = os.path.join(jdir, pinned)
+        if _usable(fp):
+            return fp
+        j["log"].append(f"[system] ! pinned entry '{pinned}' is missing or empty — re-scanning")
+
+    # 2. The conventional name for this language.
+    conventional = os.path.join(jdir, "main." + ext)
+    if _usable(conventional):
+        return conventional
+
+    # 3. The known entry names, in the same order used at create time.
+    for cand_lang, fname in _ENTRY_CANDIDATES:
+        if cand_lang != j.get("lang"):
+            continue
+        fp = os.path.join(jdir, fname)
+        if _usable(fp):
+            return fp
+
+    # 4. Any single source file of the right type at the top level. Only when
+    #    there is exactly one -- guessing between several would be worse than
+    #    saying so.
+    try:
+        matches = [
+            f for f in sorted(os.listdir(jdir))
+            if f.endswith("." + ext)
+            and _usable(os.path.join(jdir, f))
+            and not f.startswith(".")
+        ]
+    except OSError:
+        matches = []
+    if len(matches) == 1:
+        return os.path.join(jdir, matches[0])
+
+    # 5. Whatever was recorded, if it is still real.
+    old = j.get("file")
+    if old and _usable(old):
+        return old
+    return None
+
+
 def _prepare_and_run(j: dict, reqs: list, is_repo: bool = False) -> None:
     """Background worker: install deps (repo manifests first, then inline imports),
     then start the job."""
@@ -1728,9 +1799,26 @@ def job_start(req: JobStartRequest, authorization: Optional[str] = Header(None))
             raise HTTPException(400, detail="Compilation failed:\n" + (cerr or cout)[:3000])
 
     # Dependencies: AUTO-DETECTED from inline code OR repo manifest.
+    #
+    # BUG (reported: ModuleNotFoundError on every cloned repo). This used to
+    # read `if repo_url and detected_src:`, and the same expression was passed
+    # to _prepare_and_run as its is_repo flag. _detect_entry() only recognises
+    # a fixed list of filenames (main.py, app.py, bot.py, ...), so a repo whose
+    # entry is called anything else -- n.py, start.py, __main__.py -- returned
+    # (None, None). detected_src was then None, the flag was falsy, and
+    # _install_repo_deps NEVER RAN even though requirements.txt was sitting
+    # right there. The mechanism was correct; it was simply not reached.
+    #
+    # A manifest in the checkout is the only thing that decides now. Whether
+    # we managed to guess the entry file is unrelated to whether the repo
+    # declares dependencies.
     reqs = []
     pylibs = None
-    if repo_url and detected_src:
+    repo_has_manifest = bool(repo_url) and any(
+        os.path.isfile(os.path.join(jdir, m)) for m in
+        ("requirements.txt", "pyproject.toml", "package.json", "Gemfile", "composer.json")
+    )
+    if repo_has_manifest:
         # Install from repo manifests first (requirements.txt / package.json / Gemfile)
         pylibs = os.path.join(jdir, "pylibs")
         os.makedirs(pylibs, exist_ok=True)
@@ -1769,7 +1857,7 @@ def job_start(req: JobStartRequest, authorization: Optional[str] = Header(None))
     for line in repo_log:
         job["log"].append(line)
     job["log"].append(f"[system] entry: {os.path.relpath(src, jdir)} ({lang})")
-    threading.Thread(target=_prepare_and_run, args=(job, reqs, repo_url and detected_src), daemon=True).start()
+    threading.Thread(target=_prepare_and_run, args=(job, reqs, repo_has_manifest), daemon=True).start()
     logger.info("Job %s (%s/%s) created (repo=%s)", job_id, job["name"], lang, bool(repo_url))
     return _job_public(job)
 
@@ -1779,6 +1867,145 @@ def job_list(authorization: Optional[str] = Header(None)):
     _check_secret(authorization)
     with _jobs_lock:
         return {"jobs": [_job_public(j) for j in _jobs.values()], "capacity": MAX_BG_JOBS_HARD}
+
+
+# ---------------------------------------------------------------------------
+# FILE BROWSER  —  list / read / pin-entry for a job's working directory
+#
+# Cloned repos are multi-file, and until now only one file was reachable, so a
+# user could not even look at the requirements.txt that had failed to install.
+# These three endpoints back the tree in the editor.
+#
+# Everything is read straight off disk on each call. There is deliberately no
+# cache: a cached listing is the bug fixed in _resolve_entry_now(), and the
+# same mistake here would show a tree that disagrees with what actually runs.
+# ---------------------------------------------------------------------------
+
+# Never worth listing, and in .git's case actively harmful to walk.
+_FB_SKIP_DIRS = {
+    ".git", "node_modules", "pylibs", "__pycache__", ".venv", "venv",
+    "vendor", ".mypy_cache", ".pytest_cache", ".ruff_cache", "dist", "build",
+    ".next", ".cache", ".idea", ".vscode",
+}
+_FB_MAX_FILES = 400          # a tree past this is unusable anyway
+_FB_MAX_READ = 512 * 1024    # 512 KB: the editor is not a hex viewer
+
+
+def _fb_safe_join(jdir: str, rel: str) -> str:
+    """Resolve rel inside jdir, or raise.
+
+    Path traversal matters here even though the caller is authenticated: the
+    job directory is the security boundary, and "../../etc/passwd" must not
+    resolve. realpath collapses .. and follows symlinks, so a symlink planted
+    inside a cloned repo cannot escape either.
+    """
+    rel = (rel or "").strip().lstrip("/")
+    if not rel:
+        raise HTTPException(400, detail="path required")
+    base = os.path.realpath(jdir)
+    full = os.path.realpath(os.path.join(base, rel))
+    if full != base and not full.startswith(base + os.sep):
+        raise HTTPException(400, detail="path outside the job directory")
+    return full
+
+
+def _fb_is_texty(path: str) -> bool:
+    """Cheap binary check, so the tree can mark what is openable."""
+    try:
+        with open(path, "rb") as f:
+            chunk = f.read(4096)
+    except OSError:
+        return False
+    if b"\x00" in chunk:
+        return False
+    return True
+
+
+@app.get("/internal/jobs/{job_id}/files")
+def job_files(job_id: str, authorization: Optional[str] = Header(None)):
+    """Flat listing of the job's workspace, sorted, directories implied by path."""
+    _check_secret(authorization)
+    j = _jobs.get(job_id)
+    if not j:
+        raise HTTPException(404, detail="Job not found.")
+    jdir = j.get("dir") or ""
+    if not os.path.isdir(jdir):
+        return {"files": [], "entry": None, "truncated": False}
+
+    out = []
+    truncated = False
+    for root, dirs, names in os.walk(jdir):
+        dirs[:] = [d for d in dirs if d not in _FB_SKIP_DIRS and not d.startswith(".")]
+        for n in sorted(names):
+            if n.startswith("."):
+                continue
+            full = os.path.join(root, n)
+            rel = os.path.relpath(full, jdir)
+            try:
+                size = os.path.getsize(full)
+            except OSError:
+                continue
+            out.append({
+                "path": rel.replace(os.sep, "/"),
+                "size": size,
+                "text": size <= _FB_MAX_READ and _fb_is_texty(full),
+            })
+            if len(out) >= _FB_MAX_FILES:
+                truncated = True
+                break
+        if truncated:
+            break
+
+    out.sort(key=lambda f: (f["path"].count("/"), f["path"].lower()))
+    cur = j.get("file")
+    entry = os.path.relpath(cur, jdir).replace(os.sep, "/") if cur and os.path.isfile(cur) else None
+    return {"files": out, "entry": entry, "truncated": truncated}
+
+
+@app.get("/internal/jobs/{job_id}/file")
+def job_file_read(job_id: str, path: str, authorization: Optional[str] = Header(None)):
+    _check_secret(authorization)
+    j = _jobs.get(job_id)
+    if not j:
+        raise HTTPException(404, detail="Job not found.")
+    full = _fb_safe_join(j.get("dir") or "", path)
+    if not os.path.isfile(full):
+        raise HTTPException(404, detail="File not found.")
+    size = os.path.getsize(full)
+    if size > _FB_MAX_READ:
+        raise HTTPException(413, detail=f"File is {size // 1024} KB; the editor opens up to {_FB_MAX_READ // 1024} KB.")
+    if not _fb_is_texty(full):
+        raise HTTPException(415, detail="That file is binary.")
+    with open(full, "r", encoding="utf-8", errors="replace") as f:
+        return {"path": path, "content": f.read(), "size": size}
+
+
+class EntryPinRequest(BaseModel):
+    path: str
+
+
+@app.post("/internal/jobs/{job_id}/entry")
+def job_set_entry(job_id: str, req: EntryPinRequest,
+                  authorization: Optional[str] = Header(None)):
+    """Pin which file Run executes, for when auto-detection guessed wrong."""
+    _check_secret(authorization)
+    j = _jobs.get(job_id)
+    if not j:
+        raise HTTPException(404, detail="Job not found.")
+    full = _fb_safe_join(j.get("dir") or "", req.path)
+    if not os.path.isfile(full):
+        raise HTTPException(404, detail="File not found.")
+    rel = os.path.relpath(full, os.path.realpath(j["dir"])).replace(os.sep, "/")
+    j["entry_rel"] = rel
+    # Take effect on the next start; _resolve_entry_now() reads entry_rel first.
+    j["file"] = full
+    ext = rel.rsplit(".", 1)[-1].lower() if "." in rel else ""
+    for lname, cfg in LANGS.items():
+        if cfg.get("ext") == ext:
+            j["lang"] = lname
+            break
+    j["log"].append(f"[system] entry point set to {rel} — press Restart to apply")
+    return {"ok": True, "entry": rel, "lang": j.get("lang")}
 
 
 @app.get("/internal/jobs/{job_id}")
@@ -1982,6 +2209,24 @@ def job_restart(job_id: str, authorization: Optional[str] = Header(None)):
     # released, every later job operation piled up behind it and RunSpace froze.
     if not j.get("port"):
         j["port"] = _alloc_port()
+
+    # Re-scan the working directory instead of trusting the path recorded at
+    # create time: the user may have renamed, added or deleted files in the
+    # editor since. See _resolve_entry_now().
+    fresh = _resolve_entry_now(j)
+    if fresh:
+        if os.path.abspath(fresh) != os.path.abspath(j.get("file") or ""):
+            j["log"].append(
+                f"[system] entry changed → {os.path.relpath(fresh, j['dir'])}")
+        j["file"] = fresh
+    else:
+        j["status"] = "crashed"
+        j["log"].append(
+            "[system] ✗ nothing runnable in the workspace — every candidate "
+            "file is missing or empty. Open the file browser and pick an "
+            "entry point.")
+        return _job_public(j)
+
     j["log"].append("[system] restarting in place (workspace preserved)")
     _spawn(j)
     logger.info("Job %s restarted in place (dir: %s)", job_id, j.get("dir"))
