@@ -123,53 +123,27 @@ for (const width of [1280, 720]) {
 
 /* ── 3. NO OVERLAPPING BUTTONS ─────────────────────────────────────────── */
 console.log('\n[3] Run / Details / Close do not stack on each other');
-{
-  // Narrow: the controls must leave the header row entirely and become a
-  // vertical menu -- that is what "একটার উপর আরেকটা" was.
-  const dom = build(720), w = dom.window, d = w.document;
-  const right = d.querySelector('#tab-jobs .rs-head-right');
-  ok('the action group exists', !!right);
-  ok('narrow: it is lifted out of the header row', outOfFlow(w, right),
-     cs(w, right).position);
-  ok('narrow: it stacks vertically', cs(w, right).flexDirection === 'column',
-     cs(w, right).flexDirection);
-  ok('narrow: it is closed until asked for',
-     cs(w, right).visibility === 'hidden' || cs(w, right).opacity === '0',
-     `vis=${cs(w, right).visibility} op=${cs(w, right).opacity}`);
-  ok('narrow: it cannot be clicked while closed',
-     cs(w, right).pointerEvents === 'none', cs(w, right).pointerEvents);
-
-  d.body.classList.add('rs-side-open');
-  ok('narrow: the menu button reveals it',
-     cs(w, right).visibility === 'visible' && cs(w, right).pointerEvents === 'auto',
-     `vis=${cs(w, right).visibility} pe=${cs(w, right).pointerEvents}`);
-
-  // Every action becomes a full-width row, so two cannot share a line.
-  const seg = d.getElementById('rsJobActions');
-  ok('narrow: the segmented group unrolls into a column',
-     cs(w, seg).flexDirection === 'column', cs(w, seg).flexDirection);
-  for (const id of ['btnStartJob', 'btnStopJob', 'btnRestartJob']) {
-    const b = d.getElementById(id);
-    if (!b) continue;
-    ok(`narrow: #${id} is a full-width row`, cs(w, b).width === '100%',
-       cs(w, b).width);
-  }
-}
-{
-  // Wide: they stay inline, but nothing may shrink into its neighbour.
-  const dom = build(1280), w = dom.window, d = w.document;
-  const right = d.querySelector('#tab-jobs .rs-head-right');
-  ok('wide: the controls stay in the header', !outOfFlow(w, right),
-     cs(w, right).position);
-  ok('wide: they sit in a row', cs(w, right).flexDirection !== 'column',
-     cs(w, right).flexDirection);
+/* REWRITTEN. This section used to assert that .rs-head-right becomes a
+   dropdown below 900px. That element is gone: the brief that followed asked
+   for ONE "···" button holding every action at every width, so there is no
+   action group left in the header row to collapse. The requirement it was
+   protecting -- two controls must never share a line and never overlap --
+   is now enforced in test_runspace_single_header.js, which measures the
+   row's minimum width at 320/375/414 and checks each menu row is full
+   width. Keeping the old assertions would pin a layout that no longer
+   exists. What is still worth checking here is the invariant itself. */
+for (const width of [320, 375, 1280]) {
+  const dom = build(width), w = dom.window, d = w.document;
   const head = d.querySelector('#tab-jobs .rs-head');
-  const kids = [...head.children];
-  ok('wide: no header child is allowed to shrink',
-     kids.every(k => (cs(w, k).flexShrink || '1') === '0'),
+  const kids = [...head.children].filter(k => cs(w, k).display !== 'none');
+  ok(`[${width}] the header holds at most three things`, kids.length <= 3,
      kids.map(k => k.id || k.className).join(','));
-  ok('wide: only the breadcrumb absorbs the slack',
-     cs(w, d.querySelector('#tab-jobs .rs-crumb')).flexGrow === '1');
+  ok(`[${width}] nothing in the row may shrink except the identity`,
+     kids.every(k => k.id === 'rsIdentity' || (cs(w, k).flexShrink || '1') === '0'),
+     kids.map(k => `${k.id || k.className}:${cs(w, k).flexShrink}`).join(' '));
+  const menu = d.getElementById('rsMoreMenu');
+  ok(`[${width}] every action sits in the menu, stacked`,
+     cs(w, menu).flexDirection === 'column', cs(w, menu).flexDirection);
 }
 
 /* ── 4. SIGN-IN: filler gone, three controls arranged ──────────────────── */

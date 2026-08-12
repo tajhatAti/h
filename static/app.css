@@ -2056,90 +2056,320 @@ body.term-open .wb-term-kbd { display: flex; }
 #tab-jobs .rs-body { position: relative; }
 #tab-jobs .rs-main { flex: 1 1 100%; width: 100%; min-width: 0; }
 
-/* ── (b) one menu, buttons in a column ─────────────────────────────────── */
-/* Nothing in the header may shrink into its neighbour. */
-#tab-jobs .rs-head > * { flex-shrink: 0; }
-/* grow to fill, but NEVER shrink: `flex: 1 1 auto` resets flex-shrink to 1
-   and overrode the `> *` guard above, which is how the buttons ended up
-   crushed into each other. The long job name is truncated by overflow
-   instead of by squeezing the controls next to it. */
-#tab-jobs .rs-crumb { flex: 1 0 auto; min-width: 0; overflow: hidden; }
 
-/* Below 900px the action group leaves the header and becomes a dropdown
-   anchored to the menu button, opening downward as a column. */
-@media (max-width: 900px) {
-  #tab-jobs .rs-head { position: relative; z-index: 870; }
+/* ══════════════════════════════════════════════════════════════════════════
+   RUNSPACE HEADER — one row, one "···", editor takes the rest
 
-  #tab-jobs .rs-head-right {
-    position: absolute;
-    top: calc(100% + 6px);
-    right: var(--s3);
-    z-index: 875;
-    flex-direction: column;
-    align-items: stretch;
-    gap: var(--s-1);
-    width: 210px;
-    padding: var(--s-1);
-    background: var(--card);
-    border: 1px solid var(--line-2);
-    border-radius: var(--r-row);
-    box-shadow: var(--e3), var(--rim);
-    /* Closed: folded up into the header, invisible, untouchable. */
-    transform: scaleY(.96) translateY(-6px);
-    transform-origin: top right;
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
-    transition: transform var(--fast), opacity var(--fast), visibility var(--fast);
-  }
-  /* The same class pro.js already toggles for the rail opens this menu, so
-     no script change is needed and the two can never disagree. */
-  body.rs-side-open #tab-jobs .rs-head-right {
-    transform: none;
-    opacity: 1;
-    visibility: visible;
-    pointer-events: auto;
-  }
+   The row used to carry a rail toggle, a three-button run group, an
+   inspector button, a close button, a separator and a runner dot, plus a
+   SECOND row underneath with the name field, a runtime <select> and a
+   GitHub URL input. At 375px that is far more than fits, so it overflowed
+   and scrolled sideways instead of adapting.
 
-  /* Inside the menu every control is a full-width row, stacked. */
-  #tab-jobs .rs-head-right .rs-seg {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    width: 100%;
-    padding: 0;
-    gap: var(--s-1);
-    background: transparent;
-    border: 0;
-    box-shadow: none;
-    overflow: visible;
-  }
-  #tab-jobs .rs-head-right .rs-seg-btn,
-  #tab-jobs .rs-head-right .rs-ghost-btn {
-    width: 100%;
-    height: 40px;
-    justify-content: flex-start;
-    gap: var(--s3);
-    padding: 0 var(--s3);
-    border-radius: var(--r-sm);
-    background: transparent;
-    border: 0;
-    box-shadow: none;
-    font-size: var(--t-md);
-  }
-  #tab-jobs .rs-head-right .rs-seg-btn:hover,
-  #tab-jobs .rs-head-right .rs-ghost-btn:hover { background: var(--card-2); }
-  /* Icon-only buttons get their label back once they are list rows. */
-  #tab-jobs .rs-head-right .rs-sq { width: 100%; }
-  #tab-jobs .rs-head-right .rs-seg-label { font-size: var(--t-md); color: inherit; }
-  #tab-jobs #btnInspector::after { content: "Details"; }
-  #tab-jobs #btnDeselect::after  { content: "Close job"; }
+   Now: [☰] [● name ……… ] [···]  — and nothing else, at any width.
+   Every action lives in the menu behind "···".
+
+   On shadcn/ui: the brief asks for DropdownMenu and Sheet. This app has no
+   React — no package.json, no bundler, zero .tsx files — so those
+   components cannot be installed. The BEHAVIOUR they specify is what
+   matters and is reproduced here: an anchored dropdown on wide screens, a
+   bottom sheet under 760px, one vertical list, icon + label per row,
+   destructive actions in the status red. The existing Job Details kebab
+   already worked this way, so this also keeps the two consistent.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+#tab-jobs .rs-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  height: 52px;
+  padding: 0 var(--s-2);
+  overflow: visible;              /* the menu escapes the row */
 }
 
-/* Wide screens keep the controls inline, but with real spacing so they can
-   never touch. */
-@media (min-width: 901px) {
-  #tab-jobs .rs-head-right { gap: var(--s2); }
-  #tab-jobs .rs-head-right .rs-seg { flex: 0 0 auto; overflow: visible; }
-  #tab-jobs .rs-seg-btn { white-space: nowrap; }
+/* Nothing in the row may shrink into its neighbour... */
+#tab-jobs .rs-head > * { flex-shrink: 0; }
+
+/* ...except the identity block, which absorbs all slack and truncates. */
+#tab-jobs .rs-id {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  flex: 1 1 auto;
+  min-width: 0;                   /* required, or the text refuses to shrink */
+  overflow: hidden;
+}
+#tab-jobs .rs-id .rs-crumb-cur,
+#tab-jobs .rs-id .rs-crumb-root {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+#tab-jobs .rs-id .rs-crumb-cur { flex: 0 1 auto; }
+#tab-jobs .rs-id .rs-status-dot { flex: 0 0 auto; }
+#tab-jobs .rs-id .rs-chip { flex: 0 0 auto; }
+
+/* Below 420px the "RunSpace /" prefix is noise — the job name is the
+   information. Hiding it buys the name ~70px on a 320px screen. */
+@media (max-width: 420px) {
+  #tab-jobs .rs-id .rs-crumb-root,
+  #tab-jobs .rs-id .rs-crumb-sep { display: none; }
+}
+
+/* ── the "···" trigger and its menu ────────────────────────────────────── */
+#tab-jobs .rs-more-wrap { position: relative; flex: 0 0 auto; }
+
+#tab-jobs .rs-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 880;
+  width: 260px;
+  max-height: min(70vh, 520px);
+  overflow-y: auto;
+  padding: var(--s-1);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  background: var(--card);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-row);
+  box-shadow: var(--e3), var(--rim);
+  animation: rsMenuIn .14s var(--ease) both;
+}
+#tab-jobs .rs-menu[hidden] { display: none; }
+@keyframes rsMenuIn {
+  from { opacity: 0; transform: translateY(-6px) scaleY(.98) }
+  to   { opacity: 1; transform: none }
+}
+
+/* One vertical list. Icon + label, even spacing, no colour noise. */
+#tab-jobs .rs-menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  width: 100%;
+  min-height: 44px;               /* touch target */
+  padding: 0 var(--s-3);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  box-shadow: none;
+  color: var(--fg-2);
+  font-size: var(--t-md);
+  font-weight: 550;
+  text-align: left;
+  justify-content: flex-start;
+  cursor: pointer;
+}
+#tab-jobs .rs-menu-item:hover { background: var(--bg-3); color: var(--fg); }
+#tab-jobs .rs-menu-item:active { background: var(--line); }
+#tab-jobs .rs-menu-item[hidden] { display: none; }
+#tab-jobs .rs-menu-item .rs-ic-sm { flex: 0 0 auto; }
+#tab-jobs .rs-menu-item .rs-seg-label {
+  flex: 1 1 auto; font-size: var(--t-md); color: inherit;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* Destructive actions carry the status red; everything else stays neutral. */
+#tab-jobs .rs-menu-danger,
+#tab-jobs .rs-menu .rs-seg-danger { color: var(--danger); }
+#tab-jobs .rs-menu-danger:hover,
+#tab-jobs .rs-menu .rs-seg-danger:hover { background: var(--danger-dim); color: var(--danger); }
+
+#tab-jobs .rs-menu-head {
+  padding: var(--s-2) var(--s-3) var(--s-1);
+  font-family: var(--mono); font-size: var(--t-xs);
+  letter-spacing: .14em; text-transform: uppercase; color: var(--fg-3);
+}
+#tab-jobs .rs-menu-sep { height: 1px; margin: var(--s-1) var(--s-2); background: var(--line); }
+#tab-jobs .rs-menu-grab { display: none; }
+
+/* The run group is a plain list inside the menu, not a segmented control. */
+#tab-jobs .rs-menu .rs-seg {
+  display: flex; flex-direction: column; align-items: stretch;
+  width: 100%; gap: var(--s-1); padding: 0;
+  background: transparent; border: 0; box-shadow: none; overflow: visible;
+}
+#tab-jobs .rs-menu .rs-seg[hidden] { display: none; }
+
+/* Rows that hold a field rather than fire an action. */
+#tab-jobs .rs-menu-field { cursor: default; }
+#tab-jobs .rs-menu-field:hover { background: transparent; }
+#tab-jobs .rs-menu-field .rs-sel {
+  flex: 0 0 auto; width: 110px; height: 32px;
+  font-size: var(--t-sm); padding: 0 28px 0 var(--s-2);
+}
+#tab-jobs .rs-menu-field.rs-gh-wrap { gap: var(--s-2); padding: var(--s-2) var(--s-3); }
+#tab-jobs .rs-menu-field .rs-gh { flex: 1 1 auto; min-width: 0; height: 32px; font-size: var(--t-sm); }
+#tab-jobs .rs-menu-field .rs-sq { flex: 0 0 auto; width: 32px; height: 32px; }
+
+/* ── under 760px the same menu is a bottom sheet ───────────────────────── */
+@media (max-width: 760px) {
+  #tab-jobs .rs-menu {
+    position: fixed;
+    top: auto; right: 0; bottom: 0; left: 0;
+    width: auto;
+    max-height: 76vh;
+    border-radius: var(--r-md) var(--r-md) 0 0;
+    border-left: 0; border-right: 0; border-bottom: 0;
+    padding: var(--s-2) var(--s-2) calc(var(--s-3) + env(safe-area-inset-bottom, 0px));
+    animation: rsSheetUp .18s var(--ease) both;
+  }
+  @keyframes rsSheetUp { from { transform: translateY(100%) } to { transform: none } }
+  #tab-jobs .rs-menu-grab {
+    display: block; width: 40px; height: 4px; margin: var(--s-1) auto var(--s-2);
+    background: var(--line-2); border-radius: var(--r-pill);
+  }
+  #tab-jobs .rs-menu-item { min-height: 48px; }
+  #tab-jobs .rs-menu-field .rs-sel { width: 130px; height: 38px; }
+  #tab-jobs .rs-menu-field .rs-gh,
+  #tab-jobs .rs-menu-field .rs-sq { height: 38px; }
+}
+
+/* ── everything below the header is the editor ─────────────────────────── */
+/* The meta row is now one full-width field, so it can never wrap. */
+#tab-jobs .rs-meta {
+  flex: 0 0 auto;
+  height: auto;
+  min-height: 40px;
+  padding: var(--s-1) var(--s-2);
+  display: flex; align-items: center;
+  overflow: visible;
+  border-bottom: 1px solid var(--line);
+}
+#tab-jobs .rs-meta .rs-inp {
+  width: 100%; height: 32px;
+  background: transparent; border-color: transparent; box-shadow: none;
+  font-size: var(--t-md);
+}
+#tab-jobs .rs-meta .rs-inp:focus {
+  background: var(--bg); border-color: var(--line-2);
+}
+
+/* The editor pane claims all remaining height. */
+#tab-jobs .rs-ws    { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+#tab-jobs .rs-split { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+#tab-jobs .rs-editor { flex: 1 1 auto; min-height: 0; }
+#tab-jobs .rs-cm-host { flex: 1 1 auto; min-height: 0; height: 100%; }
+#tab-jobs .rs-cm-host .cm-editor { height: 100%; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   JOB DETAILS — the same pattern
+   One header, one "···", the tab panel gets the rest of the height.
+   The kebab already existed here; this makes the header behave like
+   RunSpace's under pressure instead of letting the action row wrap.
+   ══════════════════════════════════════════════════════════════════════════ */
+#tab-jobs .jd-top { flex-wrap: nowrap; overflow: visible; gap: var(--s-2); }
+#tab-jobs .jd-top > * { flex-shrink: 0; }
+#tab-jobs .jd-id { flex: 1 1 auto; min-width: 0; overflow: hidden; }
+#tab-jobs .jd-name {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block;
+}
+#tab-jobs .jd-top-acts { flex: 0 0 auto; gap: var(--s-1); }
+/* Under 620px only the primary action and the kebab stay on the row. */
+@media (max-width: 620px) {
+  #tab-jobs .jd-top-acts #jdThemeToggle { display: none; }
+  #tab-jobs .jd-avatar { display: none; }
+}
+#tab-jobs .jd-menu-item { min-height: 44px; }
+/* Content area fills what is left. */
+#tab-jobs .jd-scroll { flex: 1 1 auto; min-height: 0; }
+
+/* Details header at phone widths.
+   Measured need was 442px against a 375px viewport: back + avatar +
+   name/badge + a labelled primary button + theme toggle + kebab. The same
+   rule as RunSpace applies — one identity, one primary, one "···" — so the
+   secondary controls fold into the menu that is already there. */
+@media (max-width: 620px) {
+  #tab-jobs .jd-top { padding-left: var(--s-2); padding-right: var(--s-2); }
+  /* The label is what costs the width; the icon still says "run". */
+  #tab-jobs .jd-top-acts #jdStart .jd-label,
+  #tab-jobs .jd-top-acts #jdStart span:not(.jd-i) { display: none; }
+  #tab-jobs .jd-top-acts #jdStart { width: 38px; padding: 0; justify-content: center; }
+  #tab-jobs .jd-back { width: 34px; padding: 0; }
+  #tab-jobs .jd-badge, #tab-jobs #jdBadge { max-width: 90px; overflow: hidden; text-overflow: ellipsis; }
+}
+@media (max-width: 400px) {
+  /* At the narrowest sizes the status pill duplicates the header dot. */
+  #tab-jobs #jdBadge { display: none; }
+}
+
+/* While the sheet is open the page behind it must not scroll: a swipe
+   meant for the menu would otherwise move the editor underneath. */
+body.rs-menu-open { overflow: hidden; }
+@media (min-width: 761px) {
+  /* On desktop the menu is a small dropdown; locking the page would be
+     heavy-handed and causes a scrollbar-width layout jump. */
+  body.rs-menu-open { overflow: auto; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CODE STUDIO — the same single-header pattern
+   The toolbar held a name field, a language <select> and eight action
+   buttons in one row. Publish and Save stay (the two things done most);
+   the rest sit behind a "···" so the row cannot overflow at 320px.
+   ══════════════════════════════════════════════════════════════════════════ */
+.cs-header { overflow: visible; gap: var(--s-2); flex-wrap: nowrap; }
+.cs-header > * { flex-shrink: 0; }
+.cs-brand { flex: 1 1 auto; min-width: 0; overflow: hidden; }
+.cs-name  { min-width: 0; width: 100%; text-overflow: ellipsis; }
+.cs-actions { flex: 0 0 auto; display: flex; align-items: center; gap: var(--s-1); }
+
+.cs-more-wrap { position: relative; flex: 0 0 auto; }
+.cs-menu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 880;
+  width: 240px; max-height: min(70vh, 480px); overflow-y: auto;
+  padding: var(--s-1);
+  display: flex; flex-direction: column; gap: 2px;
+  background: var(--card); border: 1px solid var(--line-2);
+  border-radius: var(--r-row); box-shadow: var(--e3), var(--rim);
+  animation: rsMenuIn .14s var(--ease) both;
+}
+.cs-menu[hidden] { display: none; }
+.cs-menu-item {
+  display: flex; align-items: center; gap: var(--s-3);
+  width: 100%; min-height: 44px; padding: 0 var(--s-3);
+  border: 0; border-radius: var(--r-sm); background: transparent; box-shadow: none;
+  color: var(--fg-2); font-size: var(--t-md); font-weight: 550;
+  justify-content: flex-start; text-align: left; cursor: pointer;
+}
+.cs-menu-item:hover { background: var(--bg-3); color: var(--fg); }
+.cs-menu-item .btn-svg { width: 16px; height: 16px; flex: 0 0 auto; }
+.cs-menu-item span { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cs-menu-head {
+  padding: var(--s-2) var(--s-3) var(--s-1);
+  font-family: var(--mono); font-size: var(--t-xs);
+  letter-spacing: .14em; text-transform: uppercase; color: var(--fg-3);
+}
+.cs-menu-sep { height: 1px; margin: var(--s-1) var(--s-2); background: var(--line); }
+.cs-menu-grab { display: none; }
+
+/* Editor fills what is left. */
+.cs-canvas, .cs-editor-zone { flex: 1 1 auto; min-height: 0; }
+
+@media (max-width: 760px) {
+  /* Bottom sheet, matching RunSpace. */
+  .cs-menu {
+    position: fixed; top: auto; right: 0; bottom: 0; left: 0;
+    width: auto; max-height: 76vh;
+    border-radius: var(--r-md) var(--r-md) 0 0;
+    border-left: 0; border-right: 0; border-bottom: 0;
+    padding: var(--s-2) var(--s-2) calc(var(--s-3) + env(safe-area-inset-bottom, 0px));
+    animation: rsSheetUp .18s var(--ease) both;
+  }
+  .cs-menu-grab {
+    display: block; width: 40px; height: 4px; margin: var(--s-1) auto var(--s-2);
+    background: var(--line-2); border-radius: var(--r-pill);
+  }
+  .cs-menu-item { min-height: 48px; }
+  /* Labels off the two remaining buttons; the icons carry them. */
+  .cs-actions .cs-act span { display: none; }
+  .cs-actions .cs-act { width: 38px; padding: 0; justify-content: center; }
+  .cs-lang { width: 84px; }
+}
+@media (max-width: 380px) {
+  /* The language select is the last thing to give way. */
+  .cs-header .cs-lang { display: none; }
 }

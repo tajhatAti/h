@@ -3997,6 +3997,85 @@ function _initWbWiring() {
     }, 60);
   };
   if (newBtn)  { newBtn.addEventListener("click", onNew); newBtn.dataset.wired = "1"; newBtn.type = "button"; }
+
+  /* ── the "···" overflow menu ────────────────────────────────────────────
+     Every toolbar action now lives behind one button, so the header row
+     cannot overflow at any width. Same contract as the Job Details kebab
+     (#jdMoreBtn): toggle `hidden`, close on outside click, close on Escape,
+     close after an item is chosen.
+
+     Three details that matter:
+       · the item handlers are bound elsewhere and are untouched — this only
+         shows and hides the container, so no action can break by moving.
+       · closing happens on a 0ms timeout so the item's own click handler
+         runs first; closing synchronously would unmount the button
+         mid-dispatch.
+       · rows that CONTAIN a field (runtime select, GitHub URL) must not
+         close the menu when clicked, or the select can never be used. */
+  /* Code Studio's "···" — identical contract to RunSpace's, wired here so
+     both live in one place and cannot drift apart. */
+  const csMoreBtn  = document.getElementById("csMoreBtn");
+  const csMoreMenu = document.getElementById("csMoreMenu");
+  if (csMoreBtn && csMoreMenu) {
+    const closeCs = () => {
+      csMoreMenu.hidden = true;
+      csMoreBtn.setAttribute("aria-expanded", "false");
+    };
+    csMoreBtn.addEventListener("click", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const open = csMoreMenu.hidden;
+      csMoreMenu.hidden = !open;
+      csMoreBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+    csMoreMenu.addEventListener("click", (e) => {
+      if (!e.target.closest(".cs-menu-item")) return;
+      setTimeout(closeCs, 0);      // let the item's own handler run first
+    });
+    document.addEventListener("click", (e) => {
+      if (csMoreMenu.hidden) return;
+      if (csMoreMenu.contains(e.target) || csMoreBtn.contains(e.target)) return;
+      closeCs();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !csMoreMenu.hidden) { e.stopPropagation(); closeCs(); }
+    });
+  }
+
+  const moreBtn  = document.getElementById("rsMoreBtn");
+  const moreMenu = document.getElementById("rsMoreMenu");
+  if (moreBtn && moreMenu) {
+    const closeMore = () => {
+      moreMenu.hidden = true;
+      moreBtn.setAttribute("aria-expanded", "false");
+      document.body.classList.remove("rs-menu-open");
+    };
+    const openMore = () => {
+      moreMenu.hidden = false;
+      moreBtn.setAttribute("aria-expanded", "true");
+      document.body.classList.add("rs-menu-open");
+    };
+    moreBtn.addEventListener("click", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      if (moreMenu.hidden) openMore(); else closeMore();
+    });
+    moreMenu.addEventListener("click", (e) => {
+      // A click inside a field row is for the field, not for dismissing.
+      if (e.target.closest(".rs-menu-field")) return;
+      if (!e.target.closest(".rs-menu-item")) return;
+      setTimeout(closeMore, 0);
+    });
+    document.addEventListener("click", (e) => {
+      if (moreMenu.hidden) return;
+      if (moreMenu.contains(e.target) || moreBtn.contains(e.target)) return;
+      closeMore();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !moreMenu.hidden) { e.stopPropagation(); closeMore(); }
+    });
+    // Changing the runtime is a decision; the menu has done its job.
+    const langSel = document.getElementById("jobLang");
+    if (langSel) langSel.addEventListener("change", () => setTimeout(closeMore, 120));
+  }
   if (newBtn2) { newBtn2.addEventListener("click", onNew); newBtn2.type = "button"; newBtn2._w = 1; }
   if (newBtnE) { newBtnE.addEventListener("click", onNew); newBtnE.type = "button"; newBtnE._w = 1; }
   // Enter key in name / repo fields → Run (mobile keyboard "Go" support)

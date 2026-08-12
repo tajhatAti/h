@@ -564,14 +564,29 @@
           <option value="ruby">RB</option>
         </select>
         <div class="cs-actions">
-          <button class="cs-act ic-btn" id="btnNewSnippet" title="New file (Ctrl+N)"><svg viewBox="0 0 24" class="btn-svg"><use href="#i-plus"/></svg></button>
-          <button class="cs-act ic-btn" id="btnCopySnippet" title="Copy code"><svg viewBox="0 0 24" class="btn-svg"><use href="#i-copy"/></svg></button>
-          <button class="cs-act ic-btn" id="btnDownloadSnippet" title="Download file"><svg viewBox="0 0 24" class="btn-svg"><use href="#i-download"/></svg></button>
-          <button class="cs-act ic-btn" id="btnFormatSnippet" title="Format"><svg viewBox="0 0 24" class="btn-svg"><use href="#i-format"/></svg></button>
-          <button class="cs-act" id="btnRunSnippet" title="Preview"><svg viewBox="0 0 24" class="btn-svg"><use href="#i-eye"/></svg><span>Preview</span></button>
-          <button class="cs-act" id="btnToggleTerm" title="Terminal (Ctrl+`)"><svg viewBox="0 0 24" class="btn-svg"><use href="#i-terminal"/></svg><span>Term</span></button>
           <button class="cs-act primary publish-btn" id="btnShareSnippet" title="Publish" data-rocket><svg viewBox="0 0 24" class="btn-svg"><use href="#i-rocket"/></svg><span>Publish</span></button>
           <button class="cs-act" id="btnSaveSnippet" title="Save (Ctrl+S)"><svg viewBox="0 0 24" class="btn-svg"><use href="#i-save"/></svg><span>Save</span></button>
+
+          <!-- Same pattern as RunSpace: one "···" holds the secondary
+               actions so the row cannot overflow at 320px. The buttons are
+               MOVED, not duplicated, so their existing handlers still fire. -->
+          <div class="cs-more-wrap">
+            <button type="button" class="cs-act ic-btn" id="csMoreBtn" title="More actions"
+                    aria-label="More actions" aria-haspopup="menu" aria-expanded="false">
+              <svg viewBox="0 0 16 16" class="btn-svg" fill="currentColor" aria-hidden="true"><circle cx="3" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="13" cy="8" r="1.4"/></svg>
+            </button>
+            <div class="cs-menu" id="csMoreMenu" role="menu" hidden>
+              <div class="cs-menu-grab" aria-hidden="true"></div>
+              <div class="cs-menu-head">Actions</div>
+              <button class="cs-menu-item" id="btnNewSnippet" role="menuitem" title="New file (Ctrl+N)"><svg viewBox="0 0 24" class="btn-svg"><use href="#i-plus"/></svg><span>New file</span></button>
+              <button class="cs-menu-item" id="btnRunSnippet" role="menuitem" title="Run"><svg viewBox="0 0 24" class="btn-svg"><use href="#i-play"/></svg><span>Run</span></button>
+              <button class="cs-menu-item" id="btnFormatSnippet" role="menuitem" title="Format"><svg viewBox="0 0 24" class="btn-svg"><use href="#i-wand"/></svg><span>Format</span></button>
+              <div class="cs-menu-sep" role="separator"></div>
+              <button class="cs-menu-item" id="btnCopySnippet" role="menuitem" title="Copy code"><svg viewBox="0 0 24" class="btn-svg"><use href="#i-copy"/></svg><span>Copy code</span></button>
+              <button class="cs-menu-item" id="btnDownloadSnippet" role="menuitem" title="Download"><svg viewBox="0 0 24" class="btn-svg"><use href="#i-download"/></svg><span>Download</span></button>
+              <button class="cs-menu-item" id="btnToggleTerm" role="menuitem" title="Terminal (Ctrl+`)"><svg viewBox="0 0 24" class="btn-svg"><use href="#i-term"/></svg><span>Terminal</span></button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -642,51 +657,101 @@
            phone screen was toolbar. Now there is ONE header: sidebar
            toggle, breadcrumb identity, and the action group.
            ============================================================ -->
+      <!-- ============================================================
+           ONE HEADER ROW.
+           Left: job name + status dot, truncating. Right: a single "···".
+           Every action lives in the menu behind that button, so the row
+           cannot overflow at any width and never needs horizontal scroll.
+           The old row carried a rail toggle, a 3-button run group, an
+           inspector button, a close button, a separator and a runner dot;
+           below ~900px they collided.
+           ============================================================ -->
       <header class="rs-head">
         <button type="button" class="rs-ghost-btn rs-sq" id="wbMenuBtn"
-                aria-label="Toggle file panel" aria-expanded="true" aria-controls="wbSide">
+                aria-label="Toggle job list" aria-expanded="false" aria-controls="wbSide">
           <svg viewBox="0 0 16 16" class="rs-ic" fill="currentColor" aria-hidden="true"><path d="M2 3.75A.75.75 0 0 1 2.75 3h10.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 3.75Zm0 4A.75.75 0 0 1 2.75 7h10.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 7.75Zm0 4a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1-.75-.75Z"/></svg>
         </button>
 
-        <!-- Breadcrumb: RunSpace / <job>  — tells you where you are -->
-        <nav class="rs-crumb" aria-label="Breadcrumb">
+        <!-- Identity: dot + name. Truncates; never wraps, never pushes. -->
+        <div class="rs-id" id="rsIdentity">
+          <span class="rs-status-dot" id="wbRunnerStat" title="Status"></span>
           <button type="button" class="rs-crumb-root" id="rsCrumbRoot">RunSpace</button>
           <span class="rs-crumb-sep" id="rsCrumbSep" hidden>/</span>
           <span class="rs-crumb-cur" id="rsTitle" hidden></span>
           <span class="rs-chip" id="rsHeadState" hidden></span>
-        </nav>
+        </div>
 
-        <div class="rs-head-right">
-          <!-- Job actions live in ONE segmented group so related controls
-               read as related, instead of five identical loose squares. -->
-          <div class="rs-seg" id="rsJobActions" hidden>
-            <button class="rs-seg-btn" id="btnStartJob" title="Run &amp; deploy (Ctrl+Enter)">
-              <svg viewBox="0 0 16 16" class="rs-ic-sm" fill="currentColor" aria-hidden="true"><path d="M4.5 3.3v9.4c0 .3.3.5.6.3l7.4-4.7a.4.4 0 0 0 0-.6L5.1 3a.4.4 0 0 0-.6.3Z"/></svg>
-              <span class="rs-seg-label">Run</span>
-              <span class="rs-spin" aria-hidden="true"></span>
+        <!-- The single overflow control. -->
+        <div class="rs-more-wrap">
+          <button type="button" class="rs-ghost-btn rs-sq" id="rsMoreBtn"
+                  title="Actions" aria-label="Actions" aria-haspopup="menu" aria-expanded="false">
+            <svg viewBox="0 0 16 16" class="rs-ic" fill="currentColor" aria-hidden="true"><circle cx="3" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="13" cy="8" r="1.4"/></svg>
+          </button>
+
+          <!-- Dropdown on wide screens, bottom sheet under 760px. Same
+               markup, same handlers: only the presentation differs. -->
+          <div class="rs-menu" id="rsMoreMenu" role="menu" hidden>
+            <div class="rs-menu-grab" aria-hidden="true"></div>
+            <div class="rs-menu-head">Actions</div>
+
+            <div class="rs-seg" id="rsJobActions" hidden>
+              <button class="rs-menu-item rs-seg-btn" id="btnStartJob" role="menuitem" title="Run &amp; deploy (Ctrl+Enter)">
+                <svg viewBox="0 0 16 16" class="rs-ic-sm" fill="currentColor" aria-hidden="true"><path d="M4.5 3.3v9.4c0 .3.3.5.6.3l7.4-4.7a.4.4 0 0 0 0-.6L5.1 3a.4.4 0 0 0-.6.3Z"/></svg>
+                <span class="rs-seg-label">Run</span>
+                <span class="rs-spin" aria-hidden="true"></span>
+              </button>
+              <button class="rs-menu-item rs-seg-btn" id="btnRestartJob" role="menuitem" title="Restart" hidden>
+                <svg viewBox="0 0 16 16" class="rs-ic-sm" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 8a6 6 0 0 1 10-4.4L14 5"/><path d="M14 2v3.5h-3.5"/><path d="M14 8a6 6 0 0 1-10 4.4L2 11"/><path d="M2 14v-3.5h3.5"/></svg>
+                <span class="rs-seg-label">Restart</span>
+              </button>
+              <button class="rs-menu-item rs-seg-btn rs-seg-danger" id="btnStopJob" role="menuitem" title="Stop" hidden>
+                <svg viewBox="0 0 16 16" class="rs-ic-sm" fill="currentColor" aria-hidden="true"><rect x="4" y="4" width="8" height="8" rx="1.2"/></svg>
+                <span class="rs-seg-label">Stop</span>
+              </button>
+            </div>
+
+            <div class="rs-menu-sep" role="separator"></div>
+
+            <button class="rs-menu-item" id="btnInspector" role="menuitem"
+                    aria-expanded="false" aria-controls="wbInspector" hidden>
+              <svg viewBox="0 0 16 16" class="rs-ic-sm" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="1.4" y="2.4" width="13.2" height="11.2" rx="2"/><path d="M10.2 2.4v11.2"/></svg>
+              <span class="rs-seg-label">Details</span>
             </button>
-            <button class="rs-seg-btn" id="btnRestartJob" title="Restart" hidden>
-              <svg viewBox="0 0 16 16" class="rs-ic-sm" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 8a6 6 0 0 1 10-4.4L14 5"/><path d="M14 2v3.5h-3.5"/><path d="M14 8a6 6 0 0 1-10 4.4L2 11"/><path d="M2 14v-3.5h3.5"/></svg>
-              <span class="rs-seg-label">Restart</span>
-            </button>
-            <button class="rs-seg-btn rs-seg-danger" id="btnStopJob" title="Stop" hidden>
-              <svg viewBox="0 0 16 16" class="rs-ic-sm" fill="currentColor" aria-hidden="true"><rect x="4" y="4" width="8" height="8" rx="1.2"/></svg>
-              <span class="rs-seg-label">Stop</span>
+
+            <!-- Runtime lives in the menu rather than a second toolbar row:
+                 a select cannot be guaranteed to fit beside anything at
+                 320px, and the brief says move it here instead of letting
+                 it overflow. -->
+            <label class="rs-menu-item rs-menu-field" id="rsLangRow">
+              <svg viewBox="0 0 16 16" class="rs-ic-sm" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4 2.5 8 6 12"/><path d="m10 4 3.5 4L10 12"/></svg>
+              <span class="rs-seg-label">Runtime</span>
+              <select class="rs-sel" id="jobLang" aria-label="Runtime">
+                <option value="python">Python</option>
+                <option value="javascript">Node.js</option>
+                <option value="bash">Bash</option>
+                <option value="ruby">Ruby</option>
+                <option value="php">PHP</option>
+              </select>
+            </label>
+
+            <!-- GitHub import: label + field on their own row inside the menu. -->
+            <div class="rs-menu-item rs-menu-field rs-gh-wrap">
+              <span class="rs-gh-ic" aria-hidden="true">
+                <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+              </span>
+              <input class="rs-inp rs-gh" id="jobRepoUrl" type="url" placeholder="Import from a GitHub repo…" spellcheck="false" autocomplete="off" aria-label="GitHub repository URL">
+              <button class="rs-ghost-btn rs-sq" id="btnImportGh" title="Import repository" aria-label="Import repository">
+                <svg viewBox="0 0 16 16" class="rs-ic-sm" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v8"/><path d="m4.5 7 3.5 3.5L11.5 7"/><path d="M2.5 13.5h11"/></svg>
+              </button>
+            </div>
+
+            <div class="rs-menu-sep" role="separator"></div>
+
+            <button class="rs-menu-item rs-menu-danger" id="btnDeselect" role="menuitem" hidden>
+              <svg viewBox="0 0 16 16" class="rs-ic-sm" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 4 4 12"/><path d="m4 4 8 8"/></svg>
+              <span class="rs-seg-label">Close job</span>
             </button>
           </div>
-
-          <!-- Toggles the third column on desktop, the bottom sheet on mobile.
-               Same control, same data — only the presentation differs. -->
-          <button class="rs-ghost-btn rs-sq" id="btnInspector" title="Toggle inspector"
-                  aria-label="Toggle inspector" aria-expanded="false" aria-controls="wbInspector" hidden>
-            <svg viewBox="0 0 16 16" class="rs-ic-sm" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="1.4" y="2.4" width="13.2" height="11.2" rx="2"/><path d="M10.2 2.4v11.2"/></svg>
-          </button>
-          <button class="rs-ghost-btn rs-sq" id="btnDeselect" title="Close job" hidden>
-            <svg viewBox="0 0 16 16" class="rs-ic-sm" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 4 4 12"/><path d="m4 4 8 8"/></svg>
-          </button>
-
-          <span class="rs-sep-v" aria-hidden="true"></span>
-          <span class="rs-status-dot" id="wbRunnerStat" title="Runner status"></span>
         </div>
       </header>
 
@@ -755,26 +820,11 @@
                  header's segmented group. What is left is job METADATA —
                  one row, never wrapping, horizontally scrollable if narrow.
                  ======================================================== -->
+            <!-- The one thin row the brief permits: a single full-width
+                 field that cannot wrap at any width. Runtime and GitHub
+                 import moved into the "···" menu. -->
             <div class="rs-meta">
               <input class="rs-inp" id="jobName" type="text" placeholder="Untitled job" maxlength="60" spellcheck="false" autocomplete="off" aria-label="Job name">
-              <span class="rs-sep-v" aria-hidden="true"></span>
-              <select class="rs-sel" id="jobLang" aria-label="Runtime">
-                <option value="python">Python</option>
-                <option value="javascript">Node.js</option>
-                <option value="bash">Bash</option>
-                <option value="ruby">Ruby</option>
-                <option value="php">PHP</option>
-              </select>
-              <span class="rs-sep-v" aria-hidden="true"></span>
-              <div class="rs-gh-wrap">
-                <span class="rs-gh-ic" aria-hidden="true">
-                  <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
-                </span>
-                <input class="rs-inp rs-gh" id="jobRepoUrl" type="url" placeholder="Import from a GitHub repo…" spellcheck="false" autocomplete="off" aria-label="GitHub repository URL">
-                <button class="rs-ghost-btn rs-sq" id="btnImportGh" title="Import repository" aria-label="Import repository">
-                  <svg viewBox="0 0 16 16" class="rs-ic-sm" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v8"/><path d="m4.5 7 3.5 3.5L11.5 7"/><path d="M2.5 13.5h11"/></svg>
-                </button>
-              </div>
             </div>
 
             <!-- Vertical split: editor top, logs bottom -->
