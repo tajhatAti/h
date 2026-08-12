@@ -7075,3 +7075,176 @@ function _initRsHeaderActions() {
 if (document.readyState === "loading")
   document.addEventListener("DOMContentLoaded", () => setTimeout(_initRsHeaderActions, 70));
 else setTimeout(_initRsHeaderActions, 70);
+
+/* ══════════════════════════════════════════════════════════════════════════
+   JOB LIST PANEL  —  standalone, opens like the "···" menu
+
+   The old .rs-side rail is driven by two body classes and eight competing
+   CSS blocks; tapping "Job list" toggled those classes and the result
+   depended on which block won. This renders the same jobs into its own
+   panel with the menu's styling, and touches none of that.
+
+   It reads window._lastJobs, which loadJobs() already keeps current, so
+   there is no second fetch and no second source of truth.
+   ══════════════════════════════════════════════════════════════════════════ */
+function _rsJobsPopRender() {
+  const list = document.getElementById("rsJobsPopList");
+  if (!list) return;
+  const jobs = window._lastJobs || [];
+  if (!jobs.length) {
+    list.innerHTML = '<div class="rs-jp-empty">No jobs yet — create one below.</div>';
+    return;
+  }
+  const esc = (t) => String(t == null ? "" : t)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  list.innerHTML = jobs.map(j => {
+    const st = String(j.status || "").toLowerCase();
+    const cls = st === "running" ? "running" : (st === "crashed" ? "crashed" : "");
+    const active = String(j.id) === String(_selectedJobId) ? " is-active" : "";
+    return '<button type="button" class="rs-jp-item' + active + '" data-jid="' + esc(j.id) + '">' +
+             '<span class="rs-jp-dot ' + cls + '"></span>' +
+             '<span class="rs-jp-name">' + esc(j.name || "untitled") + "</span>" +
+             '<span class="rs-jp-meta">' + esc(j.language || "") + "</span>" +
+           "</button>";
+  }).join("");
+}
+
+function rsJobsPopOpen() {
+  const pop = document.getElementById("rsJobsPop");
+  if (!pop) return;
+  const menu = document.getElementById("rsMoreMenu");
+  if (menu) menu.hidden = true;          // only one panel at a time
+  _rsJobsPopRender();
+  pop.hidden = false;
+  document.body.classList.add("rs-menu-open");
+}
+function rsJobsPopClose() {
+  const pop = document.getElementById("rsJobsPop");
+  if (!pop) return;
+  pop.hidden = true;
+  const menu = document.getElementById("rsMoreMenu");
+  if (!menu || menu.hidden) document.body.classList.remove("rs-menu-open");
+}
+
+function _initRsJobsPop() {
+  const pop = document.getElementById("rsJobsPop");
+  if (!pop || pop.dataset.wired === "1") return;
+  pop.dataset.wired = "1";
+
+  // The menu row opens this instead of toggling the legacy rail classes.
+  const trigger = document.getElementById("btnJobsInMenu");
+  if (trigger) {
+    const fresh = trigger.cloneNode(true);   // drop the old rail handler
+    trigger.parentNode.replaceChild(fresh, trigger);
+    fresh.addEventListener("click", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const menu = document.getElementById("rsMoreMenu");
+      if (menu) menu.hidden = true;
+      rsJobsPopOpen();
+    });
+  }
+
+  pop.addEventListener("click", (e) => {
+    const row = e.target.closest(".rs-jp-item");
+    if (row) {
+      e.preventDefault(); e.stopPropagation();
+      rsJobsPopClose();
+      if (typeof selectJob === "function") selectJob(row.getAttribute("data-jid"));
+      return;
+    }
+    if (e.target.closest("#rsJobsPopNew")) {
+      e.preventDefault(); e.stopPropagation();
+      rsJobsPopClose();
+      const real = document.getElementById("btnNew");
+      if (real) real.click();
+    }
+  });
+
+  document.addEventListener("click", (e) => {
+    if (pop.hidden) return;
+    if (pop.contains(e.target)) return;
+    if (e.target.closest("#btnJobsInMenu, #rsMoreBtn")) return;
+    rsJobsPopClose();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !pop.hidden) { e.stopPropagation(); rsJobsPopClose(); }
+  });
+
+  const scrim = document.getElementById("rsMenuScrim");
+  if (scrim) scrim.addEventListener("click", rsJobsPopClose);
+}
+
+/* Tapping the inspector sheet itself dismisses it, as asked. */
+function _initRsInspDismiss() {
+  const insp = document.getElementById("wbInspector") ||
+               document.querySelector("#tab-jobs .rs-insp");
+  if (!insp || insp.dataset.dismissWired === "1") return;
+  insp.dataset.dismissWired = "1";
+  insp.addEventListener("click", (e) => {
+    // Only a tap on the sheet's own background closes it; controls inside
+    // must keep working.
+    if (e.target !== insp && !e.target.classList.contains("rs-insp-head")) return;
+    document.body.classList.remove("rs-insp-open");
+    insp.classList.remove("rs-insp-open");
+  });
+}
+
+if (document.readyState === "loading")
+  document.addEventListener("DOMContentLoaded", () => setTimeout(() => {
+    _initRsJobsPop(); _initRsInspDismiss();
+  }, 80));
+else setTimeout(() => { _initRsJobsPop(); _initRsInspDismiss(); }, 80);
+
+/* ══════════════════════════════════════════════════════════════════════════
+   REPO JOBS — show the cloned entry file in the editor
+
+   A GitHub-imported job stores no inline code: the source arrives with the
+   clone and lives in the runner's workspace. selectJob() fills the editor
+   from the DB row, so for those jobs it filled it with "" and the editor
+   looked empty even though the project was running fine.
+
+   The file-browser endpoint added earlier already serves the workspace, so
+   this asks it for the current entry file. Read-only intent: the user can
+   still edit and redeploy, exactly as with a pasted job.
+   ══════════════════════════════════════════════════════════════════════════ */
+async function _rsPullRepoEntry(jobId) {
+  if (!jobId) return;
+  try {
+    const listing = await api("/api/jobs/" + jobId + "/files", "GET", null, true);
+    const entry = listing && listing.entry;
+    if (!entry) return;
+    const got = await api("/api/jobs/" + jobId + "/file?path=" +
+                          encodeURIComponent(entry), "GET", null, true);
+    if (!got || typeof got.content !== "string") return;
+    // Do not clobber unsaved edits.
+    const cur = (typeof _jobCmGetValue === "function" ? _jobCmGetValue() : "") || "";
+    if (cur.trim()) return;
+    _jobCmSetValue(got.content);
+    const ext = (entry.split(".").pop() || "").toLowerCase();
+    const map = { py: "python", js: "javascript", mjs: "javascript",
+                  rb: "ruby", php: "php", sh: "bash" };
+    if (map[ext]) _jobCmSetMode(map[ext]);
+    if (typeof _setHint === "function") _setHint("", entry);
+  } catch (e) {
+    /* The job may not be running yet, or the runner may have restarted —
+       neither is worth a toast on a background fill. */
+  }
+}
+
+/* Hook it onto selectJob without editing that function: wrap it once. */
+(function _wrapSelectJobForRepo() {
+  if (typeof selectJob !== "function" || window.__repoEntryWrapped) return;
+  window.__repoEntryWrapped = true;
+  const orig = selectJob;
+  window.selectJob = function (id) {
+    const r = orig.apply(this, arguments);
+    // After the normal fill, top up from the workspace when it left the
+    // editor empty — which is exactly the repo-job case.
+    setTimeout(() => {
+      const cur = (typeof _jobCmGetValue === "function" ? _jobCmGetValue() : "") || "";
+      if (!cur.trim()) _rsPullRepoEntry(id);
+    }, 350);
+    return r;
+  };
+  selectJob = window.selectJob;
+})();

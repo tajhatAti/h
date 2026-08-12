@@ -740,6 +740,21 @@
                sheet, above everything else. -->
           <div class="rs-menu-scrim" id="rsMenuScrim" aria-hidden="true"></div>
 
+          <!-- JOB LIST — a standalone panel, deliberately NOT the old
+               .rs-side rail. That rail is styled by eight competing blocks
+               (fixed/absolute/column/drawer, three different collapse
+               rules), which is why it behaved differently every time. This
+               shares the "···" menu's look and nothing else. -->
+          <div class="rs-menu rs-jobs-pop" id="rsJobsPop" role="menu" hidden>
+            <div class="rs-menu-head">Jobs</div>
+            <div class="rs-jobs-pop-list" id="rsJobsPopList"></div>
+            <div class="rs-menu-sep" role="separator"></div>
+            <button class="rs-menu-item" id="rsJobsPopNew" role="menuitem">
+              <svg viewBox="0 0 16 16" class="rs-ic-sm" fill="currentColor" aria-hidden="true"><path d="M7.25 2.75a.75.75 0 0 1 1.5 0v4.5h4.5a.75.75 0 0 1 0 1.5h-4.5v4.5a.75.75 0 0 1-1.5 0v-4.5h-4.5a.75.75 0 0 1 0-1.5h4.5v-4.5Z"/></svg>
+              <span class="rs-seg-label">New job</span>
+            </button>
+          </div>
+
           <!-- Dropdown on wide screens, bottom sheet under 760px. Same
                markup, same handlers: only the presentation differs. -->
           <div class="rs-menu" id="rsMoreMenu" role="menu" hidden>

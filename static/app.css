@@ -2744,3 +2744,66 @@ body.rs-menu-open .rs-menu-scrim { opacity: 1; visibility: visible; pointer-even
      during a toggle -- otherwise the rail opens and instantly hides. */
   body.rs-side-open #tab-jobs .rs-side { transform: translateY(0) !important; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   JOB LIST — a standalone panel, identical in feel to the "···" menu
+
+   The old .rs-side rail is styled by eight competing blocks (static column /
+   fixed drawer / absolute overlay, plus three separate collapse rules), so
+   which one won depended on load order and viewport — hence "sometimes
+   nothing happens, sometimes it covers the whole screen". This panel shares
+   only the .rs-menu look and is otherwise independent of that rail.
+   ══════════════════════════════════════════════════════════════════════════ */
+#tab-jobs .rs-jobs-pop { padding-bottom: var(--s-1); }
+#tab-jobs .rs-jobs-pop[hidden] { display: none; }
+#tab-jobs .rs-jobs-pop-list {
+  display: flex; flex-direction: column; gap: 2px;
+  max-height: 46vh; overflow-y: auto; overscroll-behavior: contain;
+}
+#tab-jobs .rs-jp-item {
+  display: flex; align-items: center; gap: var(--s-2);
+  width: 100%; min-height: 44px; padding: 0 var(--s-3);
+  background: transparent; border: 0; border-radius: var(--r-sm);
+  color: var(--fg-2); font-size: var(--t-sm); text-align: left;
+  justify-content: flex-start; cursor: pointer;
+}
+#tab-jobs .rs-jp-item:hover { background: var(--bg-3); color: var(--fg); }
+#tab-jobs .rs-jp-item.is-active { background: var(--bg-3); color: var(--fg); }
+#tab-jobs .rs-jp-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; background: var(--fg-3); }
+#tab-jobs .rs-jp-dot.running { background: var(--ok); box-shadow: 0 0 6px rgba(63,214,126,.6); }
+#tab-jobs .rs-jp-dot.crashed { background: var(--danger); }
+#tab-jobs .rs-jp-name {
+  flex: 1 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+#tab-jobs .rs-jp-meta { flex: 0 0 auto; font-size: var(--t-xs); color: var(--fg-3); }
+#tab-jobs .rs-jp-empty { padding: var(--s-3); color: var(--fg-3); font-size: var(--t-sm); }
+
+/* ── Save & Run keeps its label on a phone ─────────────────────────────── */
+/* An earlier rule stripped the text under 400px, leaving a bare triangle
+   that reads as nothing. The label is the point; the icon can go instead. */
+@media (max-width: 400px) {
+  #tab-jobs .rs-run-quick span { display: inline !important; }
+  #tab-jobs .rs-run-quick svg { display: none; }
+  #tab-jobs .rs-run-quick {
+    width: auto !important; padding: 0 var(--s-2) !important;
+    font-size: var(--t-xs);
+  }
+}
+
+/* ── Details (inspector): rises from the bottom, dismissed by tapping it ─ */
+@media (max-width: 760px) {
+  #tab-jobs .rs-insp {
+    height: 52vh !important; max-height: 52vh !important;
+    border-radius: var(--r-md) var(--r-md) 0 0;
+  }
+}
+
+/* ── Full details page: back button only ───────────────────────────────── */
+/* Everything else in that header duplicates what the page already shows, or
+   belongs to the editor view. */
+#tab-jobs .jd-top .jd-top-acts,
+#tab-jobs .jd-top #jdThemeToggle,
+#tab-jobs .jd-top .jd-more-wrap,
+#tab-jobs .jd-top #jdStart { display: none; }
+#tab-jobs .jd-top .jd-back { display: inline-flex; }
