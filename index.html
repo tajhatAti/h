@@ -809,6 +809,17 @@
               </button>
             </div>
 
+            <!-- Upload a file from the device. RunSpace only had the GitHub
+                 URL field, which imports a REPO — it cannot take example.py
+                 off a phone. Same handler shape as Code Studio's upload:
+                 read the file, put the text in the editor, done. -->
+            <input type="file" id="rsFileInput" hidden
+                   accept=".py,.js,.mjs,.cjs,.ts,.sh,.bash,.rb,.php,.txt,.json,.yml,.yaml,.env,.md,text/*">
+            <button class="rs-menu-item" id="btnUploadJobFile" role="menuitem" title="Upload a code file from this device">
+              <svg viewBox="0 0 24 24" class="rs-ic-sm" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+              <span class="rs-seg-label">Upload file</span>
+            </button>
+
             <div class="rs-menu-sep" role="separator"></div>
 
             <button class="rs-menu-item rs-menu-danger" id="btnDeselect" role="menuitem" hidden>

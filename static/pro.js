@@ -6904,3 +6904,115 @@ function _initRsFiles() {
 if (document.readyState === "loading")
   document.addEventListener("DOMContentLoaded", () => setTimeout(_initRsFiles, 50));
 else setTimeout(_initRsFiles, 50);
+
+/* ══════════════════════════════════════════════════════════════════════════
+   RUNSPACE — upload a file from the device
+
+   RunSpace only had the GitHub URL field, which clones a REPO. There was no
+   way to take example.py off a phone and deploy it, which is what was asked
+   for. This adds that one thing.
+
+   It reuses the validation already written for Code Studio's upload
+   (_csHandleUpload's helpers): same size cap, same blocked extensions, same
+   magic-number sniff, same UTF-8 decode. Duplicating that logic would mean
+   two places to keep in step, and the security half is not worth having
+   twice.
+
+   Once the text is in the editor it is an ordinary draft — Run, save and
+   deploy work exactly as if it had been typed.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Extension -> the values #jobLang offers. Deliberately smaller than Code
+   Studio's map: RunSpace can only RUN these five. */
+const RS_EXT_LANG = {
+  py: "python", pyw: "python",
+  js: "javascript", mjs: "javascript", cjs: "javascript",
+  sh: "bash", bash: "bash",
+  rb: "ruby",
+  php: "php",
+};
+
+async function _rsHandleUpload(file) {
+  if (!file) return;
+  const ext = _csExt(file.name);
+
+  if (ext === "zip") {
+    toast("Zip upload is not available yet — upload a single file, or import a GitHub repo.", "error");
+    return;
+  }
+  if (CS_BLOCKED_EXT.has(ext)) {
+    toast("." + ext + " files cannot be opened — text and code only.", "error");
+    return;
+  }
+  if (file.size > CS_UPLOAD_MAX_BYTES) {
+    toast("That file is too large (limit " + Math.round(CS_UPLOAD_MAX_BYTES / 1048576) + " MB).", "error");
+    return;
+  }
+
+  let buf;
+  try {
+    buf = new Uint8Array(await file.arrayBuffer());
+  } catch (e) {
+    toast("Could not read that file.", "error");
+    return;
+  }
+
+  // Same content check as Code Studio: an extension proves nothing, and this
+  // code can be deployed as a job.
+  const verdict = _csSniff(buf, file.name);
+  if (!verdict.ok) { toast(verdict.why, "error"); return; }
+
+  let text;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true }).decode(buf);
+  } catch (e) {
+    toast("This file is not valid UTF-8 text.", "error");
+    return;
+  }
+
+  // Name the job after the file, but never clobber a name already typed.
+  const nameInp = document.getElementById("jobName");
+  if (nameInp && !nameInp.value.trim()) {
+    nameInp.value = String(file.name).replace(/\.[^.]+$/, "").slice(0, 60);
+  }
+
+  const lang = RS_EXT_LANG[ext];
+  const langEl = document.getElementById("jobLang");
+  if (langEl && lang && [...langEl.options].some(o => o.value === lang)) {
+    langEl.value = lang;
+    _jobCmSetMode(lang);
+  }
+
+  _jobCmSetValue(text);
+  if (typeof _setHint === "function") _setHint("", "Loaded " + file.name);
+
+  if (!lang) {
+    toast("Opened " + file.name + " — pick a runtime before running it.", "info");
+  } else {
+    toast("Opened " + file.name + " — press Run to deploy.", "success");
+  }
+}
+
+function _initRsUpload() {
+  const input = document.getElementById("rsFileInput");
+  if (!input || input.dataset.wired === "1") return;
+  input.dataset.wired = "1";
+
+  const btn = document.getElementById("btnUploadJobFile");
+  if (btn) btn.addEventListener("click", (e) => {
+    e.preventDefault(); e.stopPropagation();
+    input.click();
+  });
+
+  input.addEventListener("change", () => {
+    const f = input.files && input.files[0];
+    // Clear first: picking the same file twice fires no change event
+    // otherwise, and the second attempt appears to do nothing.
+    input.value = "";
+    if (f) _rsHandleUpload(f);
+  });
+}
+
+if (document.readyState === "loading")
+  document.addEventListener("DOMContentLoaded", () => setTimeout(_initRsUpload, 60));
+else setTimeout(_initRsUpload, 60);
