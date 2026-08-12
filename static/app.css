@@ -2417,3 +2417,102 @@ body.rs-menu-open { overflow: hidden; }
   .cs-drop small { font-size: 11.5px; }
   .cs-empty-hint { display: none; }   /* no dragging on a phone */
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MOBILE BLOCKERS — the "···" sheet was trapped, and "New job" was unreachable
+
+   Both come from the same toolbar-collapse pass, and both are mine.
+
+   ── BUG 1: the menu opens but cannot be seen ────────────────────────────
+   In the previous commit I gave the header
+
+       #tab-jobs .rs-head { position: relative; z-index: 870; }
+
+   to keep it above the drawer. But `position` + a numeric `z-index`
+   creates a STACKING CONTEXT, and a `position: fixed` descendant can never
+   escape its ancestor's context. So the bottom sheet was painting with
+   z-index 880 INSIDE a context capped at 870 — underneath .bottom-nav, and
+   pinned to the bottom of the header's context rather than the viewport.
+   The click worked, the element rendered, and it was invisible: exactly
+   the report.
+
+   The brief asks whether a portal is involved. There is no React here, so
+   nothing portals to <body>. The CSS equivalent is to not create the trap:
+   the header keeps its painting order WITHOUT a stacking context, and the
+   menu is lifted to the top level.
+
+   ── BUG 2: "New job" was behind/under the editor ────────────────────────
+   Not z-index — geometry. #btnNew lives inside .rs-side, and the last pass
+   made that rail an overlay that starts translateX(-100%) + visibility:
+   hidden at EVERY width so the editor could be full-bleed. The only other
+   entry point, #btnNewEmpty, ships with inline style="display:none" and is
+   only revealed by JS once a jobs fetch resolves. On a fresh load there was
+   therefore no reachable way to create a job.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 1a. Do not trap the menu ──────────────────────────────────────────── */
+/* `isolation: isolate` is deliberately NOT used here: it would create the
+   very context being removed. The header no longer needs a z-index at all —
+   it is a flex sibling that comes before the body in DOM order, and the
+   drawer that used to cover it is itself z-indexed. */
+#tab-jobs .rs-head {
+  position: relative;   /* still the anchor for the desktop dropdown */
+  z-index: auto;        /* ← was 870: that was the trap */
+}
+
+/* ── 1b. The sheet sits above every other fixed layer ──────────────────── */
+/* Above .bottom-nav (800), the rail (860), its scrim (855) and the activity
+   panel (950); below toasts (9990) and modals (10000), which must always be
+   able to interrupt. */
+#tab-jobs .rs-menu { z-index: 9000; }
+
+/* A scrim, so the sheet reads as modal and a tap outside dismisses it
+   rather than hitting whatever is behind. */
+.rs-menu-scrim {
+  position: fixed;
+  top: 0; right: 0; bottom: 0; left: 0;
+  z-index: 8990;
+  background: rgba(0, 0, 0, .55);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity var(--fast), visibility var(--fast);
+}
+body.rs-menu-open .rs-menu-scrim { opacity: 1; visibility: visible; pointer-events: auto; }
+@media (min-width: 761px) {
+  /* The desktop dropdown is small and anchored; a full-screen scrim there
+     would be heavy-handed. Outside-click closing is handled in JS. */
+  .rs-menu-scrim { display: none; }
+}
+
+/* ── 1c. On mobile it is a SHEET, pinned to the viewport ───────────────── */
+@media (max-width: 760px) {
+  #tab-jobs .rs-menu {
+    position: fixed;
+    top: auto; right: 0; bottom: 0; left: 0;
+    width: auto;
+    max-width: 100vw;
+    max-height: 76vh;
+    /* The safe-area inset keeps the last row clear of the home indicator. */
+    padding-bottom: calc(var(--s-3) + env(safe-area-inset-bottom, 0px));
+  }
+  /* The bottom nav must not sit on top of the open sheet. */
+  body.rs-menu-open .bottom-nav { display: none; }
+}
+
+/* ── 2. "New job" is always reachable ──────────────────────────────────── */
+/* It exists in three places now, and at least one is always on screen:
+     · in the rail          — when the rail is open
+     · in the "···" menu    — always, at every width
+     · in the empty state   — once JS reveals it
+   The menu copy is the guarantee: the menu is reachable from the header,
+   which is never covered. */
+#tab-jobs .rs-menu #btnNewInMenu { display: flex; }
+
+/* The rail's own copy keeps working when the rail is open. */
+#tab-jobs .rs-side-new { flex: 0 0 auto; }
+
+/* The empty-state button must never be painted under the editor: the
+   empty state and the workspace are mutually exclusive, so give it a layer
+   above the editor surface for the case where both are briefly visible
+   during a fetch. */
+#tab-jobs .rs-empty { position: relative; z-index: 5; }
+#tab-jobs .rs-empty-btn { position: relative; z-index: 6; }

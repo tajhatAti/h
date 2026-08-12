@@ -716,11 +716,31 @@
             <svg viewBox="0 0 16 16" class="rs-ic" fill="currentColor" aria-hidden="true"><circle cx="3" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="13" cy="8" r="1.4"/></svg>
           </button>
 
+          <!-- Tap-outside target for the mobile sheet. Fixed and below the
+               sheet, above everything else. -->
+          <div class="rs-menu-scrim" id="rsMenuScrim" aria-hidden="true"></div>
+
           <!-- Dropdown on wide screens, bottom sheet under 760px. Same
                markup, same handlers: only the presentation differs. -->
           <div class="rs-menu" id="rsMoreMenu" role="menu" hidden>
             <div class="rs-menu-grab" aria-hidden="true"></div>
             <div class="rs-menu-head">Actions</div>
+
+            <!-- Always present. #btnNew lives inside the job rail, which is
+                 an off-canvas overlay at every width, so on a fresh load it
+                 is not on screen; this copy is what guarantees a user can
+                 always start a job. Its click is forwarded to #btnNew so
+                 there is one implementation of "new job", not two. -->
+            <button class="rs-menu-item" id="btnNewInMenu" role="menuitem" title="New job (Ctrl+N)">
+              <svg viewBox="0 0 16 16" class="rs-ic-sm" fill="currentColor" aria-hidden="true"><path d="M7.25 2.75a.75.75 0 0 1 1.5 0v4.5h4.5a.75.75 0 0 1 0 1.5h-4.5v4.5a.75.75 0 0 1-1.5 0v-4.5h-4.5a.75.75 0 0 1 0-1.5h4.5v-4.5Z"/></svg>
+              <span class="rs-seg-label">New job</span>
+            </button>
+            <button class="rs-menu-item" id="btnJobsInMenu" role="menuitem" title="Show the job list">
+              <svg viewBox="0 0 16 16" class="rs-ic-sm" fill="currentColor" aria-hidden="true"><path d="M2 3.75A.75.75 0 0 1 2.75 3h10.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 3.75Zm0 4A.75.75 0 0 1 2.75 7h10.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 7.75Zm0 4a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1-.75-.75Z"/></svg>
+              <span class="rs-seg-label">Job list</span>
+            </button>
+
+            <div class="rs-menu-sep" role="separator"></div>
 
             <div class="rs-seg" id="rsJobActions" hidden>
               <button class="rs-menu-item rs-seg-btn" id="btnStartJob" role="menuitem" title="Run &amp; deploy (Ctrl+Enter)">

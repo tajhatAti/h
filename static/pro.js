@@ -4075,6 +4075,38 @@ function _initWbWiring() {
     // Changing the runtime is a decision; the menu has done its job.
     const langSel = document.getElementById("jobLang");
     if (langSel) langSel.addEventListener("change", () => setTimeout(closeMore, 120));
+
+    // Tapping the scrim behind the mobile sheet dismisses it.
+    const scrim = document.getElementById("rsMenuScrim");
+    if (scrim) scrim.addEventListener("click", (e) => {
+      e.preventDefault(); e.stopPropagation(); closeMore();
+    });
+
+    /* "New job" and "Job list" inside the menu.
+       #btnNew is the real control but it lives inside the job rail, which
+       is an off-canvas overlay at every width — on a fresh load it is not
+       on screen, so it could not be reached at all. These forward to the
+       existing handlers instead of duplicating them, so there is still one
+       implementation of each action. */
+    const newInMenu = document.getElementById("btnNewInMenu");
+    if (newInMenu) newInMenu.addEventListener("click", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      closeMore();
+      const real = document.getElementById("btnNew");
+      if (real) real.click();
+      // The rail is where the new draft is listed; leave it closed so the
+      // editor stays full-bleed, which is what the user asked for.
+    });
+
+    const jobsInMenu = document.getElementById("btnJobsInMenu");
+    if (jobsInMenu) jobsInMenu.addEventListener("click", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      closeMore();
+      document.body.classList.add("rs-side-open");
+      document.body.classList.remove("rs-side-collapsed");
+      const mb = document.getElementById("wbMenuBtn");
+      if (mb) mb.setAttribute("aria-expanded", "true");
+    });
   }
   if (newBtn2) { newBtn2.addEventListener("click", onNew); newBtn2.type = "button"; newBtn2._w = 1; }
   if (newBtnE) { newBtnE.addEventListener("click", onNew); newBtnE.type = "button"; newBtnE._w = 1; }

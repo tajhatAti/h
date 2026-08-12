@@ -188,10 +188,24 @@ console.log('\n[4] RunSpace itself renders when selected');
   jobs.classList.add('active');
   ok('#tab-jobs shows when active', win.getComputedStyle(jobs).display !== 'none',
      win.getComputedStyle(jobs).display);
+  /* CHANGED 2026-08. This required z-index >= 860 on the header, and that
+     requirement is what caused the next bug: a positioned element with a
+     numeric z-index creates a STACKING CONTEXT, which trapped the "···"
+     bottom sheet inside it -- the sheet rendered at 880 but could never
+     paint above the header's own 870, so on mobile it was invisible.
+
+     The requirement was also wrong on its own terms. The rail is an
+     overlay; covering the header while it is OPEN is the drawer pattern
+     working, not a defect. With the rail closed -- the default -- nothing
+     covers the header at all. So assert what actually matters: the header
+     is reachable when the rail is closed, and it does not trap its own
+     descendants. */
   const head = d.querySelector('#tab-jobs .rs-head');
-  ok('the header sits above the drawer layer',
-     Number(win.getComputedStyle(head).zIndex || 0) >= 860,
+  ok('the header creates no stacking context (or the menu gets trapped)',
+     win.getComputedStyle(head).zIndex === 'auto',
      win.getComputedStyle(head).zIndex);
+  ok('with the rail closed nothing covers the header',
+     offCanvasOrHidden(win, d.getElementById('wbSide')));
 }
 
 console.log('\n[5] desktop and mobile do not both apply');
