@@ -6424,3 +6424,298 @@ function _progressDone() {
     _progressSet(0);
   }, 260);
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CODE STUDIO — FILE UPLOAD  (single file; .zip deferred, see the note)
+
+   Two entry points, ONE handler: the "Upload file" menu row and the
+   drag-and-drop zone both feed _csHandleUpload(). Once the text is in the
+   editor there is no "uploaded" state anywhere -- it is the same draft the
+   user would have typed, so save / run / publish need no new code path.
+   That is requirement 5, and it is met by construction rather than by
+   remembering to keep two paths in sync.
+
+   ON .zip (requirement 3): the brief says to reuse the file-tree component
+   from the GitHub-import work and explicitly NOT to build a second one.
+   That component does not exist yet -- GitHub import currently lives in
+   RunSpace and clones server-side with no tree UI, and #snippetsList is a
+   flat list of saved snippets, not a tree. Building a tree here would
+   create exactly the duplicate the brief forbids, so .zip is rejected with
+   a message that says why rather than half-implemented. The brief also
+   ranks single-file as the higher-value piece to do first.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* 9 MB. The editor holds the whole file in memory as a string, CodeMirror
+   re-tokenises it on every keystroke, and /snippets stores it in one row --
+   past roughly this size the tab janks rather than fails, which is worse. */
+const CS_UPLOAD_MAX_BYTES = 9 * 1024 * 1024;
+
+/* Extension -> the language values #snippetLanguage actually offers. An
+   extension not listed still uploads; it just opens as plain text. */
+const CS_EXT_LANG = {
+  py: "python", pyw: "python",
+  js: "javascript", mjs: "javascript", cjs: "javascript", jsx: "javascript",
+  ts: "typescript", tsx: "typescript",
+  html: "html", htm: "html", xhtml: "html", vue: "html", svelte: "html",
+  css: "css", scss: "css", sass: "css", less: "css",
+  json: "json", jsonc: "json", webmanifest: "json",
+  md: "markdown", markdown: "markdown", mdx: "markdown",
+  sh: "bash", bash: "bash", zsh: "bash", fish: "bash",
+  sql: "sql",
+  java: "java", kt: "java",
+  c: "cpp", h: "cpp", cpp: "cpp", cc: "cpp", cxx: "cpp", hpp: "cpp", hh: "cpp",
+  go: "go",
+  php: "php", phtml: "php",
+  rb: "ruby", rake: "ruby", gemfile: "ruby",
+  txt: "text", log: "text", env: "text", ini: "text", cfg: "text",
+  conf: "text", toml: "text", yml: "text", yaml: "text", xml: "text",
+  csv: "text", tsv: "text", rs: "text", swift: "text", lua: "text",
+  pl: "text", r: "text", dart: "text", gitignore: "text", dockerfile: "text",
+};
+
+/* Extensions that must never reach the editor. This is the cheap first
+   gate; the byte sniff below is the one that actually decides, because an
+   extension is trivially renamed. */
+const CS_BLOCKED_EXT = new Set([
+  "exe","dll","so","dylib","bin","com","msi","app","apk","ipa","deb","rpm",
+  "jar","war","class","pyc","pyo","o","a","lib","obj","wasm","elf",
+  "zip","tar","gz","bz2","xz","7z","rar","iso","dmg","pkg",
+  "png","jpg","jpeg","gif","webp","bmp","ico","tiff","svgz","avif","heic",
+  "mp3","mp4","wav","ogg","webm","avi","mov","mkv","flac","m4a",
+  "pdf","doc","docx","xls","xlsx","ppt","pptx","odt","ods",
+  "db","sqlite","sqlite3","mdb","dat","pack","idx",
+  "ttf","otf","woff","woff2","eot",
+]);
+
+/* Magic numbers for formats that commonly arrive renamed as .txt/.py. */
+const CS_MAGIC = [
+  { sig: [0x4d, 0x5a],                   name: "a Windows executable" },      // MZ
+  { sig: [0x7f, 0x45, 0x4c, 0x46],       name: "a Linux executable" },        // ELF
+  { sig: [0xca, 0xfe, 0xba, 0xbe],       name: "a Java class file" },
+  { sig: [0x50, 0x4b, 0x03, 0x04],       name: "a zip archive" },
+  { sig: [0x50, 0x4b, 0x05, 0x06],       name: "a zip archive" },
+  { sig: [0x1f, 0x8b],                   name: "a gzip archive" },
+  { sig: [0x89, 0x50, 0x4e, 0x47],       name: "a PNG image" },
+  { sig: [0xff, 0xd8, 0xff],             name: "a JPEG image" },
+  { sig: [0x47, 0x49, 0x46, 0x38],       name: "a GIF image" },
+  { sig: [0x25, 0x50, 0x44, 0x46],       name: "a PDF" },
+  { sig: [0x52, 0x61, 0x72, 0x21],       name: "a RAR archive" },
+  { sig: [0x37, 0x7a, 0xbc, 0xaf],       name: "a 7-Zip archive" },
+  { sig: [0x00, 0x61, 0x73, 0x6d],       name: "a WebAssembly module" },
+  { sig: [0xfe, 0xed, 0xfa, 0xce],       name: "a macOS executable" },
+  { sig: [0xcf, 0xfa, 0xed, 0xfe],       name: "a macOS executable" },
+];
+
+function _csExt(name) {
+  const base = String(name || "").toLowerCase().split(/[\\/]/).pop();
+  if (base === "dockerfile" || base === "makefile") return base;
+  const i = base.lastIndexOf(".");
+  return i > 0 ? base.slice(i + 1) : "";
+}
+
+/* Decide whether these bytes are text.
+ *
+ * Extension and MIME are both attacker-controlled, so the verdict comes
+ * from the CONTENT:
+ *   · a known binary magic number is an immediate reject, named so the
+ *     message is useful;
+ *   · a NUL byte in the first 8 KB means binary -- no text encoding this
+ *     editor supports produces one (UTF-16 would, which is why the BOM is
+ *     checked first and rejected explicitly rather than mangled);
+ *   · a high proportion of non-printable control characters means binary
+ *     even without a NUL.
+ */
+function _csSniff(bytes, fileName) {
+  const n = Math.min(bytes.length, 8192);
+  if (!n) return { ok: true };                       // empty file is fine
+
+  for (const m of CS_MAGIC) {
+    if (bytes.length >= m.sig.length && m.sig.every((b, i) => bytes[i] === b))
+      return { ok: false, why: "This looks like " + m.name + ", not source code." };
+  }
+  // UTF-16/32 BOMs: technically text, but decoded as UTF-8 they become
+  // mojibake, so say so instead of loading garbage.
+  if ((bytes[0] === 0xff && bytes[1] === 0xfe) || (bytes[0] === 0xfe && bytes[1] === 0xff))
+    return { ok: false, why: "This file is UTF-16. Save it as UTF-8 and try again." };
+
+  let ctrl = 0;
+  for (let i = 0; i < n; i++) {
+    const b = bytes[i];
+    if (b === 0) return { ok: false, why: "This file contains binary data, not text." };
+    // Printable, or one of tab / LF / CR / form feed / escape.
+    if (b < 0x09 || (b > 0x0d && b < 0x20 && b !== 0x1b)) ctrl++;
+  }
+  if (ctrl / n > 0.10)
+    return { ok: false, why: "This file does not look like text." };
+  return { ok: true };
+}
+
+function _csBytesLabel(n) {
+  if (n < 1024) return n + " B";
+  if (n < 1024 * 1024) return (n / 1024).toFixed(0) + " KB";
+  return (n / 1024 / 1024).toFixed(1) + " MB";
+}
+
+/* The single handler. Both entry points call this. */
+async function _csHandleUpload(file) {
+  if (!file) return;
+
+  const ext = _csExt(file.name);
+
+  // .zip gets its own message: it is a deliberate deferral, not a bug.
+  if (ext === "zip") {
+    toast("Zip upload is not available yet — it needs the file-tree view. Upload a single file for now.", "error");
+    return;
+  }
+  if (CS_BLOCKED_EXT.has(ext)) {
+    toast("." + ext + " files cannot be opened in the editor — text and code only.", "error");
+    return;
+  }
+  if (file.size > CS_UPLOAD_MAX_BYTES) {
+    toast("That file is " + _csBytesLabel(file.size) + ". The limit is "
+          + _csBytesLabel(CS_UPLOAD_MAX_BYTES) + ".", "error");
+    return;
+  }
+
+  let buf;
+  try {
+    buf = new Uint8Array(await file.arrayBuffer());
+  } catch (e) {
+    toast("Could not read that file.", "error");
+    return;
+  }
+
+  const verdict = _csSniff(buf, file.name);
+  if (!verdict.ok) { toast(verdict.why, "error"); return; }
+
+  let text;
+  try {
+    // fatal:true so invalid UTF-8 is caught here rather than silently
+    // replaced with U+FFFD all through the user's code.
+    text = new TextDecoder("utf-8", { fatal: true }).decode(buf);
+  } catch (e) {
+    toast("This file is not valid UTF-8 text.", "error");
+    return;
+  }
+
+  _csLoadTextIntoEditor(text, file.name, ext);
+  toast("Opened " + file.name + " (" + _csBytesLabel(file.size) + ")", "success");
+}
+
+/* Put text in the editor exactly the way loadSnippetIntoEditor() does, so
+   an uploaded file and a saved snippet are indistinguishable afterwards. */
+function _csLoadTextIntoEditor(text, fileName, ext) {
+  // A fresh draft: this is a new file, not an edit of the open snippet.
+  if (typeof editingSnippetId !== "undefined") editingSnippetId = null;
+
+  const titleEl = document.getElementById("snippetTitle");
+  if (titleEl) titleEl.value = String(fileName || "untitled").replace(/\.[^.]+$/, "").slice(0, 60);
+
+  const langEl = document.getElementById("snippetLanguage");
+  const lang = CS_EXT_LANG[ext] || "text";
+  if (langEl) {
+    // Only select a value the <select> actually has.
+    const has = [...langEl.options].some(o => o.value === lang);
+    langEl.value = has ? lang : "text";
+  }
+
+  const ta = document.getElementById("snippetContent");
+  if (ta) ta.value = text;
+  if (typeof cmEditor !== "undefined" && cmEditor) cmEditor.setValue(text);
+
+  if (typeof updateCodeMirrorMode === "function") updateCodeMirrorMode();
+  if (typeof updateEditorMeta === "function") updateEditorMeta();
+  if (typeof runLivePreview === "function") runLivePreview();
+  _csRefreshEmptyState();
+}
+
+/* The empty-state upload prompt is only for an empty editor. */
+function _csRefreshEmptyState() {
+  const box = document.getElementById("csEmptyUpload");
+  if (!box) return;
+  const ta = document.getElementById("snippetContent");
+  let val = ta ? ta.value : "";
+  if (typeof cmEditor !== "undefined" && cmEditor && typeof cmEditor.getValue === "function") {
+    try { val = cmEditor.getValue(); } catch (e) {}
+  }
+  box.hidden = !!(val && val.trim());
+}
+
+function _initCsUpload() {
+  const input = document.getElementById("csFileInput");
+  if (!input || input.dataset.wired === "1") return;
+  input.dataset.wired = "1";
+
+  const pick = (e) => {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    input.click();
+  };
+  const menuBtn  = document.getElementById("btnUploadFile");
+  const emptyBtn = document.getElementById("btnUploadFileEmpty");
+  if (menuBtn)  menuBtn.addEventListener("click", pick);
+  if (emptyBtn) emptyBtn.addEventListener("click", pick);
+
+  input.addEventListener("change", () => {
+    const f = input.files && input.files[0];
+    // Reset first: without this, choosing the SAME file twice fires no
+    // change event and the second attempt silently does nothing.
+    input.value = "";
+    if (f) _csHandleUpload(f);
+  });
+
+  // ── drag and drop ────────────────────────────────────────────────────
+  const zone = document.getElementById("ideEditor");
+  const drop = document.getElementById("csDropZone");
+  if (zone && drop) {
+    // dragenter/dragleave fire for every child element the pointer crosses,
+    // so a naive show/hide flickers. Count the enters instead.
+    let depth = 0;
+    const show = () => { drop.classList.add("is-over"); drop.setAttribute("aria-hidden", "false"); };
+    const hide = () => { depth = 0; drop.classList.remove("is-over"); drop.setAttribute("aria-hidden", "true"); };
+
+    const isFileDrag = (e) =>
+      !!(e.dataTransfer && [...(e.dataTransfer.types || [])].includes("Files"));
+
+    zone.addEventListener("dragenter", (e) => {
+      if (!isFileDrag(e)) return;
+      e.preventDefault(); depth++; show();
+    });
+    zone.addEventListener("dragover", (e) => {
+      if (!isFileDrag(e)) return;
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+    });
+    zone.addEventListener("dragleave", (e) => {
+      if (!isFileDrag(e)) return;
+      depth--; if (depth <= 0) hide();
+    });
+    zone.addEventListener("drop", (e) => {
+      if (!isFileDrag(e)) return;
+      e.preventDefault(); e.stopPropagation(); hide();
+      const files = e.dataTransfer.files;
+      if (!files || !files.length) return;
+      if (files.length > 1) {
+        toast("One file at a time for now — zip/multi-file needs the file tree.", "error");
+        return;
+      }
+      _csHandleUpload(files[0]);
+    });
+  }
+
+  // The browser's default is to NAVIGATE to a dropped file, which throws
+  // away unsaved work. Suppress that everywhere outside the drop zone.
+  ["dragover", "drop"].forEach(evt => {
+    document.addEventListener(evt, (e) => {
+      if (e.target && e.target.closest && e.target.closest("#ideEditor")) return;
+      if (e.dataTransfer && [...(e.dataTransfer.types || [])].includes("Files")) e.preventDefault();
+    });
+  });
+
+  _csRefreshEmptyState();
+  const ta = document.getElementById("snippetContent");
+  if (ta) ta.addEventListener("input", _csRefreshEmptyState);
+}
+
+if (document.readyState === "loading")
+  document.addEventListener("DOMContentLoaded", () => setTimeout(_initCsUpload, 40));
+else setTimeout(_initCsUpload, 40);

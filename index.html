@@ -579,6 +579,7 @@
               <div class="cs-menu-grab" aria-hidden="true"></div>
               <div class="cs-menu-head">Actions</div>
               <button class="cs-menu-item" id="btnNewSnippet" role="menuitem" title="New file (Ctrl+N)"><svg viewBox="0 0 24" class="btn-svg"><use href="#i-plus"/></svg><span>New file</span></button>
+              <button class="cs-menu-item" id="btnUploadFile" role="menuitem" title="Upload a code file"><svg viewBox="0 0 24" class="btn-svg" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg><span>Upload file</span></button>
               <button class="cs-menu-item" id="btnRunSnippet" role="menuitem" title="Run"><svg viewBox="0 0 24" class="btn-svg"><use href="#i-play"/></svg><span>Run</span></button>
               <button class="cs-menu-item" id="btnFormatSnippet" role="menuitem" title="Format"><svg viewBox="0 0 24" class="btn-svg"><use href="#i-wand"/></svg><span>Format</span></button>
               <div class="cs-menu-sep" role="separator"></div>
@@ -604,6 +605,33 @@
           <div class="snippets-list" id="snippetsList"></div>
         </div>
         <div class="cs-editor-zone" id="ideEditor">
+          <!-- One <input type=file> shared by the menu button and the drop
+               zone, so both paths run the identical handler. `accept` is a
+               convenience filter in the picker only -- it is trivially
+               bypassed, so the real validation happens in JS on the bytes. -->
+          <input type="file" id="csFileInput" hidden
+                 accept=".py,.js,.mjs,.cjs,.ts,.tsx,.jsx,.html,.htm,.css,.scss,.json,.md,.markdown,.txt,.sh,.bash,.sql,.java,.c,.h,.cpp,.cc,.hpp,.go,.php,.rb,.rs,.yml,.yaml,.toml,.ini,.cfg,.env,.xml,.csv,.log,.gitignore,.dockerfile,text/*">
+
+          <!-- Drag-and-drop target. Hidden until a drag enters the editor,
+               so it never sits on top of the code the user is writing. -->
+          <div class="cs-drop" id="csDropZone" aria-hidden="true">
+            <div class="cs-drop-inner">
+              <svg viewBox="0 0 24 24" class="cs-drop-ic" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+              <b>Drop a code file to open it</b>
+              <small>Text and code files up to 9&nbsp;MB · .py .js .html .css .json .md and more</small>
+            </div>
+          </div>
+
+          <!-- Shown only when the editor is empty: the third way in, beside
+               "New" and the saved-snippet list. -->
+          <div class="cs-empty-upload" id="csEmptyUpload" hidden>
+            <button type="button" class="btn-secondary sm" id="btnUploadFileEmpty">
+              <svg viewBox="0 0 24 24" class="btn-svg" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+              Upload file
+            </button>
+            <span class="cs-empty-hint">or drag one anywhere in the editor</span>
+          </div>
+
           <textarea id="snippetContent" class="cs-code-input" placeholder="// Start coding here...
 // Type HTML, CSS, JS or Markdown — hit Preview to see it live
 // Pick Python/Go/C/Java... and hit Run ▶ — output appears below
