@@ -239,14 +239,29 @@ console.log('\n[5] menu presentation: dropdown wide, bottom sheet on mobile');
   ok('wide: it is a column', cs(ww, wm).flexDirection === 'column');
   ok('wide: no grab handle', cs(ww, ww.document.querySelector('.rs-menu-grab')).display === 'none');
 
+/* CHANGED 2026-08. These asserted the mobile menu is a full-width bottom
+   sheet. The user rejected that outright -- "3 menu button a click korle
+   pura screen জুড়ে আসে, আমি চাচ্ছি শুধু অল্প একটু জায়গায় আসবে, উপরে উঠে
+   আসবে এমন" -- so it is now a compact anchored panel at every width.
+   Keeping the sheet assertions would pin the behaviour that was rejected.
+   What still matters, and is asserted instead: the panel stays inside the
+   viewport, cannot be clipped by an ancestor, and outranks the other fixed
+   layers. */
   const mob = build(375), mw = mob.window;
   const mm = mw.document.getElementById('rsMoreMenu');
   mm.removeAttribute('hidden');
-  ok('mobile: it is a bottom sheet', cs(mw, mm).position === 'fixed', cs(mw, mm).position);
-  ok('mobile: pinned to the bottom edge', (cs(mw, mm).bottom || '') === '0px', cs(mw, mm).bottom);
-  ok('mobile: it has a grab handle',
-     cs(mw, mw.document.querySelector('.rs-menu-grab')).display === 'block');
-  ok('mobile: it clears the home indicator', /safe-area-inset-bottom/.test(CSS));
+  ok('mobile: viewport-anchored so no ancestor can clip it',
+     cs(mw, mm).position === 'fixed', cs(mw, mm).position);
+  ok('mobile: it hangs below the header, not at the bottom edge',
+     (cs(mw, mm).bottom || '') === 'auto' && parseFloat(cs(mw, mm).top) > 0,
+     `top=${cs(mw, mm).top} bottom=${cs(mw, mm).bottom}`);
+  ok('mobile: it is a narrow panel, not full width',
+     parseFloat(cs(mw, mm).width) > 0 && parseFloat(cs(mw, mm).width) <= 260,
+     cs(mw, mm).width);
+  ok('mobile: it still fits the narrowest screen',
+     /max-width:\s*calc\(100vw/.test(CSS));
+  ok('mobile: no grab handle on a panel',
+     cs(mw, mw.document.querySelector('.rs-menu-grab')).display === 'none');
 }
 
 console.log('\n[6] the list itself: icon + label, one accent, red for destructive');
@@ -376,7 +391,10 @@ for (const width of [320, 375, 414]) {
     ok(`#${id} stays on the row`, !!el && !el.closest('#csMoreMenu'));
   }
   menu.removeAttribute('hidden');
-  ok('mobile: it is a bottom sheet', cs(w, menu).position === 'fixed', cs(w, menu).position);
+  /* Code Studio's menu follows RunSpace's: a compact anchored panel, kept
+     position:fixed only so an ancestor's overflow cannot clip it. */
+  ok('mobile: viewport-anchored so nothing clips it',
+     cs(w, menu).position === 'fixed', cs(w, menu).position);
   const wide = build(1280);
   const wm = wide.window.document.getElementById('csMoreMenu');
   wm.removeAttribute('hidden');

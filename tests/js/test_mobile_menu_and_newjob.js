@@ -140,30 +140,32 @@ for (const width of [320, 375, 414]) {
 }
 
 /* ── 2. it is a real bottom sheet, inside the viewport ─────────────────── */
-console.log('\n[2] on mobile it is a sheet pinned to the viewport');
+console.log('\n[2] on mobile it is a compact panel, fully in the viewport');
+/* CHANGED 2026-08. This asserted a full-width bottom sheet. The user
+   rejected that -- "pura screen জুড়ে আসে, আমি চাচ্ছি শুধু অল্প একটু জায়গায়
+   আসবে, উপরে উঠে আসবে এমন" -- so the menu is a compact anchored panel now.
+   It stays position:fixed so no ancestor overflow can clip it (.dash-main
+   sets overflow:hidden), but hangs below the header instead of filling the
+   screen. */
 for (const width of [320, 375, 414]) {
   const dom = build(width), w = dom.window, d = w.document;
   const menu = d.getElementById('rsMoreMenu');
   menu.removeAttribute('hidden');
   const s = cs(w, menu);
-  ok(`[${width}] position:fixed (viewport, not the header)`, s.position === 'fixed', s.position);
-  ok(`[${width}] pinned to the bottom edge`, s.bottom === '0px', s.bottom);
-  ok(`[${width}] spans the full width`, s.left === '0px' && s.right === '0px',
-     `${s.left}/${s.right}`);
-  ok(`[${width}] cannot exceed the viewport width`,
-     (s.maxWidth || '').includes('100vw') || s.width === 'auto', s.maxWidth || s.width);
-  /* jsdom resolves vh against its 768px default viewport, so the computed
-     value is px. Accept either, and require the cap to leave the top of the
-     screen free. */
-  const capPx = /vh/.test(s.maxHeight || '')
-    ? (parseFloat(s.maxHeight) / 100) * 768
-    : parseFloat(s.maxHeight || 'NaN');
-  ok(`[${width}] height is capped below the full screen`,
-     !Number.isNaN(capPx) && capPx > 0 && capPx < 768, s.maxHeight);
-  ok(`[${width}] it clears the home indicator`, /safe-area-inset-bottom/.test(CSS));
-  ok(`[${width}] it is actually rendered`, s.display !== 'none' && s.visibility !== 'hidden',
-     `${s.display}/${s.visibility}`);
+  ok(`[${width}] viewport-anchored, so ancestor overflow cannot clip it`,
+     s.position === 'fixed', s.position);
+  ok(`[${width}] it hangs below the header, not at the bottom edge`,
+     parseFloat(s.top) > 0 && s.bottom === 'auto', `top=${s.top} bottom=${s.bottom}`);
+  ok(`[${width}] it is narrow, not full width`,
+     parseFloat(s.width) > 0 && parseFloat(s.width) <= 260, s.width);
+  ok(`[${width}] and can never exceed the screen`,
+     /max-width:\s*calc\(100vw - 24px\)/.test(CSS));
+  ok(`[${width}] height is capped so it stays a panel`,
+     parseFloat(s.maxHeight) > 0 && parseFloat(s.maxHeight) < 768, s.maxHeight);
+  ok(`[${width}] it is actually rendered`,
+     s.display !== 'none' && s.visibility !== 'hidden', `${s.display}/${s.visibility}`);
 }
+
 
 /* ── 3. it outranks every other fixed layer it must beat ───────────────── */
 console.log('\n[3] nothing paints over the open sheet');
@@ -191,8 +193,10 @@ console.log('\n[3] nothing paints over the open sheet');
   // The bottom nav is removed outright while the sheet is open.
   d.body.classList.add('rs-menu-open');
   const bn = d.querySelector('.bottom-nav');
-  if (bn) ok('the bottom nav steps aside while the sheet is open',
-             cs(w, bn).display === 'none', cs(w, bn).display);
+  /* The panel no longer reaches the bottom of the screen, so the nav has no
+     reason to disappear -- hiding it would just make the app flicker. */
+  if (bn) ok('the bottom nav stays put beside the panel',
+             cs(w, bn).display !== 'none', cs(w, bn).display);
   const scrim = d.getElementById('rsMenuScrim');
   ok('a scrim appears behind it', !!scrim && cs(w, scrim).visibility === 'visible',
      scrim && cs(w, scrim).visibility);

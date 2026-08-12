@@ -2626,9 +2626,10 @@ body.rs-menu-open .rs-menu-scrim { opacity: 1; visibility: visible; pointer-even
   #tab-jobs .rs-menu-grab,
   .cs-menu-grab { display: none; }
 
-  /* Rows can be tighter now that the panel is compact, but still tappable. */
+  /* Rows stay at the 44px touch floor. 42px was below it, and a menu is
+     exactly where a mis-tap is most annoying. */
   #tab-jobs .rs-menu-item,
-  .cs-menu-item { min-height: 42px; }
+  .cs-menu-item { min-height: 44px; }
 
   /* No scrim: it is a dropdown, not a modal. Outside-click still closes it
      (handled in pro.js), and the page behind stays scrollable. */
@@ -2642,4 +2643,36 @@ body.rs-menu-open .rs-menu-scrim { opacity: 1; visibility: visible; pointer-even
   #tab-jobs .rs-menu-field .rs-sel { width: 104px; height: 32px; }
   #tab-jobs .rs-menu-field .rs-gh,
   #tab-jobs .rs-menu-field .rs-sq { height: 32px; }
+}
+
+/* The compact panel is position:absolute, so unlike the old fixed sheet it
+   IS clipped by an ancestor's overflow — and body.rs-active .dash-main sets
+   overflow:hidden. The menu would be cut off a few pixels below the header.
+   Fixed rather than absolute keeps it anchored to the viewport (immune to
+   ancestor clipping) while staying a small panel; the header sits at a known
+   52px, so anchoring just below it puts the panel exactly where an anchored
+   dropdown would be. */
+@media (max-width: 760px) {
+  /* position:fixed, not absolute: body.rs-active .dash-main sets
+     overflow:hidden, which would clip an absolutely-positioned panel a few
+     pixels below the header. Fixed escapes that while still being a small
+     anchored panel rather than a sheet.
+
+     !important because .cs-menu / .rs-menu each get a position from three
+     separate mobile blocks in this file; relying on source order across
+     130KB is how this flipped back once already. */
+  #tab-jobs .rs-menu {
+    position: fixed !important;
+    top: 58px !important;      /* 52px header + 6px gap */
+    right: 8px !important;
+    bottom: auto !important;
+    left: auto !important;
+  }
+  .cs-menu {
+    position: fixed !important;
+    top: 54px !important;      /* Code Studio's header is 48px */
+    right: 8px !important;
+    bottom: auto !important;
+    left: auto !important;
+  }
 }
