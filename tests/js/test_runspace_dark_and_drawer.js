@@ -192,7 +192,14 @@ function railHidden(mediaQuery, bodyClass) {
   doc.body.className = bodyClass;
   const el = doc.querySelector('#tab-jobs .rs-side');
   const cs = dm.window.getComputedStyle(el);
-  return cs.transform.includes('-100%') || cs.width === '0px';
+  /* The mobile rail now rises from the BOTTOM -- translateY(100%) when
+     closed -- because a full-height side drawer covered the whole screen.
+     Matching only '-100%' missed that and reported an obviously hidden
+     panel as visible. Judge by "is it off-screen or collapsed", whichever
+     axis it uses. */
+  const tf = cs.transform || '';
+  return tf.includes('-100%') || tf.includes('translateY(100%)') ||
+         cs.width === '0px' || cs.visibility === 'hidden';
 }
 const DESK = '@media (min-width: 761px)', MOB = '@media (max-width: 760px)';
 ok('desktop: rs-side-collapsed hides the rail', railHidden(DESK, 'rs-side-collapsed'));

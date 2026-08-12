@@ -167,11 +167,16 @@ for (const width of [320, 375, 414, 768, 1280]) {
      purpose: it is the "RunSpace" breadcrumb label inside the identity
      block, not a control competing for space. Judging by tag alone counted
      it as a stray. */
+  /* CHANGED: Save & Run now sits on the header by request -- "3 menu te
+     bahire ano, Running lekhar pashe ano, jeno bare bare 3 dot click korte
+     na hoy". So the row holds the rail toggle, Run, and the kebab. The
+     invariant that still matters is that no OTHER action leaked back in. */
   const strays = [...head.querySelectorAll('button')]
     .filter(b => !b.closest('.rs-menu') && !b.closest('#rsIdentity'))
     .map(b => b.id);
-  ok(`[${width}] only the toggle and the kebab are in the row`,
-     strays.length === 2 && strays.includes('wbMenuBtn') && strays.includes('rsMoreBtn'),
+  const allowed = ['wbMenuBtn', 'btnRunQuick', 'rsMoreBtn'];
+  ok(`[${width}] only the toggle, Run and the kebab are in the row`,
+     strays.every(id => allowed.includes(id)) && strays.includes('rsMoreBtn'),
      strays.join(','));
 }
 

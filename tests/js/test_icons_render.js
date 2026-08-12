@@ -100,10 +100,17 @@ for (const sel of ['.cs-menu-item', '.rs-menu-item']) {
   for (const el of d.querySelectorAll(sel)) {
     const label = (el.textContent || '').trim();
     const svg = el.querySelector('svg');
-    const iconOk = !!svg &&
-      (svg.getAttribute('viewBox') || '').trim().split(/[\s,]+/).length === 4;
-    ok(`${sel} "${label.slice(0, 18) || el.id}" has a usable icon`, iconOk,
-       svg ? svg.getAttribute('viewBox') : 'no svg');
+    /* A row may be text-only on purpose -- the Files row had its icon
+       removed by request. What must never happen is a BROKEN icon: an svg
+       that is present but cannot paint. So only rows that carry an svg are
+       checked, and every row must still show something. */
+    if (svg) {
+      const iconOk = (svg.getAttribute('viewBox') || '').trim().split(/[\s,]+/).length === 4;
+      ok(`${sel} "${label.slice(0, 18) || el.id}" icon is usable`, iconOk,
+         svg.getAttribute('viewBox'));
+    } else {
+      ok(`${sel} "${label.slice(0, 18) || el.id}" has a label instead`, !!label, el.id);
+    }
   }
 }
 

@@ -915,6 +915,39 @@ def _detect_entry(jdir: str, code_overwrite: bool, log: deque) -> tuple:
         log.append("[system] detected static site (index.html) — serving via built-in HTTP server")
         return "python", launcher
 
+    # Nothing matched the conventional names. Rather than give up -- which is
+    # what made https://github.com/tajhatati/bb (a repo whose only source file
+    # is n.py) look empty -- fall back to whatever source is actually there.
+    #
+    # Preference order matters: a manifest tells us the ecosystem, so a repo
+    # with requirements.txt is Python even if it also ships a stray .js.
+    ext_lang = [("py", "python"), ("js", "javascript"), ("rb", "ruby"),
+                ("php", "php"), ("sh", "bash")]
+    if has_package_json:
+        ext_lang.insert(0, ext_lang.pop(1))
+    elif has_gemfile:
+        ext_lang.insert(0, ext_lang.pop(2))
+
+    for ext, lname in ext_lang:
+        try:
+            hits = sorted(
+                f for f in os.listdir(jdir)
+                if f.endswith("." + ext)
+                and not f.startswith((".", "_", "test_", "setup"))
+                and os.path.isfile(os.path.join(jdir, f))
+                and os.path.getsize(os.path.join(jdir, f)) > 0
+            )
+        except OSError:
+            hits = []
+        if not hits:
+            continue
+        # One obvious candidate, or the largest -- the entry point of a small
+        # repo is almost never the tiny helper next to it.
+        pick = hits[0] if len(hits) == 1 else max(
+            hits, key=lambda f: os.path.getsize(os.path.join(jdir, f)))
+        log.append(f"[system] no conventional entry file; using {pick}")
+        return lname, os.path.join(jdir, pick)
+
     return None, None
 
 
@@ -1702,7 +1735,10 @@ def job_start(req: JobStartRequest, authorization: Optional[str] = Header(None))
     code = req.code or ""
     if lang not in LANGS:
         raise HTTPException(400, detail=f"Unsupported language: {lang}. Available: {', '.join(sorted(LANGS))}")
-    if not code.strip():
+    # A repo job legitimately has NO inline code: the source arrives with the
+    # clone. This check ran before the clone and rejected every repo import
+    # outright -- reported as "code empty" on a repo that plainly has files.
+    if not code.strip() and not (req.repo_url or "").strip():
         raise HTTPException(400, detail="Code is empty.")
 
     # Admission by MEASURED memory, not by job count. Counting assumed every

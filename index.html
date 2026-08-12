@@ -721,6 +721,14 @@
           <span class="rs-chip" id="rsHeadState" hidden></span>
         </div>
 
+        <!-- Run lives on the header, beside the status text: it is the one
+             action used constantly, and reaching it through the menu meant
+             two taps every single time. -->
+        <button type="button" class="rs-run-quick" id="btnRunQuick" title="Save &amp; Run" hidden>
+          <svg viewBox="0 0 16 16" class="rs-ic-sm" fill="currentColor" aria-hidden="true"><path d="M4.5 3.3v9.4c0 .3.3.5.6.3l7.4-4.7a.4.4 0 0 0 0-.6L5.1 3a.4.4 0 0 0-.6.3Z"/></svg>
+          <span>Save &amp; Run</span>
+        </button>
+
         <!-- The single overflow control. -->
         <div class="rs-more-wrap">
           <button type="button" class="rs-ghost-btn rs-sq" id="rsMoreBtn"
@@ -752,7 +760,6 @@
               <span class="rs-seg-label">Job list</span>
             </button>
             <button class="rs-menu-item" id="btnFilesInMenu" role="menuitem" title="Browse the files in this job">
-              <svg viewBox="0 0 16 16" class="rs-ic-sm" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M1.75 3.5h4l1.5 2h7v7.25a.75.75 0 0 1-.75.75H2.5a.75.75 0 0 1-.75-.75V3.5Z"/></svg>
               <span class="rs-seg-label">Files</span>
             </button>
 
@@ -775,6 +782,11 @@
             </div>
 
             <div class="rs-menu-sep" role="separator"></div>
+
+            <button class="rs-menu-item" id="btnFullDetails" role="menuitem" hidden>
+              <svg viewBox="0 0 16 16" class="rs-ic-sm" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h7v7"/><path d="M13 3 7 9"/><path d="M11 9.5V13H3V5h3.5"/></svg>
+              <span class="rs-seg-label">Full details page</span>
+            </button>
 
             <button class="rs-menu-item" id="btnInspector" role="menuitem"
                     aria-expanded="false" aria-controls="wbInspector" hidden>

@@ -7016,3 +7016,62 @@ function _initRsUpload() {
 if (document.readyState === "loading")
   document.addEventListener("DOMContentLoaded", () => setTimeout(_initRsUpload, 60));
 else setTimeout(_initRsUpload, 60);
+
+/* ══════════════════════════════════════════════════════════════════════════
+   RUNSPACE HEADER ACTIONS
+   Save & Run beside the status text, and a "Full details page" row that
+   opens the standalone view (with its existing back button) rather than the
+   half-height inspector sheet.
+   ══════════════════════════════════════════════════════════════════════════ */
+function _initRsHeaderActions() {
+  const run = document.getElementById("btnRunQuick");
+  if (!run || run.dataset.wired === "1") return;
+  run.dataset.wired = "1";
+
+  // Forward to the real Run button so there is one deploy implementation.
+  run.addEventListener("click", (e) => {
+    e.preventDefault(); e.stopPropagation();
+    const real = document.getElementById("btnStartJob");
+    if (real) real.click();
+  });
+
+  // Mirror the real button's visibility: Run only means something once a
+  // job is open. #rsJobActions is what the app already toggles for that.
+  const seg = document.getElementById("rsJobActions");
+  const sync = () => {
+    const on = !!seg && !seg.hasAttribute("hidden");
+    run.hidden = !on;
+    const real = document.getElementById("btnStartJob");
+    if (real) {
+      const label = run.querySelector("span");
+      const txt = (real.textContent || "").trim();
+      if (label && txt) label.textContent = txt.includes("Run") ? "Save & Run" : txt;
+      run.classList.toggle("loading", real.classList.contains("loading"));
+    }
+  };
+  if (seg) new MutationObserver(sync).observe(seg, { attributes: true, attributeFilter: ["hidden"] });
+  const realBtn = document.getElementById("btnStartJob");
+  if (realBtn) new MutationObserver(sync).observe(realBtn, { attributes: true, attributeFilter: ["class"] });
+  sync();
+
+  const full = document.getElementById("btnFullDetails");
+  if (full) full.addEventListener("click", (e) => {
+    e.preventDefault(); e.stopPropagation();
+    // Close the menu, then open the standalone details view. Its own back
+    // button already returns to the editor.
+    const menu = document.getElementById("rsMoreMenu");
+    if (menu) { menu.hidden = true; document.body.classList.remove("rs-menu-open"); }
+    if (typeof openJobDetails === "function" && _selectedJobId) openJobDetails(_selectedJobId);
+  });
+
+  // "Full details" is only meaningful with a job selected — same rule as Run.
+  const syncFull = () => {
+    if (full) full.hidden = !seg || seg.hasAttribute("hidden");
+  };
+  if (seg) new MutationObserver(syncFull).observe(seg, { attributes: true, attributeFilter: ["hidden"] });
+  syncFull();
+}
+
+if (document.readyState === "loading")
+  document.addEventListener("DOMContentLoaded", () => setTimeout(_initRsHeaderActions, 70));
+else setTimeout(_initRsHeaderActions, 70);

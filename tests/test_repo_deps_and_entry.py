@@ -97,18 +97,28 @@ def manifest_seen(jdir, repo_url="https://github.com/u/r"):
 # The reported case: entry file NOT in _ENTRY_CANDIDATES.
 d = mkrepo(**{"n.py": "import requests\n", "requirements.txt": "requests\n"})
 lang, src = R._detect_entry(d, False, deque())
-ok("a repo with an unrecognised entry name is not auto-detected",
-   src is None, f"detected {src}")
-ok("...but the manifest is still seen, so deps WILL install",
+# CHANGED: this used to assert detection FAILS for an unconventional name,
+# which was the state of the world, not a requirement. The reported repo
+# (tajhatati/bb) has n.py as its only source file and was rejected as
+# "code empty", so detection now falls back to whatever source is present.
+ok("an unconventional entry name is now found by fallback",
+   src is not None and src.endswith("n.py"), f"detected {src}")
+ok("and the manifest is seen, so deps install",
    manifest_seen(d) is True)
 shutil.rmtree(d, ignore_errors=True)
 
 # The old predicate, kept here so the difference is visible and enforced.
 d = mkrepo(**{"n.py": "x=1\n", "requirements.txt": "requests\n"})
 lang, src = R._detect_entry(d, False, deque())
-old_predicate = bool("https://github.com/u/r" and src)
-ok("the OLD predicate would have skipped the install (this is the bug)",
-   old_predicate is False)
+# The old gate was `repo_url and detected_src`. It is no longer reachable
+# by this input because detection now succeeds -- so assert the property
+# that actually matters instead: the install does not depend on detection.
+d2 = mkrepo(**{"README.md": "no source at all\n", "requirements.txt": "requests\n"})
+_l2, s2 = R._detect_entry(d2, False, deque())
+ok("with NO source file at all, detection still fails", s2 is None, f"{s2}")
+ok("...yet the manifest alone still triggers the install",
+   manifest_seen(d2) is True)
+shutil.rmtree(d2, ignore_errors=True)
 ok("the NEW predicate installs", manifest_seen(d) is True)
 shutil.rmtree(d, ignore_errors=True)
 
