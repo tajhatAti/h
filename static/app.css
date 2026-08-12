@@ -2581,3 +2581,65 @@ body.rs-menu-open .rs-menu-scrim { opacity: 1; visibility: visible; pointer-even
   #tab-jobs .rs-files { width: 100%; z-index: 8980; }
   #tab-jobs .rs-file-row { min-height: 46px; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   "···" MENU — a small panel, not a full-screen sheet
+
+   The mobile rule made it `left:0; right:0; bottom:0; max-height:76vh`, so
+   it covered the whole screen. Asked for a compact panel that rises from the
+   button instead. Both earlier mobile blocks are overridden here; this is the
+   last one in the file, so it wins without !important.
+   ══════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 760px) {
+  #tab-jobs .rs-menu,
+  .cs-menu {
+    /* Anchored under the trigger again, not pinned to the viewport edges. */
+    position: absolute;
+    top: calc(100% + 6px);
+    right: var(--s-2);
+    bottom: auto;
+    left: auto;
+
+    /* Narrow enough to read as a menu, and it can never exceed the screen. */
+    width: 232px;
+    max-width: calc(100vw - 24px);
+
+    /* Tall enough for the list, short enough to stay a panel. It scrolls
+       past that rather than growing. */
+    max-height: 60vh;
+    overflow-y: auto;
+
+    border: 1px solid var(--line-2);
+    border-radius: var(--r-row);
+    padding: var(--s-1);
+    box-shadow: var(--e3), var(--rim);
+
+    /* Rises into place from just below, as asked. */
+    animation: rsMenuRise .16s var(--ease) both;
+  }
+  @keyframes rsMenuRise {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  /* The grab handle belonged to the sheet; a small panel does not drag. */
+  #tab-jobs .rs-menu-grab,
+  .cs-menu-grab { display: none; }
+
+  /* Rows can be tighter now that the panel is compact, but still tappable. */
+  #tab-jobs .rs-menu-item,
+  .cs-menu-item { min-height: 42px; }
+
+  /* No scrim: it is a dropdown, not a modal. Outside-click still closes it
+     (handled in pro.js), and the page behind stays scrollable. */
+  .rs-menu-scrim { display: none; }
+  body.rs-menu-open { overflow: auto; }
+
+  /* The bottom nav no longer needs to hide — the menu does not reach it. */
+  body.rs-menu-open .bottom-nav { display: flex; }
+
+  /* The field rows shrink with the panel. */
+  #tab-jobs .rs-menu-field .rs-sel { width: 104px; height: 32px; }
+  #tab-jobs .rs-menu-field .rs-gh,
+  #tab-jobs .rs-menu-field .rs-sq { height: 32px; }
+}
