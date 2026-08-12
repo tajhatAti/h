@@ -840,7 +840,26 @@ def _clone_repo(repo_url: str, target_dir: str, log: deque) -> bool:
         log.append(f"[system] ✗ repo URL must start with https://")
         return False
     try:
-        if os.path.exists(target_dir):
+        # PRESERVE DATA ACROSS A RE-CLONE.
+        #
+        # This used to rmtree the whole workspace, which is the one place a
+        # job's directory really is destroyed: re-importing the repo (or
+        # editing a repo job, which re-clones) deleted database.db,
+        # session.json and everything else the bot had written.
+        #
+        # git clone insists on an empty target, so the data files are moved
+        # aside, the clone runs, and they are put back -- with the repo's own
+        # copy losing to the live one, since a bot's runtime state is always
+        # newer than whatever is committed.
+        keep = {}
+        if os.path.isdir(target_dir):
+            for rel in _snapshot_files(target_dir):
+                src_p = os.path.join(target_dir, rel)
+                try:
+                    with open(src_p, "rb") as fh:
+                        keep[rel] = fh.read()
+                except OSError:
+                    pass
             shutil.rmtree(target_dir, ignore_errors=True)
         os.makedirs(target_dir, exist_ok=True)
         log.append(f"[system] Cloning {url} …")
@@ -852,6 +871,22 @@ def _clone_repo(repo_url: str, target_dir: str, log: deque) -> bool:
             reason = (err or out or "").strip().splitlines()
             log.append(f"[system] ✗ git clone failed: {(reason[-1] if reason else 'unknown error')[:200]}")
             return False
+        # Put the preserved data back. The clone wins for files it also
+        # ships (that is the point of importing), except that a data file
+        # the bot wrote is newer than the repo's placeholder, so it is
+        # restored over the top.
+        restored = 0
+        for rel, blob in keep.items():
+            dst = os.path.join(target_dir, rel)
+            try:
+                os.makedirs(os.path.dirname(dst), exist_ok=True)
+                with open(dst, "wb") as fh:
+                    fh.write(blob)
+                restored += 1
+            except OSError:
+                pass
+        if restored:
+            log.append(f"[system] ✓ kept {restored} existing data file(s)")
         log.append("[system] ✓ repo cloned")
         return True
     except Exception as e:

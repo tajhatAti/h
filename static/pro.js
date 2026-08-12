@@ -4765,18 +4765,45 @@ async function _jdDownload(kind) {
   // host, so that path finds nothing. /download goes through the runner's own
   // snapshot endpoint and additionally falls back to the stored backup, so it
   // still returns data after a deploy has wiped the container.
+  /* "Data files" looked dead on tap. It was not: the request runs, but a
+     tar.gz of a workspace can take seconds to build on the runner, and
+     nothing on screen changed in the meantime — no spinner, no text. When
+     the job had never written a file the only feedback was a toast that is
+     easy to miss behind the details sheet. So the button now reports its
+     own state, and an empty result explains itself instead of vanishing. */
+  const btn = document.getElementById("jdDlDb");
+  const label = btn && btn.querySelector("span");
+  const original = label ? label.textContent : "";
+  if (btn) { btn.disabled = true; btn.classList.add("loading"); }
+  if (label) label.textContent = "Preparing…";
   try {
     const dl = await fetch("/api/jobs/" + job.id + "/download",
                            {headers: token ? {Authorization: "Bearer " + token} : {}});
     if (dl.ok) {
-      _downloadBlob(await dl.blob(), safe + "-data.tar.gz");
-      toast("Data downloaded", "success");
+      const blob = await dl.blob();
+      // A 0-byte body is a success status with nothing in it — say so rather
+      // than handing the user an empty file and letting them discover it.
+      if (!blob.size) {
+        toast("The archive came back empty — the job has not written any data files yet.", "error");
+      } else {
+        _downloadBlob(blob, safe + "-data.tar.gz");
+        toast("Data downloaded (" + Math.max(1, Math.round(blob.size / 1024)) + " KB)", "success");
+      }
       return;
     }
     let msg = "No data files yet";
     try { msg = (await dl.json()).detail || msg; } catch (_e) {}
+    if (dl.status === 404) {
+      msg = "Nothing to download yet — this job has not written a database or "
+          + "data file. Files the bot creates while running will appear here.";
+    }
     toast(msg, "error");
-  } catch (e) { toast("Download failed", "error"); }
+  } catch (e) {
+    toast("Download failed: " + (e.message || "network error"), "error");
+  } finally {
+    if (btn) { btn.disabled = false; btn.classList.remove("loading"); }
+    if (label) label.textContent = original;
+  }
 }
 
 /* Back up this job's data files to the database right now. */
