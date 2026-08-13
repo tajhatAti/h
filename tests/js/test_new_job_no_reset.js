@@ -90,7 +90,14 @@ console.log('[2] no page-reload triggers');
 // The bug this guards: a background poll reloading the page and wiping an
 // editor the user was typing in. So the rule is that every navigation must be
 // USER-INITIATED and accounted for by name, not that there are exactly two.
-const navCalls = [...SRC.matchAll(/location\.(reload|href|replace|assign)/g)].length;
+// COUNT CODE, NOT PROSE. This matched the raw source, so documenting the
+// redirect in a comment — explaining why the Mini App must NOT take it —
+// registered as two extra navigations. The check above already strips
+// comments for exactly this reason; this one did not, and a comment cannot
+// navigate anywhere.
+const SRC_CODE = SRC.replace(/\/\*[\s\S]*?\*\//g, '')
+                    .replace(/^\s*\/\/.*$/gm, '');
+const navCalls = [...SRC_CODE.matchAll(/location\.(reload|href|replace|assign)/g)].length;
 ok('codebase has only the 3 deliberate navigations', navCalls === 3, String(navCalls));
 // 1. account deletion -> home. 2. the 401 double-fail recovery.
 // 3. the Mini App's "Try again" button, which is a click handler: it can only

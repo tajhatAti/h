@@ -13,7 +13,45 @@ let _livePreviewTimer = null;
 
 
 /* ---------------- SCREEN NAV ---------------- */
+/* Screens that DO NOT EXIST inside Telegram.
+ *
+ * app.css hides every one of them under html.tg-no-auth, because a login form
+ * is meaningless in a Mini App — the account IS the Telegram account. That
+ * rule is right, but seven call sites still ASKED for these screens, and
+ * showScreen happily hid the dashboard and then "showed" something the
+ * stylesheet keeps at display:none. The result on a phone is a blank page
+ * after the words "Session expired" — the exact report, and it survived the
+ * previous fix because that fix only touched api(). */
+const _TG_FORBIDDEN_SCREENS = {
+  "screen-signin": 1, "screen-signup": 1, "screen-otp": 1,
+  "screen-forgot1": 1, "screen-forgot2": 1, "screen-forgot3": 1,
+  "screen-landing": 1,
+};
+
 function showScreen(id) {
+  /* ONE CHOKE POINT instead of seven guarded call sites. Every route that
+   * wants an auth screen inside Telegram gets the dashboard plus a silent
+   * re-login, so no code path can ever paint a hidden screen again. */
+  if (window.__inTelegram && _TG_FORBIDDEN_SCREENS[id]) {
+    id = "screen-dashboard";
+    if (!authToken && typeof window.__tgAutoLogin === "function") {
+      // __tgAutoLogin short-circuits on a stored token ("reuse the session").
+      // We are here BECAUSE the session failed, so clear it or the reuse
+      // shortcut hands back the same dead token and nothing changes.
+      try { localStorage.removeItem("ahad_token"); } catch (e) {}
+      _tgReauthOnce().then((r) => {
+        if (r && r.ok && localStorage.getItem("ahad_token")) {
+          authToken = localStorage.getItem("ahad_token");
+          if (typeof loadDashboard === "function") loadDashboard().catch(() => {});
+        } else {
+          _tgFatal((r && r.detail)
+            || "Telegram could not sign you in. Close the app and open it "
+             + "again from the bot.");
+        }
+      });
+    }
+  }
+
   // Hide all top-level screens (new class names: nav/hero/section/foot/auth/dashboard)
   document.querySelectorAll(".nav, .hero, .section, .foot, .auth, .dashboard").forEach(el => {
     el.classList.add("hidden");
@@ -268,15 +306,60 @@ function openMoreSheet() { openSideMenu(); }
 function closeMoreSheet() { closeSideMenu(); }
 
 /* ---------------- API HELPER ---------------- */
-/* Guards the Mini App re-auth path below. Without it a burst of parallel
-   401s (the dashboard fires several calls at once) would each kick off their
-   own login and race each other. Declared here, above its only use: `let` is
-   not hoisted the way `var` is, so putting it further down the file threw
-   ReferenceError on the very first 401. */
-let _tgReauthInFlight = false;
+/* THE MINI APP RE-AUTH LOCK — a shared PROMISE, not a boolean.
+ *
+ * MY OWN BUG, and it is why "Session expired" kept appearing inside Telegram
+ * even after the previous fix. The lock used to be `let _tgReauthInFlight =
+ * false`, and the 401 handler read it as:
+ *
+ *     if (inTelegram && autoLogin && !_tgReauthInFlight) { ...re-auth... }
+ *     toast("Session expired. Please sign in again."); location.href = "/";
+ *
+ * The dashboard fires several authenticated calls AT THE SAME TIME (/profile,
+ * /snippets, /stats, /api/jobs). With one dead token they all 401 together:
+ *
+ *     call #1  flag false -> takes the lock, starts re-auth   (correct)
+ *     call #2  flag TRUE  -> skips the branch entirely
+ *              -> falls straight through to the browser logout path
+ *              -> "Session expired. Please sign in again."
+ *              -> location.href = "/" ... where html.tg-no-auth hides
+ *                 every sign-in screen. Dead end. Exactly the report.
+ *
+ * So the guard meant to PREVENT a race caused the failure: the losers of the
+ * race were treated as if re-auth had been refused. They must WAIT for the
+ * winner instead. A promise does both jobs — only one login is ever sent, and
+ * every other caller awaits its result and then retries with the new token. */
+let _tgReauthPromise = null;
 
-async function api(path, method = "POST", body = null, auth = false, _retried = false) {
+/* One login for any number of concurrent 401s. */
+function _tgReauthOnce() {
+  if (_tgReauthPromise) return _tgReauthPromise;          // join the winner
+  _tgReauthPromise = (async () => {
+    try { return await window.__tgAutoLogin(); }
+    catch (e) { return { ok: false, detail: (e && e.message) || "" }; }
+    finally {
+      // Cleared on the NEXT tick, not immediately: a 401 that lands in the
+      // same microtask burst must still join this attempt rather than open a
+      // second one.
+      setTimeout(() => { _tgReauthPromise = null; }, 0);
+    }
+  })();
+  return _tgReauthPromise;
+}
+
+/* `_retried` and `_reauthed` are TWO different budgets on purpose.
+ *
+ * They used to be one flag, and that is a bug I had to watch happen in the
+ * reproduction: the cold-start retry spends `_retried`, so by the time the
+ * Telegram re-auth succeeds there is no retry left and the call fails anyway
+ * — right after a login that worked. A cold-start retry and a
+ * retry-with-a-new-token are different events and each gets one attempt. */
+async function api(path, method = "POST", body = null, auth = false,
+                   _retried = false, _reauthed = false) {
   const headers = { "Content-Type": "application/json" };
+  // Remember WHICH token this request went out with. A 401 only means "the
+  // session is dead" if the token is still the current one — see below.
+  const sentToken = authToken;
   if (auth && authToken) headers["Authorization"] = "Bearer " + authToken;
   // §4: the server enforces per-device job limits, so authenticated calls
   // carry the device fingerprint. Cached after the first computation — the
@@ -303,27 +386,16 @@ async function api(path, method = "POST", body = null, auth = false, _retried = 
   const data = await res.json().catch(() => ({}));
 
   if (res.status === 401 && auth) {
-    // Free-tier cold starts can 401 briefly while the Supabase pooler is
-    // spinning up — a single 401 during a cold boot is NOT a real expired
-    // session. Retry once after 800ms; only log out if the retry ALSO 401s.
-    // Skip retry on auth endpoints themselves (login/logout) so a bad token
-    // during sign-in surfaces immediately.
-    const isSafe = path.indexOf("/api/jobs") === 0 ||
-                   path.indexOf("/profile") === 0 ||
-                   path.indexOf("/snippets") === 0 ||
-                   path.indexOf("/stats") === 0;
-    if (isSafe && !_retried) {
-      await new Promise(r => setTimeout(r, 800));
-      try { return await api(path, method, body, auth, true); }
-      catch (retryErr) {
-        if (retryErr.kind === "infra") throw retryErr;
-        // Retry still failed — fall through to logout
-      }
+    /* A 401 FOR A TOKEN THAT IS ALREADY REPLACED IS NOT AN EXPIRED SESSION.
+     *
+     * While this request was in flight another 401 may have re-authenticated
+     * and installed a fresh token. This response describes the OLD one and is
+     * stale news. Retry with the current token instead of tearing the session
+     * down — without this, the last slow reply of a burst still logged the
+     * user out immediately after a successful re-login. */
+    if (authToken && authToken !== sentToken && !_reauthed) {
+      return await api(path, method, body, auth, _retried, true);
     }
-    localStorage.removeItem("ahad_token");
-    localStorage.removeItem("ahad_auth_token");
-    localStorage.removeItem("ahad_user");
-    authToken = null;
 
     /* INSIDE TELEGRAM, DO NOT REDIRECT — RE-AUTHENTICATE.
      *
@@ -340,23 +412,61 @@ async function api(path, method = "POST", body = null, auth = false, _retried = 
      * fresh token from initData rather than ask a human to do anything. The
      * token was just cleared above, so __tgAutoLogin's "reuse existing
      * session" shortcut cannot fire and it really does re-authenticate. */
-    if (window.__inTelegram && typeof window.__tgAutoLogin === "function" && !_tgReauthInFlight) {
-      _tgReauthInFlight = true;
-      try {
-        const r = await window.__tgAutoLogin();
-        if (r && r.ok) {
-          _tgReauthInFlight = false;
-          // Retry the original call once with the new token.
-          return await api(path, method, body, auth, true);
-        }
-      } catch (e) { /* fall through to the message below */ }
-      _tgReauthInFlight = false;
-      // Re-auth genuinely failed: say what happened instead of bouncing to a
-      // page that cannot help.
-      _tgFatal("Telegram could not restore your session. Close the app and "
-             + "open it again from the bot.");
+    if (window.__inTelegram && typeof window.__tgAutoLogin === "function") {
+      // Drop the dead token FIRST: __tgAutoLogin returns early ("reuse the
+      // existing session") whenever one is present, so leaving it would make
+      // the retry reuse the corpse.
+      localStorage.removeItem("ahad_token");
+      localStorage.removeItem("ahad_auth_token");
+      localStorage.removeItem("ahad_user");
+      authToken = null;
+
+      // EVERY concurrent 401 waits here — no caller falls through to the
+      // browser logout path any more. One network login, shared by all.
+      const r = await _tgReauthOnce();
+      if (r && r.ok && localStorage.getItem("ahad_token")) {
+        authToken = localStorage.getItem("ahad_token");
+        if (!_reauthed) return await api(path, method, body, auth, _retried, true);
+        // Already retried once: the new token is installed, so the caller can
+        // simply try again itself rather than recursing forever.
+        throw new Error("Please try that again.");
+      }
+      // Re-auth genuinely failed: SHOW THE SERVER'S OWN WORDING. "Could not
+      // restore your session" for every cause hid the one thing that is
+      // actionable — a token/bot mismatch, which says so explicitly.
+      _tgFatal((r && r.detail)
+        || "Telegram could not sign you in. Close the app and open it again "
+         + "from the bot.");
       throw new Error("Session expired.");
     }
+
+    /* Free-tier cold starts can 401 briefly while the Supabase pooler is
+     * spinning up — a single 401 during a cold boot is NOT a real expired
+     * session. Retry once after 800ms; only log out if the retry ALSO 401s.
+     * Skip retry on auth endpoints themselves (login/logout) so a bad token
+     * during sign-in surfaces immediately.
+     *
+     * MOVED BELOW THE TELEGRAM BRANCH. It used to run first, which added 800ms
+     * of dead waiting to every Mini App re-login and — worse — spent the one
+     * retry the re-auth needed afterwards. Inside Telegram a dead token has a
+     * real cure, so try the cure before the stall. */
+    const isSafe = path.indexOf("/api/jobs") === 0 ||
+                   path.indexOf("/profile") === 0 ||
+                   path.indexOf("/snippets") === 0 ||
+                   path.indexOf("/stats") === 0;
+    if (isSafe && !_retried) {
+      await new Promise(r => setTimeout(r, 800));
+      try { return await api(path, method, body, auth, true, _reauthed); }
+      catch (retryErr) {
+        if (retryErr.kind === "infra") throw retryErr;
+        // Retry still failed — fall through to logout
+      }
+    }
+
+    localStorage.removeItem("ahad_token");
+    localStorage.removeItem("ahad_auth_token");
+    localStorage.removeItem("ahad_user");
+    authToken = null;
 
     toast("Session expired. Please sign in again.", "error");
     setTimeout(() => { window.location.href = "/"; }, 1500);

@@ -1249,6 +1249,37 @@ html.tg-no-auth #screen-forgot1,
 html.tg-no-auth #screen-forgot2,
 html.tg-no-auth #screen-forgot3,
 html.tg-no-auth #screen-landing { display: none !important; }
+
+/* THE MINI APP'S ONLY ERROR SURFACE.
+   pro.js's _tgFatal() builds <div id="tgFatal" class="tg-fatal"> and sets
+   el.hidden = false — but NOTHING in this stylesheet ever described that
+   class. It was appended to <body> as unstyled text at the very bottom of a
+   full-height dashboard, below the fold, so on a phone the app looked like it
+   had simply stopped. Every message the Mini App has to deliver — including
+   "could not sign you in" — was invisible. It is a centred sheet now. */
+.tg-fatal {
+  position: fixed;
+  top: 0; right: 0; bottom: 0; left: 0;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+  text-align: center;
+  background: var(--bg);
+}
+/* [hidden] loses to display:flex on specificity, so it is restated. */
+.tg-fatal[hidden] { display: none; }
+.tg-fatal p {
+  margin: 0;
+  max-width: 34ch;
+  color: var(--fg-2);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.tg-fatal .btn-primary { min-width: 160px; }
 /* ── Links inside dark surfaces ────────────────────────────────────────── */
 /* A link must never paint its own background here: on a dark card an
    inherited highlight reads as a broken selection. Underline carries it. */
