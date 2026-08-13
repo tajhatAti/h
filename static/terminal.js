@@ -68,6 +68,33 @@
     } catch(e){}
   }
 
+  /* xterm is no longer a blocking <script> in the document head — it is
+     300KB+ of CDN payload that only matters once a terminal is opened, and
+     in the Telegram webview those round-trips were a large part of the
+     startup lag. Fetch it the first time it is actually needed.
+
+     Concurrent callers share one promise: without that, opening two slots
+     quickly would inject the script twice and race. */
+  var _xtermLoading = null;
+  function _ensureXterm(){
+    if (window.Terminal && window.FitAddon) return Promise.resolve(true);
+    if (_xtermLoading) return _xtermLoading;
+    _xtermLoading = new Promise(function(resolve){
+      var pending = 2, failed = false;
+      function one(src){
+        var el = document.createElement('script');
+        el.src = src;
+        el.async = true;
+        el.onload  = function(){ if (--pending === 0) resolve(!failed); };
+        el.onerror = function(){ failed = true; if (--pending === 0) resolve(false); };
+        document.head.appendChild(el);
+      }
+      one('https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js');
+      one('https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js');
+    });
+    return _xtermLoading;
+  }
+
   function makeXterm(){
     if (window.Terminal === undefined) return null;
     var t = new Terminal({
@@ -637,11 +664,23 @@
     stand.landingEl = $('standLanding');
     stand.slotsBar = $('standSlots');
 
-    // Build the ONE shared xterm instance
-    stand.termBase = makeXterm();
-    if(!stand.termBase) return;
-    bindLongPress(stand.hostEl);
-    bindKbd();
+    // Build the ONE shared xterm instance. The library is fetched on demand,
+    // so this waits for it rather than assuming a global is already there.
+    return _ensureXterm().then(function(ok){
+      if(!ok){
+        if (stand.landingEl) stand.landingEl.textContent =
+          'Terminal could not load — check your connection and reopen.';
+        return;
+      }
+      stand.termBase = makeXterm();
+      if(!stand.termBase) return;
+      bindLongPress(stand.hostEl);
+      bindKbd();
+      _finishStandInit();
+    });
+  }
+
+  function _finishStandInit(){
 
     // Connect button on landing
     var cbtn=$('standConnect');

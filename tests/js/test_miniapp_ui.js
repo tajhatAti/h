@@ -199,8 +199,14 @@ const okFetch = (url, opts) => {
      PRO.indexOf('// ---- Boot: decide the screen SYNCHRONOUSLY'));
   // An existing session must short-circuit: re-authenticating on every open
   // would create a session row each time.
+  /* The one-line form this used to match was reformatted when the stale-token
+     comment was added; the behaviour is unchanged — a stored token still
+     renders the dashboard immediately instead of waiting on the network. What
+     matters is that the branch exists and returns without an await, so match
+     the statements rather than their whitespace. */
   ok('an existing session skips the round-trip',
-     /if \(authToken\) \{ go\(\); done\(\); return; \}/.test(bootSeg), bootSeg.slice(-500));
+     /if \(authToken\)\s*\{[\s\S]{0,80}?go\(\);\s*done\(\);[\s\S]{0,40}?return;/.test(bootSeg),
+     bootSeg.slice(-500));
 
   // ── 6. visual adaptation ──────────────────────────────────────────────
   console.log('[6] redundant browser chrome is hidden, nothing is rebuilt');

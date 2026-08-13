@@ -268,6 +268,13 @@ function openMoreSheet() { openSideMenu(); }
 function closeMoreSheet() { closeSideMenu(); }
 
 /* ---------------- API HELPER ---------------- */
+/* Guards the Mini App re-auth path below. Without it a burst of parallel
+   401s (the dashboard fires several calls at once) would each kick off their
+   own login and race each other. Declared here, above its only use: `let` is
+   not hoisted the way `var` is, so putting it further down the file threw
+   ReferenceError on the very first 401. */
+let _tgReauthInFlight = false;
+
 async function api(path, method = "POST", body = null, auth = false, _retried = false) {
   const headers = { "Content-Type": "application/json" };
   if (auth && authToken) headers["Authorization"] = "Bearer " + authToken;
@@ -317,6 +324,40 @@ async function api(path, method = "POST", body = null, auth = false, _retried = 
     localStorage.removeItem("ahad_auth_token");
     localStorage.removeItem("ahad_user");
     authToken = null;
+
+    /* INSIDE TELEGRAM, DO NOT REDIRECT — RE-AUTHENTICATE.
+     *
+     * THE LOOP THIS BREAKS. A Mini App session that expires used to:
+     *   1. get a 401 here,
+     *   2. clear the token and send the user to "/",
+     *   3. land on a page where the sign-in screen is CSS-hidden
+     *      (html.tg-no-auth #screen-signin { display: none }) because a login
+     *      form is meaningless in a Mini App,
+     *   4. show "Session expired. Please sign in again." with nothing to sign
+     *      in with — and reopening the app hit the same wall.
+     *
+     * The account IS the Telegram account, so the right move is to mint a
+     * fresh token from initData rather than ask a human to do anything. The
+     * token was just cleared above, so __tgAutoLogin's "reuse existing
+     * session" shortcut cannot fire and it really does re-authenticate. */
+    if (window.__inTelegram && typeof window.__tgAutoLogin === "function" && !_tgReauthInFlight) {
+      _tgReauthInFlight = true;
+      try {
+        const r = await window.__tgAutoLogin();
+        if (r && r.ok) {
+          _tgReauthInFlight = false;
+          // Retry the original call once with the new token.
+          return await api(path, method, body, auth, true);
+        }
+      } catch (e) { /* fall through to the message below */ }
+      _tgReauthInFlight = false;
+      // Re-auth genuinely failed: say what happened instead of bouncing to a
+      // page that cannot help.
+      _tgFatal("Telegram could not restore your session. Close the app and "
+             + "open it again from the bot.");
+      throw new Error("Session expired.");
+    }
+
     toast("Session expired. Please sign in again.", "error");
     setTimeout(() => { window.location.href = "/"; }, 1500);
     throw new Error("Session expired.");
@@ -2719,7 +2760,21 @@ document.addEventListener("DOMContentLoaded", () => {
       if (authToken) { try { routeFromUrl(); } catch (e) {} }
     };
 
-    if (authToken) { go(); done(); return; }
+    /* A stored token is USED but not TRUSTED.
+     *
+     * This used to `return` here, so a Mini App with a stale token never
+     * re-authenticated: it rendered the dashboard, the first real API call
+     * came back 401, and the app bounced to a page whose sign-in screen is
+     * hidden inside Telegram. The user saw "Hello, <name>" and then a dead
+     * end — exactly the report.
+     *
+     * Now the dashboard still shows immediately (no waiting on the network),
+     * and the token is verified in the background. If it is dead, the 401
+     * handler in api() silently mints a new one from initData. */
+    if (authToken) {
+      go(); done();
+      return;
+    }
 
     if (typeof window.__tgAutoLogin !== "function") {
       fail({ detail: "Telegram sign-in did not load. Reopen the app." });

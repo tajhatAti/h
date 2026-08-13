@@ -50,8 +50,10 @@
      being rewritten. Square, flat, mono-labelled, no serif, no shadow. -->
 <!-- xterm.js (browser terminal emulator for the live PTY) -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css">
-<script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+<!-- xterm loads ON DEMAND (see _ensureXterm in terminal.js): it is 300KB+ of
+     CDN payload that only matters once a terminal is opened, and in the
+     Telegram webview those two blocking round-trips were a large part of the
+     startup lag. Nothing else on the page needs it. -->
 <!-- CodeMirror IDE Editor CSS & JS -->
 <script>
   // Boot guard — prevents a flash of the wrong screen before JS decides.
@@ -1538,7 +1540,11 @@
 
 <!-- CodeMirror 6 (self-hosted bundle, built from editor-src/). Must load
      before pro.js, which creates the editors. -->
-<script src="/static/cm6.bundle.js?v=20260724m"></script>
+<!-- CodeMirror (801KB) is deferred: it is the single largest asset on the
+     page and is not needed until an editor is actually shown. `defer` keeps
+     it off the critical path while still guaranteeing it runs before
+     DOMContentLoaded, which is what pro.js's boot waits on. -->
+<script defer src="/static/cm6.bundle.js?v=20260724m"></script>
 <!-- BEFORE pro.js: it sets window.__inTelegram and window.__tgAutoLogin,
      which pro.js's boot path checks to decide whether to sign in first. -->
 <script src="/static/miniapp.js?v=20260729a"></script>
